@@ -1,0 +1,212 @@
+[
+    {
+        "id": 106,
+        "name": "Alabama",
+        "code": "ALA",
+        "city": "Tuscaloosa",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/106.png",
+        "stadium": "Bryant-Denny Stadium"
+    },
+    {
+        "id": 107,
+        "name": "Ohio State",
+        "code": "OSU",
+        "city": "Columbus",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/107.png",
+        "stadium": "Ohio Stadium"
+    },
+    {
+        "id": 109,
+        "name": "Georgia",
+        "code": "UGA",
+        "city": "Athens",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/109.png",
+        "stadium": "Sanford Stadium"
+    },
+    {
+        "id": 115,
+        "name": "Michigan",
+        "code": "MICH",
+        "city": "Ann Arbor",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/115.png",
+        "stadium": "Michigan Stadium"
+    },
+    {
+        "id": 195,
+        "name": "Texas",
+        "code": "TEX",
+        "city": "Austin",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/195.png",
+        "stadium": "Darrell K Royal Stadium"
+    },
+    {
+        "id": 111,
+        "name": "Texas A&M",
+        "code": "TAMU",
+        "city": "College Station",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/111.png",
+        "stadium": "Kyle Field"
+    },
+    {
+        "id": 208,
+        "name": "Georgia Tech",
+        "code": "GT",
+        "city": "Atlanta",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/208.png",
+        "stadium": "Bobby Dodd Stadium"
+    },
+    {
+        "id": 92,
+        "name": "Michigan State",
+        "code": "MSU",
+        "city": "East Lansing",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/92.png",
+        "stadium": "Spartan Stadium"
+    },
+    {
+        "id": 193,
+        "name": "Texas Tech",
+        "code": "TTU",
+        "city": "Lubbock",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/193.png",
+        "stadium": "Jones AT&T Stadium"
+    },
+    {
+        "id": 110,
+        "name": "Oregon",
+        "code": "ORE",
+        "city": "Eugene",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/110.png",
+        "stadium": "Autzen Stadium"
+    },
+    {
+        "id": 78,
+        "name": "Penn State",
+        "code": "PSU",
+        "city": "University Park",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/78.png",
+        "stadium": "Beaver Stadium"
+    },
+    {
+        "id": 108,
+        "name": "Notre Dame",
+        "code": "ND",
+        "city": "Notre Dame",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/108.png",
+        "stadium": "Notre Dame Stadium"
+    },
+    {
+        "id": 207,
+        "name": "LSU",
+        "code": "LSU",
+        "city": "Baton Rouge",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/207.png",
+        "stadium": "Tiger Stadium"
+    },
+    {
+        "id": 122,
+        "name": "USC",
+        "code": "USC",
+        "city": "Los Angeles",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/122.png",
+        "stadium": "Los Angeles Memorial Coliseum"
+    },
+    {
+        "id": 113,
+        "name": "Florida",
+        "code": "FLA",
+        "city": "Gainesville",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/113.png",
+        "stadium": "Ben Hill Griffin Stadium"
+    },
+    {
+        "id": 69,
+        "name": "Tennessee",
+        "code": "TENN",
+        "city": "Knoxville",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/69.png",
+        "stadium": "Neyland Stadium"
+    },
+    {
+        "id": 117,
+        "name": "Oklahoma",
+        "code": "OU",
+        "city": "Norman",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/117.png",
+        "stadium": "Gaylord Family Oklahoma Memorial Stadium"
+    },
+    {
+        "id": 209,
+        "name": "Clemson",
+        "code": "CLEM",
+        "city": "Clemson",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/209.png",
+        "stadium": "Memorial Stadium"
+    },
+    {
+        "id": 61,
+        "name": "Oklahoma State",
+        "code": "OKST",
+        "city": "Stillwater",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/61.png",
+        "stadium": "Boone Pickens Stadium"
+    },
+    {
+        "id": 135,
+        "name": "South Florida",
+        "code": "USF",
+        "city": "Tampa",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/135.png",
+        "stadium": "Raymond James Stadium"
+    },
+    {
+        "id": 123,
+        "name": "Miami",
+        "code": "MIA",
+        "city": "Coral Gables",
+        "coach": null,
+        "owner": null,
+        "logo": "https://media.api-sports.io/american-football/teams/123.png",
+        "stadium": "Hard Rock Stadium"
+    }
+]

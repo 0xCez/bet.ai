@@ -1,0 +1,222 @@
+[
+    {
+        "id": 1,
+        "name": "American League",
+        "logo": "https://media.api-sports.io/baseball/teams/1.png"
+    },
+    {
+        "id": 2,
+        "name": "Arizona Diamondbacks",
+        "logo": "https://media.api-sports.io/baseball/teams/2.png",
+        "code": "ARI",
+        "statpal_code": "ari"
+    },
+    {
+        "id": 983,
+        "name": "Athletics",
+        "logo": "https://media.api-sports.io/baseball/teams/983.png",
+        "code": "OAK",
+        "statpal_code": "oak"
+    },
+    {
+        "id": 3,
+        "name": "Atlanta Braves",
+        "logo": "https://media.api-sports.io/baseball/teams/3.png",
+        "code": "ATL",
+        "statpal_code": "atl"
+    },
+    {
+        "id": 4,
+        "name": "Baltimore Orioles",
+        "logo": "https://media.api-sports.io/baseball/teams/4.png",
+        "code": "BAL",
+        "statpal_code": "bal"
+    },
+    {
+        "id": 5,
+        "name": "Boston Red Sox",
+        "logo": "https://media.api-sports.io/baseball/teams/5.png",
+        "code": "BOS",
+        "statpal_code": "bos"
+    },
+    {
+        "id": 6,
+        "name": "Chicago Cubs",
+        "logo": "https://media.api-sports.io/baseball/teams/6.png",
+        "code": "CHC",
+        "statpal_code": "chc"
+    },
+    {
+        "id": 7,
+        "name": "Chicago White Sox",
+        "logo": "https://media.api-sports.io/baseball/teams/7.png",
+        "code": "CHW",
+        "statpal_code": "chw"
+    },
+    {
+        "id": 8,
+        "name": "Cincinnati Reds",
+        "logo": "https://media.api-sports.io/baseball/teams/8.png",
+        "code": "CIN",
+        "statpal_code": "cin"
+    },
+    {
+        "id": 9,
+        "name": "Cleveland Indians",
+        "logo": "https://media.api-sports.io/baseball/teams/9.png",
+        "code": "CLE",
+        "statpal_code": "cle"
+    },
+    {
+        "id": 10,
+        "name": "Colorado Rockies",
+        "logo": "https://media.api-sports.io/baseball/teams/10.png",
+        "code": "COL",
+        "statpal_code": "col"
+    },
+    {
+        "id": 12,
+        "name": "Detroit Tigers",
+        "logo": "https://media.api-sports.io/baseball/teams/12.png",
+        "code": "DET",
+        "statpal_code": "det"
+    },
+    {
+        "id": 15,
+        "name": "Houston Astros",
+        "logo": "https://media.api-sports.io/baseball/teams/15.png",
+        "code": "HOU",
+        "statpal_code": "hou"
+    },
+    {
+        "id": 16,
+        "name": "Kansas City Royals",
+        "logo": "https://media.api-sports.io/baseball/teams/16.png",
+        "code": "KAN",
+        "statpal_code": "kan"
+    },
+    {
+        "id": 17,
+        "name": "Los Angeles Angels",
+        "logo": "https://media.api-sports.io/baseball/teams/17.png",
+        "code": "LAA",
+        "statpal_code": "laa"
+    },
+    {
+        "id": 18,
+        "name": "Los Angeles Dodgers",
+        "logo": "https://media.api-sports.io/baseball/teams/18.png",
+        "code": "LAD",
+        "statpal_code": "lad"
+    },
+    {
+        "id": 19,
+        "name": "Miami Marlins",
+        "logo": "https://media.api-sports.io/baseball/teams/19.png",
+        "code": "MIA",
+        "statpal_code": "fla"
+    },
+    {
+        "id": 20,
+        "name": "Milwaukee Brewers",
+        "logo": "https://media.api-sports.io/baseball/teams/20.png",
+        "code": "MIL",
+        "statpal_code": "mil"
+    },
+    {
+        "id": 22,
+        "name": "Minnesota Twins",
+        "logo": "https://media.api-sports.io/baseball/teams/22.png",
+        "code": "MIN",
+        "statpal_code": "min"
+    },
+    {
+        "id": 23,
+        "name": "National League",
+        "logo": "https://media.api-sports.io/baseball/teams/23.png"
+    },
+    {
+        "id": 24,
+        "name": "New York Mets",
+        "logo": "https://media.api-sports.io/baseball/teams/24.png",
+        "code": "NYM",
+        "statpal_code": "nym"
+    },
+    {
+        "id": 25,
+        "name": "New York Yankees",
+        "logo": "https://media.api-sports.io/baseball/teams/25.png",
+        "code": "NYY",
+        "statpal_code": "nyy"
+    },
+    {
+        "id": 27,
+        "name": "Philadelphia Phillies",
+        "logo": "https://media.api-sports.io/baseball/teams/27.png",
+        "code": "PHI",
+        "statpal_code": "phi"
+    },
+    {
+        "id": 28,
+        "name": "Pittsburgh Pirates",
+        "logo": "https://media.api-sports.io/baseball/teams/28.png",
+        "code": "PIT",
+        "statpal_code": "pit"
+    },
+    {
+        "id": 30,
+        "name": "San Diego Padres",
+        "logo": "https://media.api-sports.io/baseball/teams/30.png",
+        "code": "SD",
+        "statpal_code": "sdg"
+    },
+    {
+        "id": 31,
+        "name": "San Francisco Giants",
+        "logo": "https://media.api-sports.io/baseball/teams/31.png",
+        "code": "SF",
+        "statpal_code": "sfo"
+    },
+    {
+        "id": 32,
+        "name": "Seattle Mariners",
+        "logo": "https://media.api-sports.io/baseball/teams/32.png",
+        "code": "SEA",
+        "statpal_code": "sea"
+    },
+    {
+        "id": 33,
+        "name": "St.Louis Cardinals",
+        "logo": "https://media.api-sports.io/baseball/teams/33.png",
+        "code": "STL",
+        "statpal_code": "stl"
+    },
+    {
+        "id": 34,
+        "name": "Tampa Bay Rays",
+        "logo": "https://media.api-sports.io/baseball/teams/34.png",
+        "code": "TB",
+        "statpal_code": "tam"
+    },
+    {
+        "id": 35,
+        "name": "Texas Rangers",
+        "logo": "https://media.api-sports.io/baseball/teams/35.png",
+        "code": "TEX",
+        "statpal_code": "tex"
+    },
+    {
+        "id": 36,
+        "name": "Toronto Blue Jays",
+        "logo": "https://media.api-sports.io/baseball/teams/36.png",
+        "code": "TOR",
+        "statpal_code": "tor"
+    },
+    {
+        "id": 37,
+        "name": "Washington Nationals",
+        "logo": "https://media.api-sports.io/baseball/teams/37.png",
+        "code": "WAS",
+        "statpal_code": "was"
+    }
+] 

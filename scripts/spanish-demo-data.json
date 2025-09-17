@@ -1,0 +1,61 @@
+{
+  "analysis": {
+    "teams": {
+      "home": "Real Madrid",
+      "away": "FC Barcelona",
+      "logos": {
+        "home": "https://a.espncdn.com/i/teamlogos/soccer/500/86.png",
+        "away": "https://a.espncdn.com/i/teamlogos/soccer/500/83.png"
+      }
+    },
+    "keyInsights": {
+      "confidence": "Alto",
+      "marketActivity": "Elevada",
+      "lineShift": "Medio",
+      "publicVsSharps": {
+        "public": 62,
+        "sharps": 38
+      },
+      "bettingSignal": "Trampa del Público"
+    },
+    "matchSnapshot": {
+      "recentPerformance": {
+        "home": "El Real Madrid ha ganado 3 de sus últimos 5 partidos de La Liga, anotando 12 goles y concediendo solo 4.",
+        "away": "El Barcelona ha tenido un rendimiento mixto, con 2 victorias, 2 empates y 1 derrota en sus últimos 5 encuentros."
+      },
+      "headToHead": "En los últimos 5 Clásicos, el Real Madrid ha ganado 3 veces, con 1 victoria para el Barcelona y 1 empate.",
+      "momentum": {
+        "home": "El Real Madrid llega con buena forma después de una convincente victoria en la Champions League a mitad de semana.",
+        "away": "El Barcelona viene de un empate difícil en casa y tiene problemas de lesiones en posiciones clave."
+      }
+    },
+    "xFactors": [
+      {
+        "title": "Lesiones Importantes",
+        "detail": "El Barcelona tiene varios jugadores clave lesionados, incluyendo a su defensa central titular y su extremo izquierdo.",
+        "type": 1
+      },
+      {
+        "title": "Factor Santiago Bernabéu",
+        "detail": "El Real Madrid ha sido casi imparable en casa esta temporada, ganando el 85% de sus partidos en el Bernabéu.",
+        "type": 2
+      },
+      {
+        "title": "Patrón de Apuestas",
+        "detail": "El 65% de las apuestas están con el Real Madrid, pero un volumen significativo de dinero experto ha llegado para el Barcelona en las últimas horas.",
+        "type": 3
+      }
+    ],
+    "aiAnalysis": {
+      "confidenceScore": "Alta",
+      "bettingSignal": "Trampa del Público",
+      "breakdown": "El Real Madrid parece la elección obvia como favorito local y con mejor forma reciente. Sin embargo, hay señales de que esto podría ser una trampa para el público. El movimiento de dinero experto hacia el Barcelona y el historial de El Clásico sugieren que los partidos entre estos equipos rara vez siguen la forma reciente. A pesar de las lesiones del Barcelona, su calidad técnica y la naturaleza única de este derbi pueden neutralizar la ventaja del Madrid. Recomendamos considerar la línea con handicap del Barcelona o un empate como valor contra la tendencia."
+    }
+  },
+  "imageUrl": "https://firebasestorage.googleapis.com/v0/b/betai-f9176.firebasestorage.app/o/images%2FAE7AE92D-F55A-4011-9419-2581E75D92DC.jpg?alt=media&token=c3e9af45-024a-4a5f-9e58-8b74c85f56c1",
+  "timestamp": {
+    "_seconds": 1716292581,
+    "_nanoseconds": 0
+  },
+  "language": "es"
+}

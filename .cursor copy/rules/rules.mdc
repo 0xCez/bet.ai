@@ -1,0 +1,213 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+the app has components in the components/ui folder in the root folder, give these components first prefrence while crestin new screen also add new components to this folder
+App outline
+
+## **1️⃣ Overview**
+
+Bet.AI is an AI-powered sports betting assistant that helps users analyze bets, track market sentiment, and make sharper betting decisions. The app provides an intuitive interface for users to upload bet slips, browse upcoming games, and receive structured AI-driven insights, including sharp money movements, X-Factor alerts, and betting confidence scores.
+
+---
+
+## **2️⃣ Onboarding Flow**
+
+The onboarding flow is designed to engage users, personalize their experience, and seamlessly lead them to the paywall after investing time in the app.
+
+### **🔥 Step-by-Step Onboarding Process**
+
+1. **Curiosity Hook** → *“Want to see how real bettors spot sharp moves?”*
+2. **Betting Style Selection** → *“How do you usually bet?”*
+3. **Betting Frequency** → *“How often do you bet?”*
+4. **Risk Profile** → *“How much risk are you comfortable with?”*
+5. **Confidence Check** → *“Do you trust your bets?”*
+6. **AI Tease** → *“Your AI is almost ready…”*
+7. **Feature Preview Carousel** → Displays market graphs, AI insights, chatbot functionality.
+8. **User Action Step** → *Upload Bet Slip / Pick Game* → Pre-paywall engagement.
+9. **Paywall Trigger** → Blurred AI insights tease the locked features.
+10. **Subscription Page** → *User unlocks insights.*
+
+---
+
+## **3️⃣ App Pages & User Flow (Post-Onboarding MVP)**
+
+### **🏠 Home Screen – Simple & Focused Hub**
+
+📍 *The core entry point with only essential functions.*
+
+- **Upload Bet Slip CTA** → Prominent button to start analysis.
+- **Browse & Select a Game** → Users can manually select events.
+- **Access AI Chatbot** → Secondary button leading to chat with AI.
+
+### **📤 Bet Analysis Flow**
+
+📍 *User uploads a bet slip or selects a game manually.*
+
+1. **OCR Scans Bet Slip** → Extracts odds, teams, and bet type.
+2. **User Confirms Extracted Data** → Ensures accuracy before AI processing.
+3. **AI Generates Insights (Blurred Until Unlocked)** →
+    - **📈 Market Sentiment Graphs** → How public & sharp money is moving.
+    - **🔄 Odds Movement Tracker** → Line changes from opening to now.
+    - **⚠️ X-Factor Alerts** → Key injuries, weather changes, referee biases.
+    - **🧠 AI Betting Insights** → Confidence rating & sharp betting trends.
+4. **User Unlocks AI Breakdown** → Gains access to full analysis.
+
+### **📊 AI Betting Insights Page**
+
+📍 *Where users view in-depth AI-generated reports.*
+
+- **📈 Market Sentiment Graph** → Tracks how betting trends shifted over time.
+- **🔥 Sharp vs. Public Money Meter** → Highlights where pros vs. casuals are betting.
+- **⚠️ X-Factor Alerts** → Key contextual factors affecting the game.
+- **💡 AI’s Betting Take** → AI-generated recommendation based on trends.
+
+### **🤖 AI Chatbot – Betting Expert**
+
+📍 *Users can interact with AI for betting debates & clarifications.*
+
+- **Ask AI Anything** → Users type in questions about a game or betting trends.
+- **AI Provides Real-Time Analysis** → Based on structured event data.
+- **Challenge AI’s Take** → Users can debate picks with the AI for deeper insights.
+
+### **💬 Community Forum (Optional Feature)**
+
+📍 *A lightweight discussion page for bettors to share thoughts.*
+
+- **Post-game insights, questions, or betting strategies.**
+- **See trending discussions on upcoming matches.**
+
+---
+
+## **4️⃣ Summary of User Flow (MVP Scope)**
+
+1. **User completes onboarding.**
+2. **They upload a bet slip or select a game.**
+3. **OCR scans the bet, user confirms details.**
+4. **AI fetches insights (blurred before unlocking).**
+5. **User unlocks full analysis → Gains deep insights.**
+6. **They interact with the AI chatbot for further clarification.**
+7. **(Optional) User engages in community discussions.**
+
+🚀 **This MVP ensures simplicity while focusing on core engagement and retention.**
+
+---
+
+## **5️⃣ Future Features (Post-PMF Expansion)**
+
+Once the MVP proves market fit, we will introduce additional high-engagement features to drive further retention and monetization:
+
+- **🧪 Bet Simulator** → Users can simulate bets with fake money to test strategies before placing real wagers.
+- **📊 Today’s AI Pick / Smartest Bet** → AI highlights the top statistically backed bet of the day based on sharp money movements and trends.
+- **🧠 Betting IQ Quiz** → Engaging quiz to test users’ betting knowledge, reinforcing learning and interaction with AI.
+- **🏆 Betting IQ Leaderboard** → Gamification feature ranking users based on bet accuracy and strategic picks.
+- **🤖 AI Specialists in the field** → Chat with a specialist from each sport to debate plays, games, betting strategies… etc. Oscar De La Hoya for boxing, Mourinho for football, Federer for Tennis…
+
+
+  You are an expert in TypeScript, React Native, Expo, and Mobile UI development.
+
+  Code Style and Structure
+  - Write concise, technical TypeScript code with accurate examples.
+  - Use functional and declarative programming patterns; avoid classes.
+  - Prefer iteration and modularization over code duplication.
+  - Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError).
+  - Structure files: exported component, subcomponents, helpers, static content, types.
+  - Follow Expo's official documentation for setting up and configuring your projects: https://docs.expo.dev/
+
+  Naming Conventions
+  - Use lowercase with dashes for directories (e.g., components/auth-wizard).
+  - Favor named exports for components.
+
+  TypeScript Usage
+  - Use TypeScript for all code; prefer interfaces over types.
+  - Avoid enums; use maps instead.
+  - Use functional components with TypeScript interfaces.
+  - Use strict mode in TypeScript for better type safety.
+
+  Syntax and Formatting
+  - Use the "function" keyword for pure functions.
+  - Avoid unnecessary curly braces in conditionals; use concise syntax for simple statements.
+  - Use declarative JSX.
+  - Use Prettier for consistent code formatting.
+
+  UI and Styling
+  - Use Expo's built-in components for common UI patterns and layouts.
+  - Implement responsive design with Flexbox and Expo's useWindowDimensions for screen size adjustments.
+  - Use styled-components or Tailwind CSS for component styling.
+  - Implement dark mode support using Expo's useColorScheme.
+  - Ensure high accessibility (a11y) standards using ARIA roles and native accessibility props.
+  - Leverage react-native-reanimated and react-native-gesture-handler for performant animations and gestures.
+
+  Safe Area Management
+  - Use SafeAreaProvider from react-native-safe-area-context to manage safe areas globally in your app.
+  - Wrap top-level components with SafeAreaView to handle notches, status bars, and other screen insets on both iOS and Android.
+  - Use SafeAreaScrollView for scrollable content to ensure it respects safe area boundaries.
+  - Avoid hardcoding padding or margins for safe areas; rely on SafeAreaView and context hooks.
+
+  Performance Optimization
+  - Minimize the use of useState and useEffect; prefer context and reducers for state management.
+  - Use Expo's AppLoading and SplashScreen for optimized app startup experience.
+  - Optimize images: use WebP format where supported, include size data, implement lazy loading with expo-image.
+  - Implement code splitting and lazy loading for non-critical components with React's Suspense and dynamic imports.
+  - Profile and monitor performance using React Native's built-in tools and Expo's debugging features.
+  - Avoid unnecessary re-renders by memoizing components and using useMemo and useCallback hooks appropriately.
+
+  Navigation
+  - Use react-navigation for routing and navigation; follow its best practices for stack, tab, and drawer navigators.
+  - Leverage deep linking and universal links for better user engagement and navigation flow.
+  - Use dynamic routes with expo-router for better navigation handling.
+
+  State Management
+  - Use React Context and useReducer for managing global state.
+  - Leverage react-query for data fetching and caching; avoid excessive API calls.
+  - For complex state management, consider using Zustand or Redux Toolkit.
+  - Handle URL search parameters using libraries like expo-linking.
+
+  Error Handling and Validation
+  - Use Zod for runtime validation and error handling.
+  - Implement proper error logging using Sentry or a similar service.
+  - Prioritize error handling and edge cases:
+    - Handle errors at the beginning of functions.
+    - Use early returns for error conditions to avoid deeply nested if statements.
+    - Avoid unnecessary else statements; use if-return pattern instead.
+    - Implement global error boundaries to catch and handle unexpected errors.
+  - Use expo-error-reporter for logging and reporting errors in production.
+
+  Testing
+  - Write unit tests using Jest and React Native Testing Library.
+  - Implement integration tests for critical user flows using Detox.
+  - Use Expo's testing tools for running tests in different environments.
+  - Consider snapshot testing for components to ensure UI consistency.
+
+  Security
+  - Sanitize user inputs to prevent XSS attacks.
+  - Use react-native-encrypted-storage for secure storage of sensitive data.
+  - Ensure secure communication with APIs using HTTPS and proper authentication.
+  - Use Expo's Security guidelines to protect your app: https://docs.expo.dev/guides/security/
+
+  Internationalization (i18n)
+  - Use react-native-i18n or expo-localization for internationalization and localization.
+  - Support multiple languages and RTL layouts.
+  - Ensure text scaling and font adjustments for accessibility.
+
+  Key Conventions
+  1. Rely on Expo's managed workflow for streamlined development and deployment.
+  2. Prioritize Mobile Web Vitals (Load Time, Jank, and Responsiveness).
+  3. Use expo-constants for managing environment variables and configuration.
+  4. Use expo-permissions to handle device permissions gracefully.
+  5. Implement expo-updates for over-the-air (OTA) updates.
+  6. Follow Expo's best practices for app deployment and publishing: https://docs.expo.dev/distribution/introduction/
+  7. Ensure compatibility with iOS and Android by testing extensively on both platforms.
+
+  API Documentation
+  - Use Expo's official documentation for setting up and configuring your projects: https://docs.expo.dev/
+
+  Refer to Expo's documentation for detailed information on Views, Blueprints, and Extensions for best practices.
+    
