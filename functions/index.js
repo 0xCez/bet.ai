@@ -20,7 +20,7 @@ const TENNIS_API_KEY = process.env.TENNIS_API_KEY || '2cf2f7d9e8e9d7ea2ab285677a
 
 admin.initializeApp();
 const db = admin.firestore();
-const CACHE_EXPIRY_TIME = 48 * 60 * 60 * 1000; // 24 hours in milliseconds
+const CACHE_EXPIRY_TIME = 36 * 60 * 60 * 1000; // 36 hours in milliseconds
 
 /**
  * Converts JSON data to a more token-efficient markdown format
