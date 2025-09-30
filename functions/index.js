@@ -3373,28 +3373,44 @@ async function calculateLineMovementTest(sport, eventId, event) {
 }
 
 function calculateSharpMeterTest(bookmakers, event) {
-  const sharpBooks = ['pinnacle', 'circa', 'betcris', 'betonline'];
-  const publicBooks = ['fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbet'];
+  const sharpBooks = ['pinnacle', 'lowvig', 'betonlineag']; // Updated to actual available books
+  const publicBooks = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers', 'bovada', 'betus', 'mybookieag', 'fanatics', 'ballybet', 'espnbet', 'hardrockbet'];
 
   const sharpSpreads = [];
   const publicSpreads = [];
+  const sharpVigs = [];
+  const publicVigs = [];
 
   bookmakers.forEach(bookmaker => {
     const isSharp = sharpBooks.includes(bookmaker.key);
     const isPublic = publicBooks.includes(bookmaker.key);
 
-    bookmaker.markets.forEach(market => {
-      if (market.key === 'spreads') {
-        const homeLine = market.outcomes.find(o => o.name === event.home_team);
-        if (homeLine) {
-          if (isSharp) sharpSpreads.push(homeLine.point);
-          if (isPublic) publicSpreads.push(homeLine.point);
-        }
+    // Get spread data
+    const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads');
+    const moneylineMarket = bookmaker.markets.find(m => m.key === 'h2h');
+
+    if (spreadMarket) {
+      const homeLine = spreadMarket.outcomes.find(o => o.name === event.home_team);
+      if (homeLine) {
+        if (isSharp) sharpSpreads.push(homeLine.point);
+        if (isPublic) publicSpreads.push(homeLine.point);
       }
-    });
+    }
+
+    // Calculate vig for this bookmaker
+    if (moneylineMarket && moneylineMarket.outcomes.length === 2) {
+      const homeOdds = moneylineMarket.outcomes.find(o => o.name === event.home_team)?.price;
+      const awayOdds = moneylineMarket.outcomes.find(o => o.name === event.away_team)?.price;
+
+      if (homeOdds && awayOdds) {
+        const vig = calculateMarketVig(homeOdds, awayOdds);
+        if (isSharp) sharpVigs.push(vig);
+        if (isPublic) publicVigs.push(vig);
+      }
+    }
   });
 
-  // FORMULA: Sharp vs Public calculation
+  // Signal 1: Point Gap Analysis (Primary)
   const avgSharpSpread = sharpSpreads.length > 0 ?
     sharpSpreads.reduce((a, b) => a + b, 0) / sharpSpreads.length : 0;
 
@@ -3403,29 +3419,57 @@ function calculateSharpMeterTest(bookmakers, event) {
 
   const pointGap = avgSharpSpread - avgPublicSpread;
 
-  // CORRECT LOGIC: If sharps have bigger spread (more negative), they lean FAVORITE
-  // If sharps have smaller spread (less negative), they lean DOG
-  let interpretation;
+  // Signal 2: Vig Confidence Analysis
+  const avgSharpVig = sharpVigs.length > 0 ?
+    sharpVigs.reduce((a, b) => a + b, 0) / sharpVigs.length : 0;
+
+  const avgPublicVig = publicVigs.length > 0 ?
+    publicVigs.reduce((a, b) => a + b, 0) / publicVigs.length : 0;
+
+  const vigGap = avgPublicVig - avgSharpVig;
+
+  // Signal 3: Generate interpretations
+  let primarySignal;
+  let secondarySignal;
   let sharpLean;
+  let gaugeValue;
 
   if (Math.abs(pointGap) < 0.1) {
-    interpretation = "Neutral — sharps and public aligned";
+    primarySignal = "Neutral alignment";
     sharpLean = "neutral";
+    gaugeValue = 50;
   } else if (pointGap < 0) {
-    // Sharp spread is more negative (bigger favorite) = sharps lean FAVORITE
-    interpretation = `Sharps lean FAVORITE ${Math.abs(pointGap).toFixed(1)} pts — sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
+    // Sharp spread is more negative = sharps lean FAVORITE
+    primarySignal = `Sharps Lean Favorite ${Math.abs(pointGap).toFixed(1)}`;
     sharpLean = "favorite";
+    gaugeValue = Math.max(0, 50 - (Math.abs(pointGap) * 20)); // 0-50 scale
   } else {
-    // Sharp spread is less negative (smaller favorite) = sharps lean DOG
-    interpretation = `Sharps lean DOG +${Math.abs(pointGap).toFixed(1)} pts — sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
+    // Sharp spread is less negative = sharps lean DOG
+    primarySignal = `Sharps Lean Dog +${Math.abs(pointGap).toFixed(1)}`;
     sharpLean = "dog";
+    gaugeValue = Math.min(100, 50 + (pointGap * 20)); // 50-100 scale
   }
 
+  // Secondary signal about vig confidence
+  if (vigGap > 1.0) {
+    secondarySignal = `(High public vig ${avgPublicVig.toFixed(1)}% vs ${avgSharpVig.toFixed(1)}%)`;
+  } else {
+    secondarySignal = `(Similar vig levels)`;
+  }
+
+  const detailLine = `Sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
+
   return {
+    primarySignal,
+    secondarySignal,
+    detailLine,
+    gaugeValue: Math.round(gaugeValue),
     pointGap: Math.round(pointGap * 10) / 10,
     avgSharpSpread: Math.round(avgSharpSpread * 10) / 10,
     avgPublicSpread: Math.round(avgPublicSpread * 10) / 10,
-    interpretation,
+    avgSharpVig: Math.round(avgSharpVig * 10) / 10,
+    avgPublicVig: Math.round(avgPublicVig * 10) / 10,
+    vigGap: Math.round(vigGap * 10) / 10,
     sharpLean,
     sharpBooksCount: sharpSpreads.length,
     publicBooksCount: publicSpreads.length,
@@ -3434,28 +3478,74 @@ function calculateSharpMeterTest(bookmakers, event) {
 }
 
 function calculateMarketTightnessTest(bookmakers) {
-  const spreadPoints = [];
-  const spreadPrices = [];
+  // Analyze all 3 markets separately, then take the loosest
+  const markets = {
+    spread: { points: [], prices: [] },
+    moneyline: { homeOdds: [], awayOdds: [] },
+    total: { points: [], prices: [] }
+  };
 
   bookmakers.forEach(bookmaker => {
     bookmaker.markets.forEach(market => {
       if (market.key === 'spreads') {
         market.outcomes.forEach(outcome => {
           if (outcome.point < 0) { // Favorite lines only
-            spreadPoints.push(Math.abs(outcome.point));
-            spreadPrices.push(outcome.price);
+            markets.spread.points.push(Math.abs(outcome.point));
+            markets.spread.prices.push(outcome.price);
           }
         });
+      }
+
+      if (market.key === 'h2h') {
+        market.outcomes.forEach(outcome => {
+          if (outcome.name === bookmaker.markets.find(m => m.key === 'spreads')?.outcomes?.find(o => o.point < 0)?.name) {
+            markets.moneyline.homeOdds.push(outcome.price); // Favorite ML
+          }
+        });
+      }
+
+      if (market.key === 'totals') {
+        const overOutcome = market.outcomes.find(o => o.name === "Over");
+        if (overOutcome) {
+          markets.total.points.push(overOutcome.point);
+          markets.total.prices.push(overOutcome.price);
+        }
       }
     });
   });
 
-  // FORMULA: Market tightness calculation
-  const pointRange = spreadPoints.length > 0 ?
-    Math.max(...spreadPoints) - Math.min(...spreadPoints) : 0;
+  // Calculate tightness for each market
+  const spreadTightness = calculateSingleMarketTightness(markets.spread.points, markets.spread.prices, "Spread");
+  const moneylineTightness = calculateSingleMarketTightness([], markets.moneyline.homeOdds, "Moneyline");
+  const totalTightness = calculateSingleMarketTightness(markets.total.points, markets.total.prices, "Total");
 
-  const priceRange = spreadPrices.length > 0 ?
-    Math.max(...spreadPrices) - Math.min(...spreadPrices) : 0;
+  // Take the LOOSEST market as overall tightness
+  const allTightness = [spreadTightness, moneylineTightness, totalTightness]
+    .filter(t => t.valid)
+    .sort((a, b) => getTightnessScore(b.tightness) - getTightnessScore(a.tightness));
+
+  const overall = allTightness[0] || spreadTightness;
+
+  return {
+    tightness: overall.tightness,
+    pointRange: overall.pointRange,
+    priceRange: overall.priceRange,
+    comment: overall.comment,
+    summary: `${overall.tightness} • ${overall.market} market • point range ${overall.pointRange.toFixed(1)} • price range ${overall.priceRange.toFixed(0)}¢`,
+    marketBreakdown: {
+      spread: spreadTightness,
+      moneyline: moneylineTightness,
+      total: totalTightness
+    }
+  };
+}
+
+function calculateSingleMarketTightness(points, prices, marketName) {
+  const pointRange = points.length > 0 ?
+    Math.max(...points) - Math.min(...points) : 0;
+
+  const priceRange = prices.length > 0 ?
+    Math.max(...prices) - Math.min(...prices) : 0;
 
   let tightness;
   let comment;
@@ -3472,12 +3562,18 @@ function calculateMarketTightnessTest(bookmakers) {
   }
 
   return {
+    market: marketName,
     tightness,
     pointRange: Math.round(pointRange * 10) / 10,
     priceRange: Math.round(priceRange),
     comment,
-    summary: `${tightness} • point range ${pointRange.toFixed(1)} • price range ${priceRange.toFixed(0)}¢`
+    valid: points.length > 0 || prices.length > 0
   };
+}
+
+function getTightnessScore(tightness) {
+  const scores = { "Tight": 1, "Normal": 2, "Loose": 3 };
+  return scores[tightness] || 1;
 }
 
 function formatOddsTableTest(bookmakers) {
