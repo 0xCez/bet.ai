@@ -193,6 +193,53 @@ class APIService {
       return { error: apiError.message };
     }
   }
+
+  /**
+   * Fetches market intelligence data for a specific game
+   * @param sport - The sport type (nba, nfl, mlb, etc.)
+   * @param team1 - Home team name
+   * @param team2 - Away team name
+   * @param team1_code - Home team code (optional)
+   * @param team2_code - Away team code (optional)
+   * @returns Promise<MarketIntelligenceResponse>
+   */
+  static async getMarketIntelligence(
+    sport: string,
+    team1: string,
+    team2: string,
+    team1_code?: string,
+    team2_code?: string
+  ): Promise<any> {
+    try {
+      console.log(`Fetching market intelligence for ${sport}: ${team1} vs ${team2}`);
+
+      const response = await fetch(`${this.baseURL}/marketIntelligence`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sport,
+          team1,
+          team2,
+          team1_code,
+          team2_code
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Market Intelligence data:", data);
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Error fetching market intelligence:", error);
+      throw error;
+    }
+  }
 }
 
 export default APIService;

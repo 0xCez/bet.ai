@@ -98,6 +98,7 @@ interface APIAnalysisResponse {
 }
 
 interface AnalysisResult {
+  sport?: string; // Add sport field to match backend response
   teams: {
     home: string;
     away: string;
@@ -238,12 +239,18 @@ export default function AnalysisScreen() {
   );
 
   const toggleCard = (cardName: "snapshot" | "xFactors" | "aiAnalysis") => {
-    const newExpandedCards = {
-      ...expandedCards,
-      [cardName]: !expandedCards[cardName],
-    };
-    setExpandedCards(newExpandedCards);
-    cachedExpandedCards = newExpandedCards; // Update cached state
+    try {
+      console.log(`Toggling card: ${cardName}, current state:`, expandedCards[cardName]);
+      const newExpandedCards = {
+        ...expandedCards,
+        [cardName]: !expandedCards[cardName],
+      };
+      console.log(`New expanded cards state:`, newExpandedCards);
+      setExpandedCards(newExpandedCards);
+      cachedExpandedCards = newExpandedCards; // Update cached state
+    } catch (error) {
+      console.error(`Error toggling card ${cardName}:`, error);
+    }
   };
 
   useEffect(() => {
@@ -391,6 +398,7 @@ export default function AnalysisScreen() {
 
       // Now use the parsed response
       const analysisData: AnalysisResult = {
+        sport: parsedResponse?.sport || "", // ✅ CRITICAL FIX: Extract sport from API response
         teams: {
           home: parsedResponse?.teams?.home || "",
           away: parsedResponse?.teams?.away || "",
@@ -960,7 +968,7 @@ export default function AnalysisScreen() {
               color="#FFFFFF"
             />
           </Pressable>
-          {expandedCards.aiAnalysis && (
+          {expandedCards.aiAnalysis && analysisResult?.aiAnalysis && (
             <View style={styles.aiAnalysisContent}>
               <View style={styles.aiMetricsContainer}>
                 {/* Confidence Score */}
@@ -1063,24 +1071,53 @@ export default function AnalysisScreen() {
 
         <View style={styles.debateContainer}>
           {!isDemo && (
-            <BorderButton
-              onPress={() => {
-                // Pass full analysis data to chat screen
-                router.push({
-                  pathname: "/chat",
-                  params: { analysisData: JSON.stringify(analysisResult) },
-                });
-              }}
-              containerStyle={styles.floatingButton}
-              borderColor="#00C2E0"
-              backgroundColor="#00C2E020"
-              opacity={1}
-              borderWidth={1}
-            >
-              <Text style={styles.buttonText}>
-                {i18n.t("analysisDebateWithAI")}
-              </Text>
-            </BorderButton>
+            <>
+              <BorderButton
+                onPress={() => {
+                  // Pass full analysis data to chat screen
+                  router.push({
+                    pathname: "/chat",
+                    params: { analysisData: JSON.stringify(analysisResult) },
+                  });
+                }}
+                containerStyle={styles.floatingButton}
+                borderColor="#00C2E0"
+                backgroundColor="#00C2E020"
+                opacity={1}
+                borderWidth={1}
+              >
+                <Text style={styles.buttonText}>
+                  {i18n.t("analysisDebateWithAI")}
+                </Text>
+              </BorderButton>
+
+              <View style={{ marginTop: 16 }}>
+                <BorderButton
+                  onPress={() => {
+                    // Navigate to market intel with game data
+                    router.push({
+                      pathname: "/market-intel",
+                      params: {
+                        team1: analysisResult?.teams?.home || "",
+                        team2: analysisResult?.teams?.away || "",
+                        sport: analysisResult?.sport || "nba", // Use actual sport from analysis
+                        team1Logo: analysisResult?.teams?.logos?.home || "",
+                        team2Logo: analysisResult?.teams?.logos?.away || ""
+                      }
+                    });
+                  }}
+                  containerStyle={styles.floatingButton}
+                  borderColor="#FFD700"
+                  backgroundColor="#FFD70020"
+                  opacity={1}
+                  borderWidth={1}
+                >
+                  <Text style={styles.buttonText}>
+                    Market Intelligence 📊
+                  </Text>
+                </BorderButton>
+              </View>
+            </>
           )}
         </View>
         {isDemo && (

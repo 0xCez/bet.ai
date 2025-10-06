@@ -20,7 +20,7 @@ const TENNIS_API_KEY = process.env.TENNIS_API_KEY || '2cf2f7d9e8e9d7ea2ab285677a
 
 admin.initializeApp();
 const db = admin.firestore();
-const CACHE_EXPIRY_TIME = 48 * 60 * 60 * 1000; // 24 hours in milliseconds
+const CACHE_EXPIRY_TIME = 36 * 60 * 60 * 1000; // 36 hours in milliseconds
 
 /**
  * Converts JSON data to a more token-efficient markdown format
@@ -152,11 +152,19 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
           // console.log("No cache hit found, proceeding with API calls and analysis");
 
           // If no cache hit, proceed with API calls and analysis
-          const [oddsData, gameData] = await Promise.all([
+          const [oddsData, gameData, marketIntelligence, teamStats, playerStats] = await Promise.all([
             sport === 'tennis' ?
               getTennisOddsData(team1Id, team2Id, team1, team2) :
               getOddsData(sport_type_odds, team1, team2, team1_code, team2_code, locale),
-            getGameData(sport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode)
+            getGameData(sport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode),
+            // NEW: Add Market Intelligence data
+            sport === 'tennis' ?
+              null :
+              getMarketIntelligenceDataTest(sport_type_odds, team1, team2),
+            // NEW: Add Team Statistics data
+            getTeamStatsDataTest(sport, team1Id, team2Id),
+            // NEW: Add Player Statistics data
+            getPlayerStatsForSport(sport, team1Id, team2Id)
           ]);
 
           let weatherData = null;
@@ -180,6 +188,9 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
 
           console.log("WEATHER DEBUG:", JSON.stringify(weatherData, null, 2));
           console.log("UPCOMING GAME DEBUG:", JSON.stringify(gameData.upcomingGame, null, 2));
+          console.log("MARKET INTELLIGENCE DEBUG:", JSON.stringify(marketIntelligence, null, 2));
+          console.log("TEAM STATS DEBUG:", JSON.stringify(teamStats, null, 2));
+          console.log("PLAYER STATS DEBUG:", JSON.stringify(playerStats, null, 2));
 
           console.log("=== AI PROMPT DATA BEING SENT ===");
           console.log("Key Insights:", JSON.stringify(oddsData.keyInsights || {}, null, 2));
@@ -191,6 +202,9 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
           console.log("Team2 Injuries FINAL:", JSON.stringify(gameData.team2_injuries, null, 2));
           console.log("Upcoming Game FINAL:", JSON.stringify(gameData.upcomingGame, null, 2));
           console.log("Weather FINAL:", JSON.stringify(weatherData, null, 2));
+          console.log("Market Intelligence FINAL:", JSON.stringify(marketIntelligence, null, 2));
+          console.log("Team Stats FINAL:", JSON.stringify(teamStats, null, 2));
+          console.log("Player Stats FINAL:", JSON.stringify(playerStats, null, 2));
           console.log("=== END AI PROMPT DATA ===");
 
           const prompt = `
@@ -234,6 +248,15 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
 
           ## Weather Forecast
           ${JSON.stringify(weatherData)}
+
+          ## Market Intelligence
+          ${JSON.stringify(marketIntelligence)}
+
+          ## Team Statistics
+          ${JSON.stringify(teamStats)}
+
+          ## Player Statistics
+          ${JSON.stringify(playerStats)}
           ###
 
           Rules:
@@ -408,6 +431,12 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
 
             jsonResponse.image_url = imageUrl;
             jsonResponse.sport = sport;
+
+            // NEW: Add Market Intelligence, Team Stats, and Player Stats to response
+            jsonResponse.marketIntelligence = marketIntelligence;
+            jsonResponse.teamStats = teamStats;
+            jsonResponse.playerStats = playerStats;
+
             // Return the JSON object immediately without waiting for cache save
             res.status(200).json(jsonResponse);
 
@@ -2964,3 +2993,2128 @@ exports.saveExternalAnalysis = functions.https.onRequest(async (req, res) => {
     });
   }
 });
+
+
+// ====================================================================
+// MARKET INTELLIGENCE & TEAM STATS ENDPOINT - PRODUCTION READY
+// ====================================================================
+
+exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
+  // Add CORS headers for testing
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  try {
+    console.log('📊 MARKET INTELLIGENCE FUNCTION CALLED');
+    const { sport, team1, team2, team1_code, team2_code } = req.body;
+
+    if (!sport || !team1 || !team2) {
+      return res.status(400).json({
+        error: "Missing required fields: sport, team1, team2"
+      });
+    }
+
+    console.log(`Product Update Test - Processing ${sport}: ${team1} vs ${team2}`);
+
+    // Get team IDs (reuse existing function)
+    const { team1Id, team2Id, sport_type_odds } = await findTeamIds(sport, team1, team1_code, team2, team2_code);
+
+    if (!team1Id || !team2Id) {
+      return res.status(400).json({
+        error: "Could not find team IDs for the provided teams"
+      });
+    }
+
+    // Test Market Intelligence and Team Stats
+    const [marketIntelligence, teamStats] = await Promise.all([
+      getMarketIntelligenceDataTest(sport_type_odds, team1, team2),
+      getTeamStatsDataTest(sport, team1Id, team2Id)
+    ]);
+
+    // CRITICAL: Match analyzeImage structure EXACTLY
+    const response = {
+      sport,
+      teams: {
+        home: team1,
+        away: team2,
+        logos: {
+          home: "", // TODO: Add team logos if available
+          away: ""
+        }
+      },
+      // Market Intelligence data (same nesting level as keyInsights, matchSnapshot in analyzeImage)
+      marketIntelligence: {
+        bestLines: marketIntelligence.bestLines,
+        sharpMeter: marketIntelligence.sharpMeter,
+        vigAnalysis: marketIntelligence.evAnalysis?.vigAnalysis,
+        evOpportunities: marketIntelligence.evAnalysis?.uiOpportunities,
+        fairValue: marketIntelligence.evAnalysis?.fairValue, // Add fair value data
+        sharpConsensus: marketIntelligence.evAnalysis?.sharpConsensus, // MISSING - add sharp consensus data
+        marketTightness: marketIntelligence.marketTightness,
+        oddsTable: marketIntelligence.oddsTable
+      },
+      // Team Stats data
+      teamStats,
+      // Metadata (same as analyzeImage)
+      timestamp: new Date().toISOString(),
+      teamIds: { team1Id, team2Id }
+    };
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    console.error("Product Update Test Error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// Market Intelligence Test Function
+async function getMarketIntelligenceDataTest(sport, team1, team2) {
+  try {
+    const BASE_URL = `https://api.the-odds-api.com/v4/sports/${sport}`;
+
+    console.log(`Fetching events from: ${BASE_URL}/events`);
+
+    // Get events
+    const eventsResponse = await axios.get(`${BASE_URL}/events?apiKey=${ODDS_API_KEY}`);
+    const events = eventsResponse.data;
+
+    console.log(`Found ${events.length} events for ${sport}`);
+
+    const event = events.find(e => fuzzyMatchTeam(e, team1, team2));
+    if (!event) {
+      return {
+        error: "Event not found",
+        availableEvents: events.slice(0, 3).map(e => ({ home: e.home_team, away: e.away_team }))
+      };
+    }
+
+    console.log(`Found matching event: ${event.home_team} vs ${event.away_team}`);
+
+    // Get odds with multiple markets
+    // Get odds with ALL available US bookmakers for comprehensive +EV analysis
+    const oddsUrl = `${BASE_URL}/events/${event.id}/odds?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&bookmakers=pinnacle,lowvig,betonlineag,draftkings,fanduel,betmgm,williamhill_us,betrivers,bovada,betus,mybookieag,fanatics,ballybet,espnbet,hardrockbet`;
+
+    console.log(`Fetching odds from: ${oddsUrl}`);
+
+    const oddsResponse = await axios.get(oddsUrl);
+    const bookmakers = oddsResponse.data.bookmakers || [];
+
+    console.log(`Found ${bookmakers.length} bookmakers with odds`);
+
+    if (bookmakers.length === 0) {
+      return { error: "No bookmaker data available" };
+    }
+
+    // Calculate all the market intelligence metrics
+    const [bestLines, lineMovement, sharpMeter, marketTightness] = await Promise.all([
+      Promise.resolve(calculateBestLinesTest(bookmakers, event)),
+      calculateLineMovementTest(sport, event.id, event),
+      Promise.resolve(calculateSharpMeterTest(bookmakers, event)),
+      Promise.resolve(calculateMarketTightnessTest(bookmakers))
+    ]);
+
+    const marketData = {
+      bestLines,
+      lineMovement,
+      sharpMeter,
+      marketTightness,
+      evAnalysis: calculateEVOpportunities(bookmakers, event),
+      oddsTable: formatOddsTableTest(bookmakers, event),
+      rawBookmakerCount: bookmakers.length,
+      event: {
+        id: event.id,
+        home_team: event.home_team,
+        away_team: event.away_team,
+        commence_time: event.commence_time
+      }
+    };
+
+    return marketData;
+
+  } catch (error) {
+    console.error("Market Intelligence Error:", error);
+    return {
+      error: error.message,
+      stack: error.stack
+    };
+  }
+}
+
+// ACTUAL FORMULAS IMPLEMENTATION
+function calculateBestLinesTest(bookmakers, event) {
+  const spreads = [];
+  const moneylines = [];
+  const totals = [];
+
+  // Extract all lines from all bookmakers
+  bookmakers.forEach(bookmaker => {
+    bookmaker.markets.forEach(market => {
+      if (market.key === 'spreads') {
+        market.outcomes.forEach(outcome => {
+          spreads.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            team: outcome.name,
+            point: outcome.point,
+            price: outcome.price,
+            isHome: outcome.name === event.home_team
+          });
+        });
+      }
+
+      if (market.key === 'h2h') {
+        market.outcomes.forEach(outcome => {
+          moneylines.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            team: outcome.name,
+            price: outcome.price,
+            isHome: outcome.name === event.home_team
+          });
+        });
+      }
+
+      if (market.key === 'totals') {
+        market.outcomes.forEach(outcome => {
+          totals.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            type: outcome.name, // "Over" or "Under"
+            point: outcome.point,
+            price: outcome.price
+          });
+        });
+      }
+    });
+  });
+
+  // FORMULA 1: Calculate consensus spread point (median)
+  const homeSpreadPoints = spreads.filter(s => s.isHome).map(s => s.point);
+  const consensusSpreadPoint = homeSpreadPoints.length > 0 ?
+    homeSpreadPoints.sort((a, b) => a - b)[Math.floor(homeSpreadPoints.length / 2)] : 0;
+
+  // FORMULA 2: Calculate consensus total (median)
+  const totalPoints = totals.filter(t => t.type === "Over").map(t => t.point);
+  const consensusTotal = totalPoints.length > 0 ?
+    totalPoints.sort((a, b) => a - b)[Math.floor(totalPoints.length / 2)] : 0;
+
+  // FORMULA 3: Calculate consensus moneylines (median)
+  const homeMoneylineOdds = moneylines.filter(m => m.isHome).map(m => m.price);
+  const awayMoneylineOdds = moneylines.filter(m => !m.isHome).map(m => m.price);
+  const consensusHomeML = homeMoneylineOdds.length > 0 ?
+    homeMoneylineOdds.sort((a, b) => a - b)[Math.floor(homeMoneylineOdds.length / 2)] : 0;
+  const consensusAwayML = awayMoneylineOdds.length > 0 ?
+    awayMoneylineOdds.sort((a, b) => a - b)[Math.floor(awayMoneylineOdds.length / 2)] : 0;
+
+  // FORMULA 4: Find best spread lines (prioritize point first, then price)
+  const favoriteSpread = spreads
+    .filter(s => s.point < 0)
+    .sort((a, b) => {
+      if (Math.abs(a.point - b.point) < 0.1) return a.price - b.price; // Better juice
+      return a.point - b.point; // Better number (closer to 0)
+    })[0];
+
+  const underdogSpread = spreads
+    .filter(s => s.point > 0)
+    .sort((a, b) => {
+      if (Math.abs(a.point - b.point) < 0.1) return a.price - b.price; // Better juice
+      return b.point - a.point; // Better number (closer to 0)
+    })[0];
+
+  // FORMULA 4: Find best moneylines
+  const bestHomeMl = moneylines
+    .filter(m => m.isHome)
+    .sort((a, b) => a.price < 0 ? b.price - a.price : a.price - b.price)[0];
+
+  const bestAwayMl = moneylines
+    .filter(m => !m.isHome)
+    .sort((a, b) => a.price < 0 ? b.price - a.price : a.price - b.price)[0];
+
+  return {
+    consensusSpreadPoint,
+    consensusTotal,
+    consensusHomeML,
+    consensusAwayML,
+    bestLines: [
+      favoriteSpread && {
+        type: "spread",
+        label: "Best Favorite",
+        line: favoriteSpread.point,
+        odds: favoriteSpread.price,
+        bookmaker: favoriteSpread.bookmaker,
+        team: favoriteSpread.team
+      },
+      underdogSpread && {
+        type: "spread",
+        label: "Best Underdog",
+        line: underdogSpread.point,
+        odds: underdogSpread.price,
+        bookmaker: underdogSpread.bookmaker,
+        team: underdogSpread.team
+      },
+      bestHomeMl && {
+        type: "moneyline",
+        label: "Best Home ML",
+        odds: bestHomeMl.price,
+        bookmaker: bestHomeMl.bookmaker,
+        team: bestHomeMl.team
+      },
+      bestAwayMl && {
+        type: "moneyline",
+        label: "Best Away ML",
+        odds: bestAwayMl.price,
+        bookmaker: bestAwayMl.bookmaker,
+        team: bestAwayMl.team
+      }
+    ].filter(Boolean),
+    rawData: {
+      totalSpreads: spreads.length,
+      totalMoneylines: moneylines.length,
+      totalTotals: totals.length
+    }
+  };
+}
+
+async function calculateLineMovementTest(sport, eventId, event) {
+  let historicalUrl = ""; // Define at function scope
+
+  try {
+    // Calculate historical date based on game date, not current date
+    const gameDate = new Date(event.commence_time);
+    const now = new Date();
+
+    // If game is in future, we can't get historical data from before it was posted
+    if (gameDate > now) {
+      return {
+        error: "Cannot get historical data for future games",
+        note: "Game hasn't started yet, odds history not available",
+        gameDate: event.commence_time,
+        currentDate: now.toISOString()
+      };
+    }
+
+    // For past games, get data from 1 day before game date
+    const historicalDate = new Date(gameDate);
+    historicalDate.setDate(historicalDate.getDate() - 1);
+    const historicalDateStr = historicalDate.toISOString();
+
+    console.log(`Fetching historical odds for ${eventId} from ${historicalDateStr}`);
+
+    historicalUrl = `https://api.the-odds-api.com/v4/historical/sports/${sport}/events/${eventId}/odds?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&date=${historicalDateStr}`;
+
+    console.log(`Historical URL: ${historicalUrl}`);
+
+    const historicalResponse = await axios.get(historicalUrl);
+    const historicalData = historicalResponse.data;
+
+    console.log("Historical API response structure:", JSON.stringify(historicalData, null, 2));
+
+    // Historical endpoint returns single event data, not array
+    if (!historicalData || !historicalData.data || !historicalData.data.bookmakers) {
+      return {
+        error: "No historical data available for this event",
+        note: "Event may be too recent or not available 7 days ago",
+        apiResponse: historicalData
+      };
+    }
+
+    const historicalBookmakers = historicalData.data.bookmakers;
+
+    // Calculate historical consensus
+    const historicalSpreads = [];
+    const historicalMoneylines = [];
+    const historicalTotals = [];
+
+    historicalBookmakers.forEach(bookmaker => {
+      bookmaker.markets.forEach(market => {
+        if (market.key === 'spreads') {
+          const homeLine = market.outcomes.find(o => o.name === event.home_team);
+          if (homeLine) historicalSpreads.push(homeLine.point);
+        }
+        if (market.key === 'h2h') {
+          const homeLine = market.outcomes.find(o => o.name === event.home_team);
+          if (homeLine) historicalMoneylines.push(homeLine.price);
+        }
+        if (market.key === 'totals') {
+          const overLine = market.outcomes.find(o => o.name === "Over");
+          if (overLine) historicalTotals.push(overLine.point);
+        }
+      });
+    });
+
+    // Calculate opening consensus (median of historical lines)
+    const openingSpread = historicalSpreads.length > 0 ?
+      historicalSpreads.sort((a, b) => a - b)[Math.floor(historicalSpreads.length / 2)] : null;
+
+    const openingMl = historicalMoneylines.length > 0 ?
+      historicalMoneylines.sort((a, b) => a - b)[Math.floor(historicalMoneylines.length / 2)] : null;
+
+    const openingTotal = historicalTotals.length > 0 ?
+      historicalTotals.sort((a, b) => a - b)[Math.floor(historicalTotals.length / 2)] : null;
+
+    // Get current consensus (would be calculated in main function)
+    // For now, return the historical vs current structure
+    return {
+      historical: {
+        spread: openingSpread,
+        moneyline: openingMl,
+        total: openingTotal,
+        date: historicalDateStr,
+        bookmakerCount: historicalBookmakers.length
+      },
+      note: "Historical data successfully retrieved - can calculate real movement",
+      success: true
+    };
+
+  } catch (error) {
+    console.error("Historical odds error:", error);
+
+    let errorDetails = error.message;
+    if (error.response) {
+      console.error("Error response status:", error.response.status);
+      console.error("Error response data:", error.response.data);
+      errorDetails = `Status ${error.response.status}: ${JSON.stringify(error.response.data)}`;
+    }
+
+    return {
+      error: "Failed to fetch historical odds",
+      details: errorDetails,
+      endpoint: historicalUrl,
+      eventId: eventId,
+      sport: sport
+    };
+  }
+}
+
+function calculateSharpMeterTest(bookmakers, event) {
+  const sharpBooks = ['pinnacle', 'lowvig', 'betonlineag']; // Updated to actual available books
+  const publicBooks = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers', 'bovada', 'betus', 'mybookieag', 'fanatics', 'ballybet', 'espnbet', 'hardrockbet'];
+
+  const sharpSpreads = [];
+  const publicSpreads = [];
+  const sharpVigs = [];
+  const publicVigs = [];
+
+  bookmakers.forEach(bookmaker => {
+    const isSharp = sharpBooks.includes(bookmaker.key);
+    const isPublic = publicBooks.includes(bookmaker.key);
+
+    // Get spread data
+    const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads');
+    const moneylineMarket = bookmaker.markets.find(m => m.key === 'h2h');
+
+    if (spreadMarket) {
+      const homeLine = spreadMarket.outcomes.find(o => o.name === event.home_team);
+      if (homeLine) {
+        if (isSharp) sharpSpreads.push(homeLine.point);
+        if (isPublic) publicSpreads.push(homeLine.point);
+      }
+    }
+
+    // Calculate vig for this bookmaker
+    if (moneylineMarket && moneylineMarket.outcomes.length === 2) {
+      const homeOdds = moneylineMarket.outcomes.find(o => o.name === event.home_team)?.price;
+      const awayOdds = moneylineMarket.outcomes.find(o => o.name === event.away_team)?.price;
+
+      if (homeOdds && awayOdds) {
+        const vig = calculateMarketVig(homeOdds, awayOdds);
+        if (isSharp) sharpVigs.push(vig);
+        if (isPublic) publicVigs.push(vig);
+      }
+    }
+  });
+
+  // Signal 1: Point Gap Analysis (Primary)
+  const avgSharpSpread = sharpSpreads.length > 0 ?
+    sharpSpreads.reduce((a, b) => a + b, 0) / sharpSpreads.length : 0;
+
+  const avgPublicSpread = publicSpreads.length > 0 ?
+    publicSpreads.reduce((a, b) => a + b, 0) / publicSpreads.length : 0;
+
+  const pointGap = avgSharpSpread - avgPublicSpread;
+
+  // Signal 2: Vig Confidence Analysis
+  const avgSharpVig = sharpVigs.length > 0 ?
+    sharpVigs.reduce((a, b) => a + b, 0) / sharpVigs.length : 0;
+
+  const avgPublicVig = publicVigs.length > 0 ?
+    publicVigs.reduce((a, b) => a + b, 0) / publicVigs.length : 0;
+
+  const vigGap = avgPublicVig - avgSharpVig;
+
+  // Signal 3: Generate interpretations
+  let primarySignal;
+  let secondarySignal;
+  let sharpLean;
+  let gaugeValue;
+
+  if (Math.abs(pointGap) < 0.1) {
+    primarySignal = "Neutral alignment";
+    sharpLean = "neutral";
+    gaugeValue = 50;
+  } else if (pointGap < 0) {
+    // Sharp spread is more negative = sharps lean FAVORITE
+    primarySignal = `Sharps Lean Favorite ${Math.abs(pointGap).toFixed(1)}`;
+    sharpLean = "favorite";
+    gaugeValue = Math.max(0, 50 - (Math.abs(pointGap) * 20)); // 0-50 scale
+  } else {
+    // Sharp spread is less negative = sharps lean DOG
+    primarySignal = `Sharps Lean Dog +${Math.abs(pointGap).toFixed(1)}`;
+    sharpLean = "dog";
+    gaugeValue = Math.min(100, 50 + (pointGap * 20)); // 50-100 scale
+  }
+
+  // Secondary signal about vig confidence
+  if (vigGap > 1.0) {
+    secondarySignal = `(High public vig ${avgPublicVig.toFixed(1)}% vs ${avgSharpVig.toFixed(1)}%)`;
+  } else {
+    secondarySignal = `(Similar vig levels)`;
+  }
+
+  const detailLine = `Sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
+
+  return {
+    primarySignal,
+    secondarySignal,
+    detailLine,
+    gaugeValue: Math.round(gaugeValue),
+    pointGap: Math.round(pointGap * 10) / 10,
+    avgSharpSpread: Math.round(avgSharpSpread * 10) / 10,
+    avgPublicSpread: Math.round(avgPublicSpread * 10) / 10,
+    avgSharpVig: Math.round(avgSharpVig * 10) / 10,
+    avgPublicVig: Math.round(avgPublicVig * 10) / 10,
+    vigGap: Math.round(vigGap * 10) / 10,
+    sharpLean,
+    sharpBooksCount: sharpSpreads.length,
+    publicBooksCount: publicSpreads.length,
+    dataQuality: sharpSpreads.length > 0 && publicSpreads.length > 0 ? "good" : "insufficient"
+  };
+}
+
+function calculateMarketTightnessTest(bookmakers) {
+  // Analyze all 3 markets separately, then take the loosest
+  const markets = {
+    spread: { points: [], prices: [] },
+    moneyline: { homeOdds: [], awayOdds: [] },
+    total: { points: [], prices: [] }
+  };
+
+  bookmakers.forEach(bookmaker => {
+    bookmaker.markets.forEach(market => {
+      if (market.key === 'spreads') {
+        market.outcomes.forEach(outcome => {
+          if (outcome.point < 0) { // Favorite lines only
+            markets.spread.points.push(Math.abs(outcome.point));
+            markets.spread.prices.push(outcome.price);
+          }
+        });
+      }
+
+      if (market.key === 'h2h') {
+        market.outcomes.forEach(outcome => {
+          if (outcome.name === bookmaker.markets.find(m => m.key === 'spreads')?.outcomes?.find(o => o.point < 0)?.name) {
+            markets.moneyline.homeOdds.push(outcome.price); // Favorite ML
+          }
+        });
+      }
+
+      if (market.key === 'totals') {
+        const overOutcome = market.outcomes.find(o => o.name === "Over");
+        if (overOutcome) {
+          markets.total.points.push(overOutcome.point);
+          markets.total.prices.push(overOutcome.price);
+        }
+      }
+    });
+  });
+
+  // Calculate tightness for each market
+  const spreadTightness = calculateSingleMarketTightness(markets.spread.points, markets.spread.prices, "Spread");
+  const moneylineTightness = calculateSingleMarketTightness([], markets.moneyline.homeOdds, "Moneyline");
+  const totalTightness = calculateSingleMarketTightness(markets.total.points, markets.total.prices, "Total");
+
+  // Take the LOOSEST market as overall tightness
+  const allTightness = [spreadTightness, moneylineTightness, totalTightness]
+    .filter(t => t.valid)
+    .sort((a, b) => getTightnessScore(b.tightness) - getTightnessScore(a.tightness));
+
+  const overall = allTightness[0] || spreadTightness;
+
+  return {
+    tightness: overall.tightness,
+    pointRange: overall.pointRange,
+    priceRange: overall.priceRange,
+    comment: overall.comment,
+    summary: `${overall.tightness} • ${overall.market} market • point range ${overall.pointRange.toFixed(1)} • price range ${overall.priceRange.toFixed(0)}¢`,
+    marketBreakdown: {
+      spread: spreadTightness,
+      moneyline: moneylineTightness,
+      total: totalTightness
+    }
+  };
+}
+
+function calculateSingleMarketTightness(points, prices, marketName) {
+  const pointRange = points.length > 0 ?
+    Math.max(...points) - Math.min(...points) : 0;
+
+  const priceRange = prices.length > 0 ?
+    Math.max(...prices) - Math.min(...prices) : 0;
+
+  let tightness;
+  let comment;
+
+  // MUCH STRICTER rules - Tight should be REALLY tight so we always have something to show
+  if (pointRange <= 0.25 && priceRange <= 5) {
+    tightness = "Tight";
+    comment = "Books agree, edges harder to find.";
+  } else if (pointRange <= 0.75 && priceRange <= 12) {
+    tightness = "Normal";
+    comment = "Some disagreement, shopping can help.";
+  } else {
+    tightness = "Loose";
+    comment = "Big disagreement, high value in line-shopping.";
+  }
+
+  return {
+    market: marketName,
+    tightness,
+    pointRange: Math.round(pointRange * 10) / 10,
+    priceRange: Math.round(priceRange),
+    comment,
+    valid: points.length > 0 || prices.length > 0
+  };
+}
+
+function getTightnessScore(tightness) {
+  const scores = { "Tight": 1, "Normal": 2, "Loose": 3 };
+  return scores[tightness] || 1;
+}
+
+function formatOddsTableTest(bookmakers, event) {
+  // Define sharp and public bookmakers (same as other functions)
+  const sharpBooks = ['pinnacle', 'lowvig', 'betonlineag'];
+  const publicBooks = ['draftkings', 'fanduel', 'betmgm', 'betrivers', 'williamhill_us', 'bovada', 'betus'];
+
+  // Separate and select bookmakers: 1-3 sharps + 2-3 public (max 5 total)
+  const sharpBookmakers = bookmakers.filter(b => sharpBooks.includes(b.key));
+  const publicBookmakers = bookmakers.filter(b => publicBooks.includes(b.key));
+
+  const selectedBookmakers = [
+    ...sharpBookmakers.slice(0, 2), // Max 2 sharp books
+    ...publicBookmakers.slice(0, 3)  // Max 3 public books
+  ];
+
+  console.log(`ODDS TABLE: Selected ${selectedBookmakers.length} bookmakers:`,
+    selectedBookmakers.map(b => `${b.title} (${sharpBooks.includes(b.key) ? 'Sharp' : 'Public'})`));
+
+  // Extract odds using EXACT same pattern as calculateBestLinesTest
+  return selectedBookmakers.map(bookmaker => {
+    const oddsData = {
+      bookmaker: bookmaker.title,
+      bookmakerKey: bookmaker.key,
+      isSharp: sharpBooks.includes(bookmaker.key),
+      odds: {}
+    };
+
+    // Extract odds (same logic as other functions)
+    bookmaker.markets.forEach(market => {
+      if (market.key === 'h2h') {
+        const homeOutcome = market.outcomes.find(o => o.name === event.home_team);
+        const awayOutcome = market.outcomes.find(o => o.name === event.away_team);
+
+        if (homeOutcome && awayOutcome) {
+          oddsData.odds.moneyline = {
+            home: homeOutcome.price,
+            away: awayOutcome.price
+          };
+        }
+      }
+
+      if (market.key === 'spreads') {
+        const homeOutcome = market.outcomes.find(o => o.name === event.home_team);
+        const awayOutcome = market.outcomes.find(o => o.name === event.away_team);
+
+        if (homeOutcome && awayOutcome) {
+          oddsData.odds.spread = {
+            home: { point: homeOutcome.point, price: homeOutcome.price },
+            away: { point: awayOutcome.point, price: awayOutcome.price }
+          };
+        }
+      }
+
+      if (market.key === 'totals') {
+        const overOutcome = market.outcomes.find(o => o.name === "Over");
+        const underOutcome = market.outcomes.find(o => o.name === "Under");
+
+        if (overOutcome && underOutcome) {
+          oddsData.odds.total = {
+            over: { point: overOutcome.point, price: overOutcome.price },
+            under: { point: underOutcome.point, price: underOutcome.price }
+          };
+        }
+      }
+    });
+
+    return oddsData;
+  }).filter(bookmaker =>
+    // Only include bookmakers with complete data
+    bookmaker.odds.moneyline && bookmaker.odds.moneyline.home && bookmaker.odds.moneyline.away
+  );
+}
+
+// ====================================================================
+// PLAYER STATISTICS TEST FUNCTIONS
+// ====================================================================
+
+async function getPlayerStatsDataTest(sport, team1Id, team2Id) {
+  try {
+    console.log(`Fetching player stats for ${sport} - Team1: ${team1Id}, Team2: ${team2Id}`);
+
+    const [team1Players, team2Players] = await Promise.all([
+      getTeamPlayerStatsTest(sport, team1Id),
+      getTeamPlayerStatsTest(sport, team2Id)
+    ]);
+
+    return {
+      team1: {
+        teamId: team1Id,
+        allPlayers: team1Players.players || [],
+        topPlayers: getTop3PlayersTest(team1Players.players || [], sport),
+        playerCount: (team1Players.players || []).length,
+        error: team1Players.error
+      },
+      team2: {
+        teamId: team2Id,
+        allPlayers: team2Players.players || [],
+        topPlayers: getTop3PlayersTest(team2Players.players || [], sport),
+        playerCount: (team2Players.players || []).length,
+        error: team2Players.error
+      }
+    };
+
+  } catch (error) {
+    console.error("Player Stats Error:", error);
+    return { error: error.message };
+  }
+}
+
+async function getTeamPlayerStatsTest(sport, teamId) {
+  try {
+    const currentSeason = new Date().getFullYear();
+    let apiUrl;
+
+    switch (sport.toLowerCase()) {
+      case 'nba':
+        apiUrl = `https://v2.nba.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
+        break;
+      case 'nfl':
+      case 'ncaaf':
+        apiUrl = `https://v1.american-football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
+        break;
+      case 'mlb':
+        apiUrl = `https://v1.baseball.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
+        break;
+      case 'soccer':
+        // For soccer, we need league ID - using EPL as default for testing
+        apiUrl = `https://v3.football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+        break;
+      default:
+        return { players: [], error: `Player stats not supported for ${sport}` };
+    }
+
+    console.log(`Fetching player stats from: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        "x-apisports-key": API_SPORTS_KEY
+      }
+    });
+
+    if (response.data.errors && Object.keys(response.data.errors).length > 0) {
+      console.error(`Player stats API error:`, response.data.errors);
+      return { players: [], error: JSON.stringify(response.data.errors) };
+    }
+
+    if (!response.data.response || response.data.response.length === 0) {
+      console.log(`No player stats found for team ${teamId}`);
+      return { players: [], error: null };
+    }
+
+    const players = response.data.response;
+    console.log(`Found ${players.length} players for team ${teamId}`);
+
+    return { players, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching player stats for team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+function getTop3PlayersTest(players, sport) {
+  if (!players || players.length === 0) return [];
+
+  switch (sport.toLowerCase()) {
+    case 'nba':
+      return players
+        .filter(p => p.statistics && p.statistics.points && p.statistics.points.average > 5) // Minimum threshold
+        .sort((a, b) => (b.statistics.points.average || 0) - (a.statistics.points.average || 0))
+        .slice(0, 3);
+
+    case 'nfl':
+    case 'ncaaf':
+      // Get top player from each key position
+      const qb = players
+        .filter(p => p.player && p.player.position === 'QB')
+        .sort((a, b) => (b.statistics?.passing?.yards || 0) - (a.statistics?.passing?.yards || 0))[0];
+
+      const rb = players
+        .filter(p => p.player && p.player.position === 'RB')
+        .sort((a, b) => (b.statistics?.rushing?.yards || 0) - (a.statistics?.rushing?.yards || 0))[0];
+
+      const wr = players
+        .filter(p => p.player && p.player.position === 'WR')
+        .sort((a, b) => (b.statistics?.receiving?.yards || 0) - (a.statistics?.receiving?.yards || 0))[0];
+
+      return [qb, rb, wr].filter(Boolean);
+
+    case 'mlb':
+      return players
+        .filter(p => p.statistics && p.statistics.batting && (p.statistics.batting.at_bats || 0) > 50)
+        .sort((a, b) => {
+          const aOPS = (a.statistics.batting.on_base_percentage || 0) + (a.statistics.batting.slugging_percentage || 0);
+          const bOPS = (b.statistics.batting.on_base_percentage || 0) + (b.statistics.batting.slugging_percentage || 0);
+          return bOPS - aOPS;
+        })
+        .slice(0, 3);
+
+    case 'soccer':
+      return players
+        .filter(p => p.statistics && p.statistics[0] && (p.statistics[0].games?.appearences || 0) > 5)
+        .sort((a, b) => {
+          const aContrib = (a.statistics[0].goals?.total || 0) + (a.statistics[0].goals?.assists || 0);
+          const bContrib = (b.statistics[0].goals?.total || 0) + (b.statistics[0].goals?.assists || 0);
+          return bContrib - aContrib;
+        })
+        .slice(0, 3);
+
+    default:
+      return players.slice(0, 3);
+  }
+}
+
+// ====================================================================
+// TEAM STATISTICS TEST FUNCTIONS
+// ====================================================================
+
+async function getTeamStatsDataTest(sport, team1Id, team2Id) {
+  try {
+    console.log(`Fetching team stats for ${sport} - Team1: ${team1Id}, Team2: ${team2Id}`);
+
+    const [team1Stats, team2Stats] = await Promise.all([
+      getSingleTeamStatsTest(sport, team1Id),
+      getSingleTeamStatsTest(sport, team2Id)
+    ]);
+
+    return {
+      team1: {
+        teamId: team1Id,
+        stats: team1Stats.stats,
+        error: team1Stats.error
+      },
+      team2: {
+        teamId: team2Id,
+        stats: team2Stats.stats,
+        error: team2Stats.error
+      }
+    };
+
+  } catch (error) {
+    console.error("Team Stats Error:", error);
+    return { error: error.message };
+  }
+}
+
+async function getSingleTeamStatsTest(sport, teamId) {
+  try {
+    const currentSeason = sport.toLowerCase() === 'nba' ? 2024 : 2025; // Use 2024 for NBA, 2025 for others
+    let apiUrl;
+
+    switch (sport.toLowerCase()) {
+      case 'nba':
+        // Based on official API-Sports.io documentation - correct parameters
+        apiUrl = `https://v2.nba.api-sports.io/teams/statistics?season=${currentSeason}&id=${teamId}`;
+        break;
+      case 'nfl':
+      case 'ncaaf':
+        // NFL uses StatPal API for comprehensive team stats
+        return await getStatPalTeamStatsTest(teamId);
+        break;
+      case 'mlb':
+        // MLB uses StatPal API for comprehensive team stats
+        return await getStatPalMLBTeamStatsTest(teamId);
+        break;
+      case 'soccer':
+        // For soccer, we need league ID - using EPL as default
+        apiUrl = `https://v3.football.api-sports.io/teams/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+        break;
+      default:
+        return { stats: null, error: `Team stats not supported for ${sport}` };
+    }
+
+    console.log(`Fetching team stats from: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl, {
+      headers: sport.toLowerCase() === 'nba' ? {
+        "x-rapidapi-host": "v2.nba.api-sports.io",
+        "x-rapidapi-key": API_SPORTS_KEY
+      } : {
+        "x-apisports-key": API_SPORTS_KEY
+      }
+    });
+
+    if (response.data.errors && Object.keys(response.data.errors).length > 0) {
+      console.error(`Team stats API error:`, response.data.errors);
+      return { stats: null, error: JSON.stringify(response.data.errors) };
+    }
+
+    if (!response.data.response) {
+      console.log(`No team stats found for team ${teamId}`);
+      return { stats: null, error: "No data found" };
+    }
+
+    const stats = response.data.response[0] || response.data.response;
+    console.log(`Found team stats for team ${teamId}`);
+
+    return { stats, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching team stats for team ${teamId}:`, error);
+    return { stats: null, error: error.message };
+  }
+}
+
+// StatPal NFL Team Statistics Function
+async function getStatPalTeamStatsTest(teamId) {
+  try {
+    // Need to convert team ID to team code for StatPal
+    const teamCode = await getTeamCodeForStatPal(teamId);
+    if (!teamCode) {
+      return { stats: null, error: "Could not find team code for StatPal API" };
+    }
+
+    const apiUrl = `https://statpal.io/api/v1/nfl/team-stats/${teamCode}?access_key=${STATPAL_API_KEY}`;
+
+    console.log(`Fetching NFL team stats from StatPal: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl);
+
+    if (response.status !== 200) {
+      return { stats: null, error: `StatPal API returned status ${response.status}` };
+    }
+
+    if (!response.data || !response.data.statistics) {
+      return { stats: null, error: "No statistics data in StatPal response" };
+    }
+
+    const stats = response.data.statistics;
+    console.log(`Found StatPal team stats for team code ${teamCode}`);
+
+    // Transform StatPal data to structured format
+    const transformedStats = transformStatPalData(stats);
+
+    return { stats: transformedStats, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching StatPal team stats for team ${teamId}:`, error);
+    return { stats: null, error: error.message };
+  }
+}
+
+// Helper function to get team code for StatPal API
+async function getTeamCodeForStatPal(teamId) {
+  try {
+    // Read NFL teams file to get StatPal code
+    const fs = require('fs');
+    const path = require('path');
+    const teamsFile = path.join(__dirname, 'nfl_teams.json');
+
+    if (!fs.existsSync(teamsFile)) {
+      console.error('NFL teams file not found');
+      return null;
+    }
+
+    const teams = JSON.parse(fs.readFileSync(teamsFile, 'utf8'));
+    const team = teams.find(t => t.id === parseInt(teamId));
+
+    if (!team || !team.statpal_code) {
+      console.error(`No StatPal code found for team ID ${teamId}`);
+      return null;
+    }
+
+    return team.statpal_code.toLowerCase();
+  } catch (error) {
+    console.error('Error getting team code for StatPal:', error);
+    return null;
+  }
+}
+
+// Transform StatPal data to structured format for UI
+function transformStatPalData(statpalStats) {
+  const categories = statpalStats.category || [];
+
+  // Find specific categories
+  const passing = categories.find(c => c.name === "Passing");
+  const rushing = categories.find(c => c.name === "Rushing");
+  const downs = categories.find(c => c.name === "Downs");
+  const kicking = categories.find(c => c.name === "Kicking");
+
+  return {
+    team: statpalStats.team,
+    season: statpalStats.season,
+
+    // Offensive Stats
+    offense: {
+      passing: {
+        yardsPerGame: parseFloat(passing?.team?.yards_per_game || 0),
+        totalYards: parseInt(passing?.team?.yards || 0),
+        touchdowns: parseInt(passing?.team?.passing_touchdowns || 0),
+        completions: parseInt(passing?.team?.completions || 0),
+        attempts: parseInt(passing?.team?.passing_attempts || 0),
+        completionPct: parseFloat(passing?.team?.completion_pct || 0),
+        interceptions: parseInt(passing?.team?.interceptions || 0),
+        sacks: parseInt(passing?.team?.sacks || 0),
+        sackedYards: parseInt(passing?.team?.sacked_yards_lost || 0)
+      },
+      rushing: {
+        yardsPerGame: parseFloat(rushing?.team?.yards_per_game || 0),
+        totalYards: parseInt(rushing?.team?.yards || 0),
+        touchdowns: parseInt(rushing?.team?.rushing_touchdowns || 0),
+        attempts: parseInt(rushing?.team?.rushing_attempts || 0),
+        yardsPerRush: parseFloat(rushing?.team?.yards_per_rush_avg || 0),
+        fumbles: parseInt(rushing?.team?.fumbles || 0),
+        fumblesLost: parseInt(rushing?.team?.fumbles_lost || 0)
+      },
+      efficiency: {
+        thirdDownPct: parseFloat(downs?.team?.third_downs_pct || 0),
+        fourthDownPct: parseFloat(downs?.team?.fourth_downs_pct || 0),
+        totalFirstDowns: parseInt(downs?.team?.total_first_downs || 0),
+        penaltyYards: parseInt(downs?.team?.penalties_yards || 0),
+        penalties: parseInt(downs?.team?.penalties || 0)
+      }
+    },
+
+    // Defensive Stats
+    defense: {
+      passing: {
+        yardsAllowedPerGame: parseFloat(passing?.opponents?.yards_per_game || 0),
+        touchdownsAllowed: parseInt(passing?.opponents?.passing_touchdowns || 0),
+        interceptions: parseInt(passing?.opponents?.interceptions || 0),
+        sacks: parseInt(passing?.opponents?.sacks || 0)
+      },
+      rushing: {
+        yardsAllowedPerGame: parseFloat(rushing?.opponents?.yards_per_game || 0),
+        touchdownsAllowed: parseInt(rushing?.opponents?.rushing_touchdowns || 0),
+        fumblesRecovered: parseInt(rushing?.opponents?.fumbles_lost || 0)
+      }
+    },
+
+    // Special Teams
+    specialTeams: {
+      fieldGoals: {
+        made: parseInt(kicking?.team?.field_goals_made || 0),
+        attempts: parseInt(kicking?.team?.field_goals_attempts || 0),
+        percentage: kicking?.team?.field_goals_made && kicking?.team?.field_goals_attempts ?
+          (parseInt(kicking.team.field_goals_made) / parseInt(kicking.team.field_goals_attempts) * 100).toFixed(1) : 0
+      }
+    },
+
+    // Calculated Metrics
+    calculated: {
+      totalYardsPerGame: (parseFloat(passing?.team?.yards_per_game || 0) + parseFloat(rushing?.team?.yards_per_game || 0)),
+      turnoverDifferential: (parseInt(passing?.opponents?.interceptions || 0) + parseInt(rushing?.opponents?.fumbles_lost || 0)) -
+                           (parseInt(passing?.team?.interceptions || 0) + parseInt(rushing?.team?.fumbles_lost || 0))
+    }
+  };
+}
+
+// StatPal MLB Team Statistics Function
+async function getStatPalMLBTeamStatsTest(teamId) {
+  try {
+    // Need to convert team ID to team code for StatPal
+    const teamCode = await getMLBTeamCodeForStatPal(teamId);
+    if (!teamCode) {
+      return { stats: null, error: "Could not find team code for StatPal MLB API" };
+    }
+
+    const apiUrl = `https://statpal.io/api/v1/mlb/team-stats/${teamCode}?access_key=${STATPAL_API_KEY}`;
+
+    console.log(`Fetching MLB team stats from StatPal: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl);
+
+    if (response.status !== 200) {
+      return { stats: null, error: `StatPal MLB API returned status ${response.status}` };
+    }
+
+    if (!response.data || !response.data.statistics) {
+      return { stats: null, error: "No statistics data in StatPal MLB response" };
+    }
+
+    const stats = response.data.statistics;
+    console.log(`Found StatPal MLB team stats for team code ${teamCode}`);
+
+    // Transform StatPal MLB data to structured format
+    const transformedStats = transformStatPalMLBData(stats);
+
+    return { stats: transformedStats, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching StatPal MLB team stats for team ${teamId}:`, error);
+    return { stats: null, error: error.message };
+  }
+}
+
+// Helper function to get MLB team code for StatPal API
+async function getMLBTeamCodeForStatPal(teamId) {
+  try {
+    // Read MLB teams file to get StatPal code
+    const fs = require('fs');
+    const path = require('path');
+    const teamsFile = path.join(__dirname, 'mlb_teams.json');
+
+    if (!fs.existsSync(teamsFile)) {
+      console.error('MLB teams file not found');
+      return null;
+    }
+
+    const teams = JSON.parse(fs.readFileSync(teamsFile, 'utf8'));
+    const team = teams.find(t => t.id === parseInt(teamId));
+
+    if (!team || !team.statpal_code) {
+      console.error(`No StatPal code found for MLB team ID ${teamId}`);
+      return null;
+    }
+
+    return team.statpal_code.toLowerCase();
+  } catch (error) {
+    console.error('Error getting MLB team code for StatPal:', error);
+    return null;
+  }
+}
+
+// Transform StatPal MLB data to structured format for UI
+function transformStatPalMLBData(statpalStats) {
+  const categories = statpalStats.category || [];
+
+  // Find specific categories
+  const batting = categories.find(c => c.name === "Batting");
+  const pitching = categories.find(c => c.name === "Pitching");
+  const fielding = categories.find(c => c.name === "Fielding");
+
+  // Aggregate team batting stats from all players
+  const battingPlayers = batting?.team?.player || [];
+  const pitchingPlayers = pitching?.team?.player || [];
+
+  // Calculate team totals
+  const teamBattingStats = battingPlayers.reduce((totals, player) => {
+    return {
+      atBats: totals.atBats + parseInt(player.at_bats || 0),
+      hits: totals.hits + parseInt(player.hits || 0),
+      homeRuns: totals.homeRuns + parseInt(player.home_runs || 0),
+      rbi: totals.rbi + parseInt(player.runs_batted_in || 0),
+      runs: totals.runs + parseInt(player.runs || 0),
+      stolenBases: totals.stolenBases + parseInt(player.stolen_bases || 0),
+      strikeouts: totals.strikeouts + parseInt(player.strikeouts || 0),
+      walks: totals.walks + parseInt(player.walks || 0),
+      doubles: totals.doubles + parseInt(player.doubles || 0),
+      triples: totals.triples + parseInt(player.triples || 0)
+    };
+  }, { atBats: 0, hits: 0, homeRuns: 0, rbi: 0, runs: 0, stolenBases: 0, strikeouts: 0, walks: 0, doubles: 0, triples: 0 });
+
+  const teamPitchingStats = pitchingPlayers.reduce((totals, player) => {
+    return {
+      wins: totals.wins + parseInt(player.wins || 0),
+      losses: totals.losses + parseInt(player.losses || 0),
+      saves: totals.saves + parseInt(player.saves || 0),
+      strikeouts: totals.strikeouts + parseInt(player.strikeouts || 0),
+      walks: totals.walks + parseInt(player.walks || 0),
+      hits: totals.hits + parseInt(player.hits || 0),
+      homeRuns: totals.homeRuns + parseInt(player.home_runs || 0),
+      earnedRuns: totals.earnedRuns + parseInt(player.earned_runs || 0),
+      inningsPitched: totals.inningsPitched + parseFloat(player.innings_pitched || 0)
+    };
+  }, { wins: 0, losses: 0, saves: 0, strikeouts: 0, walks: 0, hits: 0, homeRuns: 0, earnedRuns: 0, inningsPitched: 0 });
+
+  return {
+    team: statpalStats.team,
+    season: statpalStats.season,
+
+    // Batting Stats
+    batting: {
+      average: teamBattingStats.atBats > 0 ? (teamBattingStats.hits / teamBattingStats.atBats).toFixed(3) : "0.000",
+      homeRuns: teamBattingStats.homeRuns,
+      rbi: teamBattingStats.rbi,
+      runs: teamBattingStats.runs,
+      hits: teamBattingStats.hits,
+      doubles: teamBattingStats.doubles,
+      triples: teamBattingStats.triples,
+      stolenBases: teamBattingStats.stolenBases,
+      walks: teamBattingStats.walks,
+      strikeouts: teamBattingStats.strikeouts,
+      // Calculate OBP and SLG from aggregated data
+      onBasePercentage: teamBattingStats.atBats > 0 ?
+        ((teamBattingStats.hits + teamBattingStats.walks) / (teamBattingStats.atBats + teamBattingStats.walks)).toFixed(3) : "0.000",
+      sluggingPercentage: teamBattingStats.atBats > 0 ?
+        ((teamBattingStats.hits + teamBattingStats.doubles + (teamBattingStats.triples * 2) + (teamBattingStats.homeRuns * 3)) / teamBattingStats.atBats).toFixed(3) : "0.000"
+    },
+
+    // Pitching Stats
+    pitching: {
+      wins: teamPitchingStats.wins,
+      losses: teamPitchingStats.losses,
+      era: teamPitchingStats.inningsPitched > 0 ? (teamPitchingStats.earnedRuns * 9 / teamPitchingStats.inningsPitched).toFixed(2) : "0.00",
+      strikeouts: teamPitchingStats.strikeouts,
+      walks: teamPitchingStats.walks,
+      saves: teamPitchingStats.saves,
+      whip: teamPitchingStats.inningsPitched > 0 ?
+        ((teamPitchingStats.walks + teamPitchingStats.hits) / teamPitchingStats.inningsPitched).toFixed(2) : "0.00",
+      inningsPitched: teamPitchingStats.inningsPitched.toFixed(1),
+      hitsAllowed: teamPitchingStats.hits,
+      homeRunsAllowed: teamPitchingStats.homeRuns
+    },
+
+    // Fielding Stats (from team totals)
+    fielding: {
+      fieldingPercentage: fielding?.position?.[0]?.player?.[0]?.fielding_percentage || "0.000",
+      errors: parseInt(fielding?.position?.[0]?.player?.[0]?.errors || 0),
+      doublePlays: parseInt(fielding?.position?.[0]?.player?.[0]?.double_plays || 0)
+    },
+
+    // Calculated Metrics
+    calculated: {
+      runsPerGame: teamBattingStats.runs > 0 ? (teamBattingStats.runs / 162).toFixed(1) : "0.0",
+      ops: teamBattingStats.atBats > 0 ?
+        (parseFloat(((teamBattingStats.hits + teamBattingStats.walks) / (teamBattingStats.atBats + teamBattingStats.walks)).toFixed(3)) +
+         parseFloat(((teamBattingStats.hits + teamBattingStats.doubles + (teamBattingStats.triples * 2) + (teamBattingStats.homeRuns * 3)) / teamBattingStats.atBats).toFixed(3))).toFixed(3) : "0.000"
+    }
+  };
+}
+
+// StatPal NFL Player Statistics Function
+async function getStatPalNFLPlayerStatsTest(teamId) {
+  try {
+    // Need to convert team ID to team code for StatPal
+    const teamCode = await getTeamCodeForStatPal(teamId);
+    if (!teamCode) {
+      return { players: [], error: "Could not find team code for StatPal NFL Player API" };
+    }
+
+    const apiUrl = `https://statpal.io/api/v1/nfl/player-stats/${teamCode}?access_key=${STATPAL_API_KEY}`;
+
+    console.log(`Fetching NFL player stats from StatPal: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl);
+
+    if (response.status !== 200) {
+      return { players: [], error: `StatPal NFL Player API returned status ${response.status}` };
+    }
+
+    if (!response.data || !response.data.statistics) {
+      return { players: [], error: "No statistics data in StatPal NFL Player response" };
+    }
+
+    const stats = response.data.statistics;
+    console.log(`Found StatPal NFL player stats for team code ${teamCode}`);
+
+    // Transform StatPal player data to structured format
+    const transformedPlayers = transformStatPalNFLPlayerData(stats);
+
+    return { players: transformedPlayers, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching StatPal NFL player stats for team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+// Transform StatPal NFL player data to structured format
+function transformStatPalNFLPlayerData(statpalStats) {
+  const categories = statpalStats.category || [];
+
+  // Find specific categories
+  const passing = categories.find(c => c.name === "Passing");
+  const rushing = categories.find(c => c.name === "Rushing");
+  const receiving = categories.find(c => c.name === "Receiving");
+  const defense = categories.find(c => c.name === "Defense");
+  const scoring = categories.find(c => c.name === "Scoring");
+
+  const topPlayers = [];
+
+  // Get top QB (highest passing yards)
+  if (passing?.player?.length > 0) {
+    const topQB = passing.player[0]; // Already ranked by StatPal
+    topPlayers.push({
+      id: topQB.id,
+      name: topQB.name,
+      position: "QB",
+      category: "Passing",
+      stats: {
+        passingYards: parseInt(topQB.yards?.replace(/,/g, '') || 0),
+        passingYardsPerGame: parseFloat(topQB.yards_per_game || 0),
+        passingTouchdowns: parseInt(topQB.passing_touchdowns || 0),
+        completionPct: parseFloat(topQB.completion_pct || 0),
+        interceptions: parseInt(topQB.interceptions || 0),
+        qbRating: parseFloat(topQB.quaterback_rating || 0),
+        sacks: parseInt(topQB.sacks || 0),
+        longestPass: parseInt(topQB.longest_pass || 0),
+        attempts: parseInt(topQB.passing_attempts || 0),
+        completions: parseInt(topQB.completions || 0)
+      }
+    });
+  }
+
+  // Get top RB (highest rushing yards)
+  if (rushing?.player?.length > 0) {
+    const topRB = rushing.player[0]; // Already ranked by StatPal
+    topPlayers.push({
+      id: topRB.id,
+      name: topRB.name,
+      position: "RB",
+      category: "Rushing",
+      stats: {
+        rushingYards: parseInt(topRB.yards?.replace(/,/g, '') || 0),
+        rushingYardsPerGame: parseFloat(topRB.yards_per_game || 0),
+        rushingTouchdowns: parseInt(topRB.rushing_touchdowns || 0),
+        rushingAttempts: parseInt(topRB.rushing_attempts || 0),
+        yardsPerRush: parseFloat(topRB.yards_per_rush_avg || 0),
+        fumbles: parseInt(topRB.fumbles || 0),
+        fumblesLost: parseInt(topRB.fumbles_lost || 0),
+        longestRush: parseInt(topRB.longest_rush || 0),
+        over20Yards: parseInt(topRB.over_20_yards || 0),
+        firstDowns: parseInt(topRB.rushing_first_downs || 0)
+      }
+    });
+  }
+
+  // Get top WR (highest receiving yards)
+  if (receiving?.player?.length > 0) {
+    const topWR = receiving.player[0]; // Already ranked by StatPal
+    topPlayers.push({
+      id: topWR.id,
+      name: topWR.name,
+      position: "WR",
+      category: "Receiving",
+      stats: {
+        receivingYards: parseInt(topWR.receiving_yards?.replace(/,/g, '') || 0),
+        receivingYardsPerGame: parseFloat(topWR.yards_per_game || 0),
+        receivingTouchdowns: parseInt(topWR.receiving_touchdowns || 0),
+        receptions: parseInt(topWR.receptions || 0),
+        targets: parseInt(topWR.receiving_targets || 0),
+        yardsPerReception: parseFloat(topWR.yards_per_reception_avg || 0),
+        longestReception: parseInt(topWR.longest_reception || 0),
+        over20Yards: parseInt(topWR.over_20_yards || 0),
+        yardsAfterCatch: parseInt(topWR.yards_after_catch || 0),
+        firstDowns: parseInt(topWR.receiving_first_downs || 0)
+      }
+    });
+  }
+
+  return {
+    team: statpalStats.team,
+    season: statpalStats.season,
+    topPlayers,
+    allCategories: {
+      passing: passing?.player || [],
+      rushing: rushing?.player || [],
+      receiving: receiving?.player || [],
+      defense: defense?.player || [],
+      scoring: scoring?.player || []
+    }
+  };
+}
+
+// +EV and Arbitrage Analysis Function - All Markets
+function calculateEVOpportunities(bookmakers, event) {
+  const sharpBooks = ['pinnacle', 'lowvig', 'betonlineag'];
+
+  // Extract odds for all 3 markets
+  const moneylineOdds = { home: [], away: [] };
+  const spreadOdds = { home: [], away: [] };
+  const totalOdds = { over: [], under: [] };
+
+  bookmakers.forEach(bookmaker => {
+    bookmaker.markets.forEach(market => {
+      const isSharp = sharpBooks.includes(bookmaker.key);
+
+      if (market.key === 'h2h') {
+        const homeOutcome = market.outcomes.find(o => o.name === event.home_team);
+        const awayOutcome = market.outcomes.find(o => o.name === event.away_team);
+
+        if (homeOutcome && awayOutcome) {
+          moneylineOdds.home.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: homeOutcome.price,
+            isSharp
+          });
+
+          moneylineOdds.away.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: awayOutcome.price,
+            isSharp
+          });
+        }
+      }
+
+      if (market.key === 'spreads') {
+        const homeOutcome = market.outcomes.find(o => o.name === event.home_team);
+        const awayOutcome = market.outcomes.find(o => o.name === event.away_team);
+
+        if (homeOutcome && awayOutcome) {
+          spreadOdds.home.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: homeOutcome.price,
+            point: homeOutcome.point,
+            isSharp
+          });
+
+          spreadOdds.away.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: awayOutcome.price,
+            point: awayOutcome.point,
+            isSharp
+          });
+        }
+      }
+
+      if (market.key === 'totals') {
+        const overOutcome = market.outcomes.find(o => o.name === "Over");
+        const underOutcome = market.outcomes.find(o => o.name === "Under");
+
+        if (overOutcome && underOutcome) {
+          totalOdds.over.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: overOutcome.price,
+            point: overOutcome.point,
+            isSharp
+          });
+
+          totalOdds.under.push({
+            bookmaker: bookmaker.title,
+            bookmakerKey: bookmaker.key,
+            odds: underOutcome.price,
+            point: underOutcome.point,
+            isSharp
+          });
+        }
+      }
+    });
+  });
+
+  // 1. Calculate Sharp Consensus and True Fair Value (Multiplicative Method)
+  function getSharpConsensus(odds) {
+    // BULLETPROOF: Handle null/undefined odds array
+    if (!odds || !Array.isArray(odds) || odds.length === 0) return null;
+
+    const sharpOdds = odds
+      .filter(o => o && o.isSharp && typeof o.odds === 'number' && o.odds > 0)
+      .map(o => o.odds);
+
+    return sharpOdds.length > 0 ? sharpOdds.reduce((a, b) => a + b) / sharpOdds.length : null;
+  }
+
+  function calculateTrueFairValue(odds1, odds2) {
+    // BULLETPROOF: Validate input odds
+    if (!odds1 || !odds2 || typeof odds1 !== 'number' || typeof odds2 !== 'number') {
+      return { fair1: null, fair2: null };
+    }
+
+    // BULLETPROOF: Check for reasonable odds range (1.01 to 100.0)
+    if (odds1 < 1.01 || odds1 > 100 || odds2 < 1.01 || odds2 > 100) {
+      return { fair1: null, fair2: null };
+    }
+
+    try {
+      // Step 1: Calculate implied probabilities
+      const implied1 = 1 / odds1;
+      const implied2 = 1 / odds2;
+      const totalImplied = implied1 + implied2;
+
+      // BULLETPROOF: Check for division by zero or invalid total
+      if (totalImplied <= 0 || !isFinite(totalImplied)) {
+        return { fair1: null, fair2: null };
+      }
+
+      // Step 2: Remove vig (multiplicative method)
+      const fairProb1 = implied1 / totalImplied;
+      const fairProb2 = implied2 / totalImplied;
+
+      // Step 3: Convert back to fair odds
+      const fairOdds1 = 1 / fairProb1;
+      const fairOdds2 = 1 / fairProb2;
+
+      // BULLETPROOF: Validate final results
+      if (!isFinite(fairOdds1) || !isFinite(fairOdds2) || fairOdds1 <= 0 || fairOdds2 <= 0) {
+        return { fair1: null, fair2: null };
+      }
+
+      return {
+        fair1: parseFloat(fairOdds1.toFixed(2)),
+        fair2: parseFloat(fairOdds2.toFixed(2))
+      };
+    } catch (error) {
+      console.error('Error calculating fair value:', error);
+      return { fair1: null, fair2: null };
+    }
+  }
+
+  // Calculate sharp consensus first
+  const sharpConsensus = {
+    moneyline: {
+      home: getSharpConsensus(moneylineOdds.home),
+      away: getSharpConsensus(moneylineOdds.away)
+    },
+    spread: {
+      home: getSharpConsensus(spreadOdds.home),
+      away: getSharpConsensus(spreadOdds.away),
+      point: spreadOdds.home[0]?.point || null
+    },
+    total: {
+      over: getSharpConsensus(totalOdds.over),
+      under: getSharpConsensus(totalOdds.under),
+      point: totalOdds.over[0]?.point || null
+    }
+  };
+
+  // Calculate true fair value (vig removed) - ONLY from sharp books or N/A
+  const fairValue = {
+    moneyline: calculateTrueFairValue(sharpConsensus.moneyline.home, sharpConsensus.moneyline.away),
+    spread: calculateTrueFairValue(sharpConsensus.spread.home, sharpConsensus.spread.away),
+    total: calculateTrueFairValue(sharpConsensus.total.over, sharpConsensus.total.under)
+  };
+
+  // 2. Calculate Vig for each market
+  function calculateMarketVig(odds1, odds2) {
+    if (!odds1 || !odds2) return null;
+    const implied1 = 1 / odds1;
+    const implied2 = 1 / odds2;
+    return ((implied1 + implied2) - 1) * 100;
+  }
+
+  const vigAnalysis = {
+    moneyline: {
+      sharp: sharpConsensus.moneyline.home && sharpConsensus.moneyline.away ?
+        calculateMarketVig(sharpConsensus.moneyline.home, sharpConsensus.moneyline.away) : null,
+      market: calculateMarketVig(
+        moneylineOdds.home.reduce((sum, o) => sum + o.odds, 0) / moneylineOdds.home.length,
+        moneylineOdds.away.reduce((sum, o) => sum + o.odds, 0) / moneylineOdds.away.length
+      )
+    },
+    spread: {
+      sharp: sharpConsensus.spread.home && sharpConsensus.spread.away ?
+        calculateMarketVig(sharpConsensus.spread.home, sharpConsensus.spread.away) : null,
+      market: calculateMarketVig(
+        spreadOdds.home.reduce((sum, o) => sum + o.odds, 0) / spreadOdds.home.length,
+        spreadOdds.away.reduce((sum, o) => sum + o.odds, 0) / spreadOdds.away.length
+      )
+    },
+    total: {
+      sharp: sharpConsensus.total.over && sharpConsensus.total.under ?
+        calculateMarketVig(sharpConsensus.total.over, sharpConsensus.total.under) : null,
+      market: calculateMarketVig(
+        totalOdds.over.reduce((sum, o) => sum + o.odds, 0) / totalOdds.over.length,
+        totalOdds.under.reduce((sum, o) => sum + o.odds, 0) / totalOdds.under.length
+      )
+    }
+  };
+
+  // 3. Find lowest vig books for each market
+  const lowestVigBooks = {
+    moneyline: findLowestVigBook(moneylineOdds.home, moneylineOdds.away),
+    spread: findLowestVigBook(spreadOdds.home, spreadOdds.away),
+    total: findLowestVigBook(totalOdds.over, totalOdds.under)
+  };
+
+  // 4. Find +EV opportunities across all markets
+  const evOpportunities = [];
+
+  // BULLETPROOF: Check moneyline +EV using TRUE FAIR VALUE (vig removed)
+  if (fairValue.moneyline.fair1 && fairValue.moneyline.fair2 &&
+      typeof fairValue.moneyline.fair1 === 'number' && typeof fairValue.moneyline.fair2 === 'number') {
+
+    // Home team EV opportunities
+    moneylineOdds.home.filter(o => o && !o.isSharp && typeof o.odds === 'number' && o.odds > 0).forEach(book => {
+      try {
+        const ev = ((book.odds - fairValue.moneyline.fair1) / fairValue.moneyline.fair1) * 100;
+
+        // BULLETPROOF: Validate EV calculation and set reasonable limits (max 22% EV)
+        if (isFinite(ev) && ev > 1.0 && ev < 22.0) {
+          evOpportunities.push({
+            market: "Moneyline",
+            team: event.home_team,
+            bookmaker: book.bookmaker,
+            bookOdds: book.odds,
+            fairOdds: fairValue.moneyline.fair1,
+            sharpConsensus: sharpConsensus.moneyline.home,
+            ev: parseFloat(ev.toFixed(1))
+          });
+        }
+      } catch (error) {
+        console.error('Error calculating home ML EV:', error);
+      }
+    });
+
+    // Away team EV opportunities
+    moneylineOdds.away.filter(o => o && !o.isSharp && typeof o.odds === 'number' && o.odds > 0).forEach(book => {
+      try {
+        const ev = ((book.odds - fairValue.moneyline.fair2) / fairValue.moneyline.fair2) * 100;
+
+        // BULLETPROOF: Validate EV calculation and set reasonable limits (max 22% EV)
+        if (isFinite(ev) && ev > 1.0 && ev < 22.0) {
+          evOpportunities.push({
+            market: "Moneyline",
+            team: event.away_team,
+            bookmaker: book.bookmaker,
+            bookOdds: book.odds,
+            fairOdds: fairValue.moneyline.fair2,
+            sharpConsensus: sharpConsensus.moneyline.away,
+            ev: parseFloat(ev.toFixed(1))
+          });
+        }
+      } catch (error) {
+        console.error('Error calculating away ML EV:', error);
+      }
+    });
+  }
+
+  // Sort by highest EV
+  evOpportunities.sort((a, b) => b.ev - a.ev);
+
+  // BULLETPROOF: Arbitrage Detection with Bet Sizing
+  let arbitrageData = null;
+  let hasArbitrage = false; // Initialize hasArbitrage variable
+
+  try {
+    // BULLETPROOF: Validate we have odds data
+    const validHomeOdds = moneylineOdds.home.filter(o => o && typeof o.odds === 'number' && o.odds > 1.01);
+    const validAwayOdds = moneylineOdds.away.filter(o => o && typeof o.odds === 'number' && o.odds > 1.01);
+
+    if (validHomeOdds.length > 0 && validAwayOdds.length > 0) {
+      const bestHomeOdds = Math.max(...validHomeOdds.map(o => o.odds));
+      const bestAwayOdds = Math.max(...validAwayOdds.map(o => o.odds));
+      const bestHomeBook = validHomeOdds.find(o => o.odds === bestHomeOdds);
+      const bestAwayBook = validAwayOdds.find(o => o.odds === bestAwayOdds);
+
+      // BULLETPROOF: Validate best odds are reasonable
+      if (bestHomeOdds > 1.01 && bestAwayOdds > 1.01 && isFinite(bestHomeOdds) && isFinite(bestAwayOdds)) {
+        const arbCheck = (1 / bestHomeOdds) + (1 / bestAwayOdds);
+        hasArbitrage = arbCheck < 1.0 && arbCheck > 0.5; // Reasonable arbitrage range
+
+        if (hasArbitrage) {
+          const profit = ((1 - arbCheck) * 100);
+
+          // BULLETPROOF: Validate profit is reasonable (max 14%)
+          if (profit > 0 && profit < 14) {
+            const bankroll = 100; // $100 example
+            const bet1 = bankroll / (1 + (bestHomeOdds / bestAwayOdds));
+            const bet2 = bankroll - bet1;
+
+            // BULLETPROOF: Validate bet amounts
+            if (bet1 > 0 && bet2 > 0 && isFinite(bet1) && isFinite(bet2)) {
+              arbitrageData = {
+                detected: true,
+                profit: parseFloat(profit.toFixed(1)),
+                bets: [
+                  {
+                    team: event.home_team,
+                    amount: parseFloat(bet1.toFixed(2)),
+                    percentage: parseFloat((bet1/bankroll * 100).toFixed(2)),
+                    odds: bestHomeOdds,
+                    bookmaker: bestHomeBook?.bookmaker,
+                    bookmakerKey: bestHomeBook?.bookmakerKey,
+                    icon: getBookmakerIcon(bestHomeBook?.bookmakerKey)
+                  },
+                  {
+                    team: event.away_team,
+                    amount: parseFloat(bet2.toFixed(2)),
+                    percentage: parseFloat((bet2/bankroll * 100).toFixed(2)),
+                    odds: bestAwayOdds,
+                    bookmaker: bestAwayBook?.bookmaker,
+                    bookmakerKey: bestAwayBook?.bookmakerKey,
+                    icon: getBookmakerIcon(bestAwayBook?.bookmakerKey)
+                  }
+                ]
+              };
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error calculating arbitrage:', error);
+    arbitrageData = null;
+  }
+
+  // 6. Format opportunities for UI
+  const formattedOpportunities = formatOpportunitiesForUI(
+    evOpportunities,
+    arbitrageData,
+    lowestVigBooks,
+    event
+  );
+
+  return {
+    teams: `${event.home_team} vs ${event.away_team}`,
+    sharpConsensus,
+    fairValue,
+    vigAnalysis,
+    lowestVigBooks,
+    arbitrage: arbitrageData,
+    evOpportunities: evOpportunities.slice(0, 3),
+    // NEW: UI-formatted opportunities
+    uiOpportunities: formattedOpportunities,
+    summary: {
+      totalBooks: bookmakers.length,
+      sharpBooks: moneylineOdds.home.filter(o => o.isSharp).length,
+      hasOpportunities: evOpportunities.length > 0 || hasArbitrage
+    }
+  };
+}
+
+// Helper function to calculate market vig
+function calculateMarketVig(odds1, odds2) {
+  if (!odds1 || !odds2) return null;
+  const implied1 = 1 / odds1;
+  const implied2 = 1 / odds2;
+  return ((implied1 + implied2) - 1) * 100;
+}
+
+// Helper function to find lowest vig book for a market
+function findLowestVigBook(odds1Array, odds2Array) {
+  const bookVigs = [];
+
+  odds1Array.forEach(book1 => {
+    const book2 = odds2Array.find(b => b.bookmakerKey === book1.bookmakerKey);
+    if (book2) {
+      const vig = calculateMarketVig(book1.odds, book2.odds);
+      bookVigs.push({
+        bookmaker: book1.bookmaker,
+        vig: parseFloat(vig.toFixed(1)),
+        odds1: book1.odds,
+        odds2: book2.odds
+      });
+    }
+  });
+
+  return bookVigs.sort((a, b) => a.vig - b.vig)[0] || null;
+}
+
+// Bookmaker Icon Mapping for UI
+function getBookmakerIcon(bookmakerKey) {
+  const iconMap = {
+    'pinnacle': 'pinnacle',
+    'draftkings': 'draftkings',
+    'fanduel': 'fanduel',
+    'betmgm': 'betmgm',
+    'caesars': 'caesars',
+    'williamhill_us': 'caesars', // Caesars owns William Hill US
+    'betrivers': 'betrivers',
+    'bovada': 'bovada',
+    'betus': 'betus',
+    'mybookieag': 'mybookie',
+    'fanatics': 'fanatics',
+    'ballybet': 'ballybet',
+    'espnbet': 'espnbet',
+    'hardrockbet': 'hardrock',
+    'lowvig': 'lowvig',
+    'betonlineag': 'betonline',
+    'pointsbet': 'pointsbet'
+  };
+
+  return iconMap[bookmakerKey] || 'generic';
+}
+
+// Format opportunities for UI display
+function formatOpportunitiesForUI(evOpportunities, arbitrageData, lowestVigBooks, event) {
+  const opportunities = [];
+
+  // Priority 1: Arbitrage (if found)
+  if (arbitrageData && arbitrageData.detected) {
+    opportunities.push({
+      type: "arbitrage",
+      title: `Arb Detected - ${arbitrageData.profit}% guaranteed`,
+      description: `${arbitrageData.bets[0].percentage}% on ${arbitrageData.bets[0].team} ML ${arbitrageData.bets[0].odds}`,
+      secondLine: `${arbitrageData.bets[1].percentage}% on ${arbitrageData.bets[1].team} ML ${arbitrageData.bets[1].odds}`,
+      icon: "arbitrage", // Special arbitrage icon
+      profit: arbitrageData.profit,
+      bets: arbitrageData.bets
+    });
+  }
+
+  // Priority 2: +EV Opportunities (highest EV first)
+  evOpportunities.forEach(ev => {
+    opportunities.push({
+      type: "ev",
+      title: `+EV ${ev.ev}% at ${ev.bookmaker}`,
+      description: `${ev.team} ML ${ev.bookOdds}`,
+      icon: getBookmakerIcon(ev.bookmaker?.toLowerCase().replace(/[^a-z]/g, '')),
+      ev: ev.ev,
+      bookmaker: ev.bookmaker,
+      team: ev.team,
+      odds: ev.bookOdds
+    });
+  });
+
+  // Priority 3: If no opportunities, show efficient market + lowest vig
+  if (opportunities.length === 0) {
+    // Efficient market message
+    opportunities.push({
+      type: "efficient",
+      title: "Market is efficiently priced",
+      description: "No +EV or Arb opportunities found",
+      icon: "x"
+    });
+
+    // Lowest vig recommendations
+    if (lowestVigBooks.moneyline) {
+      opportunities.push({
+        type: "lowvig",
+        title: `Lowest Vig at ${lowestVigBooks.moneyline.vig}%`,
+        description: `ML on ${event.home_team} ${lowestVigBooks.moneyline.odds1} at ${lowestVigBooks.moneyline.bookmaker}`,
+        icon: getBookmakerIcon(lowestVigBooks.moneyline.bookmaker?.toLowerCase().replace(/[^a-z]/g, '')),
+        vig: lowestVigBooks.moneyline.vig,
+        bookmaker: lowestVigBooks.moneyline.bookmaker
+      });
+    }
+
+    if (lowestVigBooks.spread) {
+      opportunities.push({
+        type: "lowvig",
+        title: `Lowest Vig Spread at ${lowestVigBooks.spread.vig}%`,
+        description: `Spread ${lowestVigBooks.spread.odds1} at ${lowestVigBooks.spread.bookmaker}`,
+        icon: getBookmakerIcon(lowestVigBooks.spread.bookmaker?.toLowerCase().replace(/[^a-z]/g, '')),
+        vig: lowestVigBooks.spread.vig,
+        bookmaker: lowestVigBooks.spread.bookmaker
+      });
+    }
+  }
+
+  return {
+    hasOpportunities: evOpportunities.length > 0 || (arbitrageData && arbitrageData.detected),
+    opportunities: opportunities.slice(0, 4), // Max 4 items for UI
+    summary: opportunities.length === 1 && opportunities[0].type === "efficient" ?
+      "Efficient market" :
+      `${evOpportunities.length + (arbitrageData?.detected ? 1 : 0)} opportunities found`
+  };
+}
+
+// ====================================================================
+// PLAYER STATISTICS INTEGRATION FOR MAIN WORKFLOW
+// ====================================================================
+
+async function getPlayerStatsForSport(sport, team1Id, team2Id) {
+  try {
+    console.log(`Fetching player stats for ${sport} - Team1: ${team1Id}, Team2: ${team2Id}`);
+
+    const [team1Players, team2Players] = await Promise.all([
+      getSingleTeamPlayerStats(sport, team1Id),
+      getSingleTeamPlayerStats(sport, team2Id)
+    ]);
+
+    return {
+      team1: {
+        teamId: team1Id,
+        allPlayers: team1Players.players || [],
+        topPlayers: getTopPlayersForSport(team1Players.players || [], sport),
+        playerCount: (team1Players.players || []).length,
+        error: team1Players.error
+      },
+      team2: {
+        teamId: team2Id,
+        allPlayers: team2Players.players || [],
+        topPlayers: getTopPlayersForSport(team2Players.players || [], sport),
+        playerCount: (team2Players.players || []).length,
+        error: team2Players.error
+      }
+    };
+
+  } catch (error) {
+    console.error("Player Stats Integration Error:", error);
+    return { error: error.message };
+  }
+}
+
+async function getSingleTeamPlayerStats(sport, teamId) {
+  try {
+    switch (sport.toLowerCase()) {
+      case 'nfl':
+      case 'ncaaf':
+        // Use StatPal for NFL player stats
+        return await getStatPalNFLPlayerStatsTest(teamId);
+
+      case 'mlb':
+        // Use StatPal for MLB player stats
+        return await getStatPalMLBPlayerStatsTest(teamId);
+
+      case 'soccer':
+        // Use API-Sports for soccer player stats
+        return await getAPISoccerPlayerStats(teamId);
+
+      case 'nba':
+        // Use API-Sports for NBA player stats (when season available)
+        return await getAPINBAPlayerStats(teamId);
+
+      case 'tennis':
+        // Tennis doesn't have traditional team player stats
+        return { players: [], error: null };
+
+      default:
+        return { players: [], error: `Player stats not supported for ${sport}` };
+    }
+  } catch (error) {
+    console.error(`Error fetching player stats for ${sport} team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+// API-Sports Soccer Player Stats Function
+async function getAPISoccerPlayerStats(teamId) {
+  try {
+    const currentSeason = 2025;
+    const apiUrl = `https://v3.football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+
+    console.log(`Fetching soccer player stats from: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        "x-apisports-key": API_SPORTS_KEY
+      }
+    });
+
+    if (response.data.errors && Object.keys(response.data.errors).length > 0) {
+      console.error(`Soccer player stats API error:`, response.data.errors);
+      return { players: [], error: JSON.stringify(response.data.errors) };
+    }
+
+    if (!response.data.response || response.data.response.length === 0) {
+      console.log(`No soccer player stats found for team ${teamId}`);
+      return { players: [], error: null };
+    }
+
+    const players = response.data.response;
+    console.log(`Found ${players.length} soccer players for team ${teamId}`);
+
+    return { players, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching soccer player stats for team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+// API-Sports NBA Player Stats Function
+async function getAPINBAPlayerStats(teamId) {
+  try {
+    const currentSeason = 2024; // Use 2024 season for NBA
+    const apiUrl = `https://v2.nba.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
+
+    console.log(`Fetching NBA player stats from: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        "x-rapidapi-host": "v2.nba.api-sports.io",
+        "x-rapidapi-key": API_SPORTS_KEY
+      }
+    });
+
+    if (response.data.errors && Object.keys(response.data.errors).length > 0) {
+      console.error(`NBA player stats API error:`, response.data.errors);
+      return { players: [], error: JSON.stringify(response.data.errors) };
+    }
+
+    if (!response.data.response || response.data.response.length === 0) {
+      console.log(`No NBA player stats found for team ${teamId}`);
+      return { players: [], error: null };
+    }
+
+    const players = response.data.response;
+    console.log(`Found ${players.length} NBA players for team ${teamId}`);
+
+    return { players, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching NBA player stats for team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+// StatPal MLB Player Stats Function (reuse existing)
+async function getStatPalMLBPlayerStatsTest(teamId) {
+  try {
+    // Need to convert team ID to team code for StatPal
+    const teamCode = await getMLBTeamCodeForStatPal(teamId);
+    if (!teamCode) {
+      return { players: [], error: "Could not find team code for StatPal MLB Player API" };
+    }
+
+    const apiUrl = `https://statpal.io/api/v1/mlb/player-stats/${teamCode}?access_key=${STATPAL_API_KEY}`;
+
+    console.log(`Fetching MLB player stats from StatPal: ${apiUrl}`);
+
+    const response = await axios.get(apiUrl);
+
+    if (response.status !== 200) {
+      return { players: [], error: `StatPal MLB Player API returned status ${response.status}` };
+    }
+
+    if (!response.data || !response.data.statistics) {
+      return { players: [], error: "No statistics data in StatPal MLB Player response" };
+    }
+
+    const stats = response.data.statistics;
+    console.log(`Found StatPal MLB player stats for team code ${teamCode}`);
+
+    // Transform StatPal MLB player data to structured format
+    const transformedPlayers = transformStatPalMLBPlayerData(stats);
+
+    return { players: transformedPlayers, error: null };
+
+  } catch (error) {
+    console.error(`Error fetching StatPal MLB player stats for team ${teamId}:`, error);
+    return { players: [], error: error.message };
+  }
+}
+
+// Transform StatPal MLB player data
+function transformStatPalMLBPlayerData(statpalStats) {
+  const categories = statpalStats.category || [];
+
+  // Find batting category
+  const batting = categories.find(c => c.name === "Batting");
+  const pitching = categories.find(c => c.name === "Pitching");
+
+  const topPlayers = [];
+
+  // Get top 3 batters (highest OPS)
+  if (batting?.team?.player?.length > 0) {
+    const topBatters = batting.team.player
+      .filter(p => parseInt(p.at_bats || 0) > 50) // Minimum AB threshold
+      .sort((a, b) => {
+        const aOPS = parseFloat(a.on_base_percentage || 0) + parseFloat(a.slugging_percentage || 0);
+        const bOPS = parseFloat(b.on_base_percentage || 0) + parseFloat(b.slugging_percentage || 0);
+        return bOPS - aOPS;
+      })
+      .slice(0, 2); // Top 2 batters
+
+    topBatters.forEach(player => {
+      topPlayers.push({
+        id: player.id,
+        name: player.name,
+        position: "Batter",
+        category: "Batting",
+        stats: {
+          battingAvg: parseFloat(player.batting_avg || 0),
+          homeRuns: parseInt(player.home_runs || 0),
+          rbi: parseInt(player.runs_batted_in || 0),
+          runs: parseInt(player.runs || 0),
+          hits: parseInt(player.hits || 0),
+          stolenBases: parseInt(player.stolen_bases || 0),
+          onBasePercentage: parseFloat(player.on_base_percentage || 0),
+          sluggingPercentage: parseFloat(player.slugging_percentage || 0),
+          ops: parseFloat(player.on_base_percentage || 0) + parseFloat(player.slugging_percentage || 0)
+        }
+      });
+    });
+  }
+
+  // Get top pitcher (lowest ERA)
+  if (pitching?.team?.player?.length > 0) {
+    const topPitcher = pitching.team.player
+      .filter(p => parseFloat(p.innings_pitched || 0) > 20) // Minimum IP threshold
+      .sort((a, b) => parseFloat(a.earned_run_average || 999) - parseFloat(b.earned_run_average || 999))[0];
+
+    if (topPitcher) {
+      topPlayers.push({
+        id: topPitcher.id,
+        name: topPitcher.name,
+        position: "Pitcher",
+        category: "Pitching",
+        stats: {
+          era: parseFloat(topPitcher.earned_run_average || 0),
+          wins: parseInt(topPitcher.wins || 0),
+          losses: parseInt(topPitcher.losses || 0),
+          strikeouts: parseInt(topPitcher.strikeouts || 0),
+          walks: parseInt(topPitcher.walks || 0),
+          whip: parseFloat(topPitcher.walk_hits_per_inning_pitched || 0),
+          inningsPitched: parseFloat(topPitcher.innings_pitched || 0),
+          saves: parseInt(topPitcher.saves || 0)
+        }
+      });
+    }
+  }
+
+  return {
+    team: statpalStats.team,
+    season: statpalStats.season,
+    topPlayers,
+    allCategories: {
+      batting: batting?.team?.player || [],
+      pitching: pitching?.team?.player || []
+    }
+  };
+}
+
+// Generic top players function for all sports
+function getTopPlayersForSport(players, sport) {
+  if (!players || players.length === 0) return [];
+
+  switch (sport.toLowerCase()) {
+    case 'nfl':
+    case 'ncaaf':
+      // StatPal data already has topPlayers from transform function
+      return players.topPlayers || [];
+
+    case 'mlb':
+      // StatPal data already has topPlayers from transform function
+      return players.topPlayers || [];
+
+    case 'soccer':
+      // API-Sports data - sort by goals + assists
+      return players
+        .filter(p => p.statistics && p.statistics[0] && (p.statistics[0].games?.appearences || 0) > 5)
+        .sort((a, b) => {
+          const aContrib = (a.statistics[0].goals?.total || 0) + (a.statistics[0].goals?.assists || 0);
+          const bContrib = (b.statistics[0].goals?.total || 0) + (b.statistics[0].goals?.assists || 0);
+          return bContrib - aContrib;
+        })
+        .slice(0, 3);
+
+    case 'nba':
+      // API-Sports data - sort by points per game
+      return players
+        .filter(p => p.statistics && p.statistics.points && p.statistics.points.average > 5)
+        .sort((a, b) => (b.statistics.points.average || 0) - (a.statistics.points.average || 0))
+        .slice(0, 3);
+
+    default:
+      return players.slice(0, 3);
+  }
+}
