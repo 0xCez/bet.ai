@@ -78,7 +78,7 @@ export const usePaywallActions = () => {
         selectedPackage?.product,
         selectedPackage?.product.discounts[0]
       );
-      
+
       if (!offers) {
         console.log("[RevenueCat] No promotional offer found");
         return { success: false };
@@ -89,12 +89,12 @@ export const usePaywallActions = () => {
         selectedPackage,
         offers
       );
-      
+
       if (purchaseResult) {
         console.log("[RevenueCat] Promotional offer purchase successful");
         return { success: true };
       }
-      
+
       return { success: false };
     } catch (error) {
       console.error("[RevenueCat] Promotional offer purchase error:", error);
@@ -107,4 +107,4 @@ export const usePaywallActions = () => {
     handleRestorePurchase,
     handlePromotionalOffer,
   };
-}; 
+};

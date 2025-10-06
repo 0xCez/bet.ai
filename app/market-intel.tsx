@@ -6,6 +6,7 @@ import {
   ScrollView,
   Text,
   ViewStyle,
+  Animated,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -17,8 +18,10 @@ import { BorderButton } from "../components/ui/BorderButton";
 import { TopBar } from "../components/ui/TopBar";
 import { db, auth } from "../firebaseConfig";
 import { BlurText } from "../components/ui/BlurText";
+import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
+import { usePageTransition } from "../hooks/usePageTransition";
 import i18n from "../i18n";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
@@ -149,6 +152,7 @@ type MarketIntelParams = {
   team2_code?: string;
   team1Logo?: string;
   team2Logo?: string;
+  analysisId?: string;
 };
 
 // Helper function to get bookmaker logo
@@ -236,6 +240,7 @@ export default function MarketIntelScreen() {
   const params = useLocalSearchParams<MarketIntelParams>();
   const { isSubscribed } = useRevenueCatPurchases();
   const posthog = usePostHog();
+  const { animatedStyle } = usePageTransition(false);
 
   // Track page view time
   useEffect(() => {
@@ -565,7 +570,7 @@ export default function MarketIntelScreen() {
              <View style={styles.consensusTeamRow}>
                <View style={styles.consensusTeamInfo}>
                  <Image
-                   source={getTeamLogo(params.team1)}
+                   source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
                    style={styles.consensusTeamLogo}
                  />
                  <Text style={styles.consensusTeamName}>
@@ -601,7 +606,7 @@ export default function MarketIntelScreen() {
              <View style={styles.consensusTeamRow}>
                <View style={styles.consensusTeamInfo}>
                  <Image
-                   source={getTeamLogo(params.team2)}
+                   source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
                    style={styles.consensusTeamLogo}
                  />
                  <Text style={styles.consensusTeamName}>
@@ -864,7 +869,7 @@ export default function MarketIntelScreen() {
             <View style={styles.fairValueTeamRow}>
               <View style={styles.fairValueTeamInfo}>
                 <Image
-                  source={getTeamLogo(params.team1)}
+                  source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
                   style={styles.fairValueTeamLogo}
                 />
                 <Text style={styles.fairValueTeamName}>
@@ -896,7 +901,7 @@ export default function MarketIntelScreen() {
             <View style={styles.fairValueTeamRow}>
               <View style={styles.fairValueTeamInfo}>
                 <Image
-                  source={getTeamLogo(params.team2)}
+                  source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
                   style={styles.fairValueTeamLogo}
                 />
                 <Text style={styles.fairValueTeamName}>
@@ -937,6 +942,7 @@ export default function MarketIntelScreen() {
           </View>
         </View>
 
+
         {/* Action Buttons */}
         <View style={styles.debateContainer}>
           <BorderButton
@@ -969,14 +975,28 @@ export default function MarketIntelScreen() {
       <TopBar />
 
       <View style={styles.container}>
-        <ScrollView
+        <Animated.ScrollView
           showsVerticalScrollIndicator={false}
-          style={styles.scrollView}
+          style={[styles.scrollView, animatedStyle]}
+          contentContainerStyle={styles.scrollContent}
         >
           <View style={styles.analysisContainer}>
             {isLoading ? renderShimmer() : renderMarketContent()}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        {/* Floating Bottom Navigation */}
+        <FloatingBottomNav
+          activeTab="market"
+          analysisData={{
+            team1: params.team1,
+            team2: params.team2,
+            sport: params.sport,
+            team1Logo: params.team1Logo,
+            team2Logo: params.team2Logo,
+            analysisId: params.analysisId, // Pass analysisId if available
+          }}
+        />
       </View>
     </ScreenBackground>
   );
@@ -1153,6 +1173,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 120, // Extra padding for floating nav
   },
   imageContainer: {
     width: "100%",

@@ -34,6 +34,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "../firebaseConfig"; // Assuming firebaseConfig.ts exports db and auth
 import { BlurText } from "@/components/ui/BlurText";
+import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import * as Progress from "react-native-progress";
@@ -1069,6 +1070,7 @@ export default function AnalysisScreen() {
           )}
         </View>
 
+
         <View style={styles.debateContainer}>
           {!isDemo && (
             <>
@@ -1117,6 +1119,61 @@ export default function AnalysisScreen() {
                   </Text>
                 </BorderButton>
               </View>
+
+              <View style={{ marginTop: 16 }}>
+                <BorderButton
+                  onPress={() => {
+                    // Navigate to team stats with game data
+                    router.push({
+                      pathname: "/team-stats",
+                      params: {
+                        team1: analysisResult?.teams?.home || "",
+                        team2: analysisResult?.teams?.away || "",
+                        sport: analysisResult?.sport || "nfl",
+                        team1Logo: analysisResult?.teams?.logos?.home || "",
+                        team2Logo: analysisResult?.teams?.logos?.away || "",
+                        selectedTeam: "team1" // Default to team1, can be changed later
+                      }
+                    });
+                  }}
+                  containerStyle={styles.floatingButton}
+                  borderColor="#00FF41"
+                  backgroundColor="#00FF4120"
+                  opacity={1}
+                  borderWidth={1}
+                >
+                  <Text style={styles.buttonText}>
+                    Team Stats 🏈
+                  </Text>
+                </BorderButton>
+              </View>
+
+              <View style={{ marginTop: 16 }}>
+                <BorderButton
+                  onPress={() => {
+                    // Navigate to player stats with game data
+                    router.push({
+                      pathname: "/player-stats",
+                      params: {
+                        team1: analysisResult?.teams?.home || "",
+                        team2: analysisResult?.teams?.away || "",
+                        sport: analysisResult?.sport || "nfl",
+                        team1Logo: analysisResult?.teams?.logos?.home || "",
+                        team2Logo: analysisResult?.teams?.logos?.away || ""
+                      }
+                    });
+                  }}
+                  containerStyle={styles.floatingButton}
+                  borderColor="#00D4FF"
+                  backgroundColor="#00D4FF20"
+                  opacity={1}
+                  borderWidth={1}
+                >
+                  <Text style={styles.buttonText}>
+                    Player Stats 👤
+                  </Text>
+                </BorderButton>
+              </View>
             </>
           )}
         </View>
@@ -1153,12 +1210,27 @@ export default function AnalysisScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
         >
           {/* Analysis Content */}
           <View style={styles.analysisContainer}>
             {isLoading ? renderShimmer() : renderAnalysisContent()}
           </View>
         </ScrollView>
+
+        {/* Floating Bottom Navigation - Only show for non-demo */}
+        {!isDemo && (
+          <FloatingBottomNav
+            activeTab="intel"
+            analysisData={{
+              team1: analysisResult?.teams?.home,
+              team2: analysisResult?.teams?.away,
+              sport: analysisResult?.sport,
+              team1Logo: analysisResult?.teams?.logos?.home,
+              team2Logo: analysisResult?.teams?.logos?.away,
+            }}
+          />
+        )}
 
         {/* Floating Next Button */}
         {!isLoading && isDemo && (
@@ -1205,6 +1277,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  scrollContent: {
+    paddingBottom: 120, // Extra padding for floating nav
   },
   title: {
     fontSize: 28,

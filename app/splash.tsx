@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { auth } from "../firebaseConfig";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { getAppState, AppState } from "../utils/appStorage";
+import { initializeAuthStateManager, isUserLoggedIn } from "../utils/authStateManager";
 import * as SplashScreen from "expo-splash-screen";
 import { Logo } from "@/components/ui/Logo";
 import { ScreenBackground } from "@/components/ui/ScreenBackground";
@@ -21,14 +22,27 @@ export default function SplashPage() {
   const [appState, setAppState] = useState<AppState | null>(null);
   const posthog = usePostHog();
 
-  // Handle Firebase Auth state
+  // Handle Firebase Auth state with improved persistence
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // Initialize auth state manager
+    const unsubscribeAuthManager = initializeAuthStateManager();
+
+    // Set up auth state listener with debouncing
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", { user: !!user, uid: user?.uid });
+
+      // Double-check auth state to prevent false logouts
+      const isLoggedIn = await isUserLoggedIn();
+      console.log("Confirmed login status:", isLoggedIn);
+
       setFirebaseUser(user);
       setIsAuthInitialized(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubscribeAuthManager();
+    };
   }, []);
 
   // Handle navigation once auth is initialized
