@@ -54,3 +54,4 @@ app/firebaseConfig.ts
 .env
 .env.local
 .env.production
+bet.ai/

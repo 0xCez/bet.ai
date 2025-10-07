@@ -69,8 +69,13 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           }
           break;
         case "market":
+          // Route to sport-specific market intel page
+          console.log("FloatingBottomNav Market - Sport:", analysisData?.sport);
+          const marketIntelPath = analysisData?.sport === "soccer" ? "/market-intel-soccer" :
+                                 "/market-intel"; // NFL, NBA, MLB use main page
+          console.log("FloatingBottomNav Market - Path:", marketIntelPath);
           router.push({
-            pathname: "/market-intel",
+            pathname: marketIntelPath,
             params: baseParams,
           });
           break;

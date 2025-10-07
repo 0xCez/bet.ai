@@ -3213,8 +3213,11 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
     }
 
     // Use soccer-specific calculations
+    const bestLines = calculateSoccerBestLines(bookmakers, event);
+    const evAnalysis = calculateSoccerEVOpportunities(bookmakers, event);
+
     const marketData = {
-      bestLines: calculateSoccerBestLines(bookmakers, event),
+      bestLines,
       sharpMeter: {
         primarySignal: "Soccer analysis",
         secondarySignal: "3-way betting",
@@ -3225,6 +3228,10 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
         avgPublicSpread: 0,
         dataQuality: "good"
       },
+      vigAnalysis: evAnalysis.vigAnalysis,
+      fairValue: evAnalysis.fairValue,
+      sharpConsensus: evAnalysis.sharpConsensus,
+      evOpportunities: evAnalysis.uiOpportunities,
       marketTightness: {
         tightness: "Normal",
         pointRange: 0,
@@ -3232,7 +3239,6 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
         comment: "Soccer market analysis",
         summary: "Normal • Soccer market • 3-way betting"
       },
-      evAnalysis: calculateSoccerEVOpportunities(bookmakers, event),
       oddsTable: formatSoccerOddsTable(bookmakers, event),
       rawBookmakerCount: bookmakers.length,
       event: {
@@ -4661,13 +4667,6 @@ function calculateEVOpportunities(bookmakers, event) {
     return ((implied1 + implied2) - 1) * 100;
   }
 
-  // Helper to validate and cap vig values
-  const validateVig = (vig) => {
-    if (!vig || !isFinite(vig)) return null;
-    if (vig < 0) return 0.1; // Minimum realistic vig
-    if (vig > 50) return 50; // Maximum realistic vig
-    return Math.round(vig * 10) / 10;
-  };
 
   const vigAnalysis = {
     moneyline: {
@@ -4847,6 +4846,14 @@ function calculateEVOpportunities(bookmakers, event) {
       hasOpportunities: evOpportunities.length > 0 || hasArbitrage
     }
   };
+}
+
+// Helper function to validate and cap vig values
+function validateVig(vig) {
+  if (!vig || !isFinite(vig)) return null;
+  if (vig < 0) return 0.1; // Minimum realistic vig
+  if (vig > 50) return 50; // Maximum realistic vig
+  return Math.round(vig * 10) / 10;
 }
 
 // Helper function to calculate market vig - handle both 2-way and 3-way betting
@@ -5071,42 +5078,301 @@ function calculateSoccerBestLines(bookmakers, event) {
 }
 
 function calculateSoccerEVOpportunities(bookmakers, event) {
-  // Simplified soccer EV - disable for now to prevent impossible values
-  return {
-    teams: `${event.home_team} vs ${event.away_team}`,
-    sharpConsensus: { moneyline: { home: null, away: null } },
-    fairValue: { moneyline: { fair1: null, fair2: null } },
-    vigAnalysis: {
-      moneyline: { sharp: 5.0, market: 6.0 },
-      spread: { sharp: null, market: null },
-      total: { sharp: null, market: null }
-    },
-    uiOpportunities: {
-      hasOpportunities: false,
-      opportunities: [{
+  try {
+    // Extract 3-way moneyline odds (Home/Draw/Away)
+    const homeOdds = [];
+    const drawOdds = [];
+    const awayOdds = [];
+
+    bookmakers.forEach(bookmaker => {
+      const h2hMarket = bookmaker.markets.find(m => m.key === 'h2h');
+      if (h2hMarket && h2hMarket.outcomes) {
+        const homeOutcome = h2hMarket.outcomes.find(o => o.name === event.home_team);
+        const awayOutcome = h2hMarket.outcomes.find(o => o.name === event.away_team);
+        const drawOutcome = h2hMarket.outcomes.find(o => o.name === 'Draw');
+
+        if (homeOutcome && awayOutcome && drawOutcome) {
+          const isSharp = ['pinnacle', 'betfair'].includes(bookmaker.key);
+
+          homeOdds.push({ bookmaker: bookmaker.title, bookmakerKey: bookmaker.key, odds: homeOutcome.price, isSharp });
+          drawOdds.push({ bookmaker: bookmaker.title, bookmakerKey: bookmaker.key, odds: drawOutcome.price, isSharp });
+          awayOdds.push({ bookmaker: bookmaker.title, bookmakerKey: bookmaker.key, odds: awayOutcome.price, isSharp });
+        }
+      }
+    });
+
+    if (homeOdds.length === 0) {
+      return {
+        teams: `${event.home_team} vs ${event.away_team}`,
+        sharpConsensus: { moneyline: { home: null, away: null, draw: null } },
+        fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+        vigAnalysis: {
+          moneyline: { sharp: null, market: null },
+          spread: { sharp: null, market: null },
+          total: { sharp: null, market: null }
+        },
+        uiOpportunities: {
+          hasOpportunities: false,
+          opportunities: [{
+            type: "efficient",
+            title: "No soccer odds available",
+            description: "Unable to find 3-way betting odds",
+            icon: "x"
+          }],
+          summary: "No data"
+        }
+      };
+    }
+
+    // Calculate sharp consensus (median of sharp books)
+    const sharpHomeOdds = homeOdds.filter(o => o.isSharp).map(o => o.odds);
+    const sharpDrawOdds = drawOdds.filter(o => o.isSharp).map(o => o.odds);
+    const sharpAwayOdds = awayOdds.filter(o => o.isSharp).map(o => o.odds);
+
+    const sharpConsensusHome = sharpHomeOdds.length > 0 ? sharpHomeOdds.sort((a, b) => a - b)[Math.floor(sharpHomeOdds.length / 2)] : null;
+    const sharpConsensusDraw = sharpDrawOdds.length > 0 ? sharpDrawOdds.sort((a, b) => a - b)[Math.floor(sharpDrawOdds.length / 2)] : null;
+    const sharpConsensusAway = sharpAwayOdds.length > 0 ? sharpAwayOdds.sort((a, b) => a - b)[Math.floor(sharpAwayOdds.length / 2)] : null;
+
+    // Calculate 3-way fair value (remove vig from sharp consensus)
+    let fairHome = null, fairDraw = null, fairAway = null;
+
+    if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
+      const impliedHome = 1 / sharpConsensusHome;
+      const impliedDraw = 1 / sharpConsensusDraw;
+      const impliedAway = 1 / sharpConsensusAway;
+      const totalImplied = impliedHome + impliedDraw + impliedAway;
+
+      // Remove vig by normalizing to 100%
+      const trueImpliedHome = impliedHome / totalImplied;
+      const trueImpliedDraw = impliedDraw / totalImplied;
+      const trueImpliedAway = impliedAway / totalImplied;
+
+      fairHome = parseFloat((1 / trueImpliedHome).toFixed(2));
+      fairDraw = parseFloat((1 / trueImpliedDraw).toFixed(2));
+      fairAway = parseFloat((1 / trueImpliedAway).toFixed(2));
+    }
+
+    // Calculate 3-way vig analysis
+    const allHomeOdds = homeOdds.map(o => o.odds);
+    const allDrawOdds = drawOdds.map(o => o.odds);
+    const allAwayOdds = awayOdds.map(o => o.odds);
+
+    // Market vig (average across all books)
+    let marketVig = null;
+    if (allHomeOdds.length > 0) {
+      const avgVigs = [];
+      for (let i = 0; i < Math.min(allHomeOdds.length, allDrawOdds.length, allAwayOdds.length); i++) {
+        const vig = calculateMarketVig(allHomeOdds[i], allAwayOdds[i], allDrawOdds[i]);
+        if (vig !== null && isFinite(vig)) {
+          avgVigs.push(vig);
+        }
+      }
+      marketVig = avgVigs.length > 0 ? parseFloat((avgVigs.reduce((a, b) => a + b, 0) / avgVigs.length).toFixed(1)) : null;
+    }
+
+    // Sharp vig (from sharp books only)
+    let sharpVig = null;
+    if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
+      sharpVig = parseFloat(calculateMarketVig(sharpConsensusHome, sharpConsensusAway, sharpConsensusDraw).toFixed(1));
+    }
+
+    // Find EV+ opportunities
+    const evOpportunities = [];
+    const arbitrageOpportunities = [];
+
+    if (fairHome && fairDraw && fairAway) {
+      // Check each bookmaker for EV+
+      homeOdds.forEach(book => {
+        const ev = ((book.odds / fairHome) - 1) * 100;
+        if (ev > 0.3) { // 0.3%+ EV threshold
+          evOpportunities.push({
+            type: "ev",
+            outcome: "Home Win",
+            team: event.home_team,
+            bookmaker: book.bookmaker,
+            bookmakerKey: book.bookmakerKey,
+            odds: book.odds,
+            fairOdds: fairHome,
+            ev: parseFloat(ev.toFixed(1)),
+            icon: "trending-up"
+          });
+        }
+      });
+
+      drawOdds.forEach(book => {
+        const ev = ((book.odds / fairDraw) - 1) * 100;
+        if (ev > 0.3) {
+          evOpportunities.push({
+            type: "ev",
+            outcome: "Draw",
+            team: "Draw",
+            bookmaker: book.bookmaker,
+            bookmakerKey: book.bookmakerKey,
+            odds: book.odds,
+            fairOdds: fairDraw,
+            ev: parseFloat(ev.toFixed(1)),
+            icon: "trending-up"
+          });
+        }
+      });
+
+      awayOdds.forEach(book => {
+        const ev = ((book.odds / fairAway) - 1) * 100;
+        if (ev > 0.3) {
+          evOpportunities.push({
+            type: "ev",
+            outcome: "Away Win",
+            team: event.away_team,
+            bookmaker: book.bookmaker,
+            bookmakerKey: book.bookmakerKey,
+            odds: book.odds,
+            fairOdds: fairAway,
+            ev: parseFloat(ev.toFixed(1)),
+            icon: "trending-up"
+          });
+        }
+      });
+
+      // Check for 3-way arbitrage
+      const bestHome = Math.max(...homeOdds.map(o => o.odds));
+      const bestDraw = Math.max(...drawOdds.map(o => o.odds));
+      const bestAway = Math.max(...awayOdds.map(o => o.odds));
+
+      const arbImplied = (1/bestHome) + (1/bestDraw) + (1/bestAway);
+      if (arbImplied < 1) {
+        const profit = ((1 - arbImplied) * 100);
+        arbitrageOpportunities.push({
+          type: "arbitrage",
+          profit: parseFloat(profit.toFixed(2)),
+          outcomes: [
+            { outcome: "Home", odds: bestHome, stake: parseFloat((1/bestHome/arbImplied * 100).toFixed(1)) },
+            { outcome: "Draw", odds: bestDraw, stake: parseFloat((1/bestDraw/arbImplied * 100).toFixed(1)) },
+            { outcome: "Away", odds: bestAway, stake: parseFloat((1/bestAway/arbImplied * 100).toFixed(1)) }
+          ]
+        });
+      }
+    }
+
+    // Format opportunities for UI
+    const allOpportunities = [...evOpportunities, ...arbitrageOpportunities];
+    const hasOpportunities = allOpportunities.length > 0;
+
+    const uiOpportunities = {
+      hasOpportunities,
+      opportunities: hasOpportunities ? allOpportunities.slice(0, 3).map(opp => ({
+        type: opp.type,
+        title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
+        description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.odds}` : "3-way arbitrage opportunity",
+        icon: opp.icon || "dollar-sign",
+        percentage: opp.type === "ev" ? opp.ev : opp.profit
+      })) : [{
         type: "efficient",
-        title: "Soccer market analysis in progress",
-        description: "3-way betting requires specialized calculations",
+        title: "Market efficiently priced",
+        description: "No profitable opportunities found",
         icon: "x"
       }],
-      summary: "Soccer analysis"
-    }
-  };
+      summary: hasOpportunities ? `${allOpportunities.length} opportunities` : "Efficient market"
+    };
+
+    return {
+      teams: `${event.home_team} vs ${event.away_team}`,
+      sharpConsensus: {
+        moneyline: {
+          home: sharpConsensusHome,
+          draw: sharpConsensusDraw,
+          away: sharpConsensusAway
+        }
+      },
+      fairValue: {
+        moneyline: {
+          fairHome,
+          fairDraw,
+          fairAway
+        }
+      },
+      vigAnalysis: {
+        moneyline: {
+          sharp: validateVig(sharpVig),
+          market: validateVig(marketVig)
+        },
+        spread: { sharp: null, market: null },
+        total: { sharp: null, market: null }
+      },
+      uiOpportunities,
+      evOpportunities: evOpportunities.slice(0, 5),
+      arbitrageOpportunities
+    };
+
+  } catch (error) {
+    console.error('Error calculating soccer EV opportunities:', error);
+    return {
+      teams: `${event.home_team} vs ${event.away_team}`,
+      sharpConsensus: { moneyline: { home: null, draw: null, away: null } },
+      fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+      vigAnalysis: {
+        moneyline: { sharp: null, market: null },
+        spread: { sharp: null, market: null },
+        total: { sharp: null, market: null }
+      },
+      uiOpportunities: {
+        hasOpportunities: false,
+        opportunities: [{
+          type: "efficient",
+          title: "Market efficiently priced",
+          description: "No profitable opportunities found",
+          icon: "x"
+        }],
+        summary: "Efficient market"
+      }
+    };
+  }
 }
 
 function formatSoccerOddsTable(bookmakers, event) {
-  // Simplified soccer odds table
-  return bookmakers.slice(0, 3).map(bookmaker => ({
-    bookmaker: bookmaker.title,
-    bookmakerKey: bookmaker.key,
-    isSharp: ['pinnacle'].includes(bookmaker.key),
-    odds: {
-      moneyline: {
-        home: bookmaker.markets.find(m => m.key === 'h2h')?.outcomes?.find(o => o.name === event.home_team)?.price || 1.5,
-        away: bookmaker.markets.find(m => m.key === 'h2h')?.outcomes?.find(o => o.name === event.away_team)?.price || 2.5
-      }
+  // Select balanced mix of bookmakers (2 sharp, 3 public max)
+  const sharpBooks = bookmakers.filter(b => ['pinnacle', 'betfair'].includes(b.key));
+  const publicBooks = bookmakers.filter(b => !['pinnacle', 'betfair'].includes(b.key));
+
+  const selectedBooks = [
+    ...sharpBooks.slice(0, 2),
+    ...publicBooks.slice(0, 3)
+  ].slice(0, 5);
+
+  return selectedBooks.map(bookmaker => {
+    const h2hMarket = bookmaker.markets.find(m => m.key === 'h2h');
+
+    if (!h2hMarket || !h2hMarket.outcomes) {
+      return {
+        bookmaker: bookmaker.title,
+        bookmakerKey: bookmaker.key,
+        isSharp: ['pinnacle', 'betfair'].includes(bookmaker.key),
+        odds: {
+          moneyline: {
+            home: null,
+            draw: null,
+            away: null
+          }
+        }
+      };
     }
-  }));
+
+    const homeOutcome = h2hMarket.outcomes.find(o => o.name === event.home_team);
+    const awayOutcome = h2hMarket.outcomes.find(o => o.name === event.away_team);
+    const drawOutcome = h2hMarket.outcomes.find(o => o.name === 'Draw');
+
+    return {
+      bookmaker: bookmaker.title,
+      bookmakerKey: bookmaker.key,
+      isSharp: ['pinnacle', 'betfair'].includes(bookmaker.key),
+      odds: {
+        moneyline: {
+          home: homeOutcome?.price || null,
+          draw: drawOutcome?.price || null,
+          away: awayOutcome?.price || null
+        }
+      }
+    };
+  });
 }
 
 // ====================================================================
