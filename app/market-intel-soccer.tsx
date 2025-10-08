@@ -28,13 +28,12 @@ const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 // Static variables to persist market data between screen navigation
 let cachedMarketResult: SoccerMarketIntelResult | null = null;
-let cachedDisplayImageUrl: string | null = null;
 let cachedParams: any = null;
 
 // Track page view time
 let pageEntryTime: number | null = null;
 
-// Interface for Soccer Market Intelligence (3-way betting)
+// Interface for Soccer Market Intelligence - EXACT same structure as NFL but with soccer properties
 interface SoccerMarketIntelResult {
   sport: string;
   teams: {
@@ -75,28 +74,23 @@ interface SoccerMarketIntelResult {
       };
     };
     evOpportunities: {
-      hasOpportunities: boolean;
+      hasOpportunities: boolean | null;
       opportunities: Array<{
         type: string;
         title: string;
         description: string;
-        icon: string;
-        percentage?: number;
+        icon?: string;
+        ev?: number;
+        vig?: number;
+        bookmaker?: string;
       }>;
       summary: string;
     };
-    sharpConsensus: {
-      moneyline: {
-        home: number | null;
-        draw: number | null;
-        away: number | null;
-      };
-    };
     fairValue: {
       moneyline: {
-        fairHome: number | null;
-        fairDraw: number | null;
-        fairAway: number | null;
+        fairHome: number;
+        fairDraw: number;
+        fairAway: number;
       };
     };
     marketTightness: {
@@ -112,917 +106,1185 @@ interface SoccerMarketIntelResult {
       odds: {
         moneyline: {
           home: number;
+          draw: number;
           away: number;
-          draw?: number;
         };
       };
     }>;
   };
+  teamStats: any;
+  timestamp: string;
+  teamIds: { team1Id: number; team2Id: number };
 }
 
-export default function SoccerMarketIntel() {
-  const params = useLocalSearchParams();
-  const [marketResult, setMarketResult] = useState<SoccerMarketIntelResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
-  const { hasActiveSubscription } = useRevenueCatPurchases();
+type SoccerMarketIntelParams = {
+  team1?: string;
+  team2?: string;
+  sport?: string;
+  team1Logo?: string;
+  team2Logo?: string;
+  analysisId?: string;
+};
+
+// Helper function to get bookmaker logo - EXACT same as NFL
+function getBookmakerLogo(bookmakerName?: string) {
+  if (!bookmakerName) return require("../assets/images/logo.png");
+
+  const logoMap: { [key: string]: any } = {
+    'DraftKings': require("../assets/images/Draftkings.png"),
+    'FanDuel': require("../assets/images/Fanduel.png"),
+    'BetMGM': require("../assets/images/Betmgm.png"),
+    'Pinnacle': require("../assets/images/Pinaccle.png"),
+    'BetUS': require("../assets/images/Betus.png"),
+    'BetRivers': require("../assets/images/Betrivers.png"),
+    'Bovada': require("../assets/images/Bovada.png"),
+    'MyBookie.ag': require("../assets/images/mybookie.png"),
+    'ESPN BET': require("../assets/images/Espnbet.png"),
+    'Caesars': require("../assets/images/Caesars.png"),
+    'Fanatics': require("../assets/images/fanatics.png"),
+    'Bally Bet': require("../assets/images/Ballybet.png"),
+    'Hard Rock Bet': require("../assets/images/Hardrockbet.png"),
+  };
+
+  return logoMap[bookmakerName] || require("../assets/images/logo.png");
+}
+
+// Helper function to format decimal odds
+function formatOdds(decimalOdds?: number): string {
+  if (!decimalOdds) return "N/A";
+  return decimalOdds.toFixed(2);
+}
+
+// Helper function to get team display name
+function getTeamDisplayName(teamName?: string): string {
+  if (!teamName) return "Team";
+  return teamName.length > 12 ? teamName.substring(0, 12) + "..." : teamName;
+}
+
+export default function SoccerMarketIntelScreen() {
+  const params = useLocalSearchParams<SoccerMarketIntelParams>();
+  const { isSubscribed } = useRevenueCatPurchases();
   const posthog = usePostHog();
-  const { fadeAnim, slideAnim } = usePageTransition();
+  const { animatedStyle } = usePageTransition(false);
 
-  // Helper function to get bookmaker logo
-  const getBookmakerLogo = (bookmakerKey: string) => {
-    const logoMap: { [key: string]: any } = {
-      pinnacle: require("../assets/images/Pinaccle.png"),
-      fanduel: require("../assets/images/Fanduel.png"),
-      draftkings: require("../assets/images/Draftkings.png"),
-      betmgm: require("../assets/images/Betmgm.png"),
-      caesars: require("../assets/images/Caesars.png"),
-      pointsbet: require("../assets/images/Pointsbet.png"),
-      fanatics: require("../assets/images/fanatics.png"), // Fallback
-      mybookieag: require("../assets/images/mybookie.png"), // Fallback
-    };
-    return logoMap[bookmakerKey] || require("../assets/images/logo.png");
-  };
-
-  // Helper function to format odds
-  const formatOdds = (odds: number) => {
-    if (!odds || odds === 0) return "N/A";
-    return odds.toFixed(2);
-  };
-
-  // Helper function to get team display name
-  const getTeamDisplayName = (teamName: string) => {
-    if (!teamName) return "Team";
-    return teamName.length > 12 ? teamName.substring(0, 12) + "..." : teamName;
-  };
-
+  // Track page view time - EXACT same as NFL
   useEffect(() => {
+    if (!auth.currentUser) return;
+
     pageEntryTime = Date.now();
 
-    console.log("Soccer Market Intel Params:", params);
-    console.log("Team1:", params.team1, "Team2:", params.team2, "Sport:", params.sport);
+    posthog?.capture("soccer_market_intel_page_viewed", {
+      userId: (auth.currentUser as any)?.uid,
+      sport: params.sport,
+      teams: `${params.team1} vs ${params.team2}`,
+    });
 
-    const currentParams = JSON.stringify(params);
+    return () => {
+      if (pageEntryTime && auth.currentUser) {
+        const timeSpentMs = Date.now() - pageEntryTime;
+        const timeSpentSeconds = Math.round(timeSpentMs / 1000);
 
-    // Check if we have cached data for the same parameters
-    if (cachedMarketResult && cachedParams === currentParams) {
-      setMarketResult(cachedMarketResult);
-      setDisplayImageUrl(cachedDisplayImageUrl);
-      setLoading(false);
+        posthog?.capture("soccer_market_intel_page_exit", {
+          userId: (auth.currentUser as any)?.uid,
+          sport: params.sport,
+          teams: `${params.team1} vs ${params.team2}`,
+          timeSpentSeconds: timeSpentSeconds,
+          timeSpentMinutes: Math.round((timeSpentSeconds / 60) * 10) / 10,
+        });
+
+        pageEntryTime = null;
+      }
+    };
+  }, [params.team1, params.team2, params.sport]);
+
+  // Check if we're navigating with the same params - EXACT same as NFL
+  const isSameAnalysis =
+    cachedParams?.team1 === params.team1 &&
+    cachedParams?.team2 === params.team2 &&
+    cachedParams?.sport === params.sport;
+
+  // Cache params for future comparison
+  if (!isSameAnalysis) {
+    cachedParams = { ...params };
+  }
+
+  const team1 = params.team1;
+  const team2 = params.team2;
+  const sport = params.sport;
+
+  const hasInitializedRef = React.useRef(false);
+
+  // Initialize state, potentially from cache - EXACT same as NFL
+  const [isLoading, setIsLoading] = useState(
+    !isSameAnalysis || !cachedMarketResult
+  );
+  const [marketResult, setMarketResult] = useState<SoccerMarketIntelResult | null>(
+    isSameAnalysis && cachedMarketResult ? cachedMarketResult : null
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    // Skip re-fetching if we're navigating back to the same analysis
+    if (isSameAnalysis && cachedMarketResult) {
+      setIsLoading(false);
       return;
     }
 
-    // For now, use test data until we fix the API integration
-    const testSoccerData = {
-      sport: "soccer",
-      teams: {
-        home: params.team1 || "Manchester City",
-        away: params.team2 || "Everton",
-        logos: {
-          home: params.team1Logo || "",
-          away: params.team2Logo || "",
-        },
-      },
-      marketIntelligence: {
-        bestLines: {
-          consensusHomeML: 1.41,
-          consensusDrawML: 4.7,
-          consensusAwayML: 7.0,
-          bestLines: [
-            {
-              type: "moneyline",
-              label: "Best Home ML",
-              odds: 1.43,
-              bookmaker: "Pinnacle",
-              team: params.team1 || "Manchester City"
-            },
-            {
-              type: "moneyline",
-              label: "Best Draw ML",
-              odds: 5.0,
-              bookmaker: "Fanatics",
-              team: "Draw"
-            },
-            {
-              type: "moneyline",
-              label: "Best Away ML",
-              odds: 7.5,
-              bookmaker: "FanDuel",
-              team: params.team2 || "Everton"
-            }
-          ],
-          rawData: {
-            totalMoneylines: 30
-          }
-        },
-        sharpMeter: {
-          primarySignal: "Soccer analysis",
-          secondarySignal: "3-way betting",
-          detailLine: "Home vs Draw vs Away",
-          gaugeValue: 50,
-          dataQuality: "good"
-        },
-        vigAnalysis: {
-          moneyline: {
-            sharp: 5,
-            market: 6
-          }
-        },
-        evOpportunities: {
-          hasOpportunities: false,
-          opportunities: [{
-            type: "efficient",
-            title: "Market efficiently priced",
-            description: "No profitable opportunities found",
-            icon: "x"
-          }],
-          summary: "Efficient market"
-        },
-        fairValue: {
-          moneyline: {
-            fairHome: 1.38,
-            fairDraw: 4.5,
-            fairAway: 6.8
-          }
-        },
-        sharpConsensus: {
-          moneyline: {
-            home: 1.40,
-            draw: 4.6,
-            away: 6.9
-          }
-        },
-        marketTightness: {
-          tightness: "Normal",
-          priceRange: 0.2,
-          comment: "Soccer market analysis",
-          summary: "Normal • Soccer market • 3-way betting"
-        },
-        oddsTable: [
-          {
-            bookmaker: "Pinnacle",
-            bookmakerKey: "pinnacle",
-            isSharp: true,
-            odds: {
-              moneyline: {
-                home: 1.43,
-                draw: 4.8,
-                away: 7.2
-              }
-            }
-          },
-          {
-            bookmaker: "FanDuel",
-            bookmakerKey: "fanduel",
-            isSharp: false,
-            odds: {
-              moneyline: {
-                home: 1.40,
-                draw: 5.0,
-                away: 7.5
-              }
-            }
-          },
-          {
-            bookmaker: "DraftKings",
-            bookmakerKey: "draftkings",
-            isSharp: false,
-            odds: {
-              moneyline: {
-                home: 1.41,
-                draw: 4.7,
-                away: 7.0
-              }
-            }
-          }
-        ]
+    // Reset cache when loading new analysis
+    if (!isSameAnalysis) {
+      cachedMarketResult = null;
+    }
+
+    if (team1 && team2 && sport) {
+      console.log(
+        `Soccer Market Intel Flow: Starting analysis for ${sport}: ${team1} vs ${team2}`
+      );
+      getMarketIntelligence();
+    } else {
+      console.error("Error: Missing required parameters (team1, team2, sport).");
+      setError("Missing game data. Please go back and try again.");
+      setIsLoading(false);
+    }
+  }, [team1, team2, sport, auth.currentUser, isSameAnalysis]);
+
+  // Main function to fetch market intelligence data - EXACT same as NFL
+  const getMarketIntelligence = async () => {
+    if (marketResult) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log("Fetching soccer market intelligence data...");
+
+      if (!sport) {
+        throw new Error("Sport parameter is required but missing");
       }
-    };
 
-    setMarketResult(testSoccerData);
-    setDisplayImageUrl(null);
-    setLoading(false);
-  }, [params]);
+      const response = await APIService.getMarketIntelligence(
+        sport,
+        team1 || "",
+        team2 || ""
+      );
 
-  const renderBestLinesCard = () => {
-    const bestLines = marketResult?.marketIntelligence?.bestLines;
-    if (!bestLines) return null;
+      console.log("Soccer Market Intelligence Response:", response);
 
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Best Lines ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
+      if (response.error) {
+        throw new Error(response.error);
+      }
 
-        <View style={styles.bestLinesContent}>
-          {bestLines.bestLines?.map((line, index) => (
-            <View key={index} style={styles.bestLineItem}>
-              <View style={styles.bestLineLeft}>
-                <Image
-                  source={getBookmakerLogo(line.bookmaker?.toLowerCase())}
-                  style={styles.bookmakerLogo}
-                />
-                <View style={styles.bestLineInfo}>
-                  <Text style={styles.bestLineLabel}>{line.label}</Text>
-                  <Text style={styles.bestLineTeam}>{getTeamDisplayName(line.team)}</Text>
-                </View>
-              </View>
-              <Text style={styles.bestLineOdds}>{formatOdds(line.odds)}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
+      if (response.status === "error") {
+        throw new Error(response.message || "Failed to fetch soccer market intelligence");
+      }
+
+      const marketData: SoccerMarketIntelResult = response;
+
+      setMarketResult(marketData);
+      cachedMarketResult = marketData;
+
+    } catch (err) {
+      console.error("Error in getSoccerMarketIntelligence:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to get soccer market intelligence"
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const renderConsensusLinesCard = () => {
-    const bestLines = marketResult?.marketIntelligence?.bestLines;
-    if (!bestLines) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Consensus Lines ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.consensusLinesContent}>
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Home Win</Text>
-                <Text style={styles.consensusLineTeam}>{getTeamDisplayName(params.team1 as string)}</Text>
-              </View>
-            </View>
-            <Text style={styles.consensusLineOdds}>{formatOdds(bestLines.consensusHomeML)}</Text>
-          </View>
-
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Draw</Text>
-                <Text style={styles.consensusLineTeam}>Tie Game</Text>
-              </View>
-            </View>
-            <Text style={styles.consensusLineOdds}>{formatOdds(bestLines.consensusDrawML)}</Text>
-          </View>
-
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Away Win</Text>
-                <Text style={styles.consensusLineTeam}>{getTeamDisplayName(params.team2 as string)}</Text>
-              </View>
-            </View>
-            <Text style={styles.consensusLineOdds}>{formatOdds(bestLines.consensusAwayML)}</Text>
-          </View>
-        </View>
+  // Shimmer rendering - EXACT same as NFL
+  const renderShimmer = () => (
+    <View style={styles.shimmerContainer}>
+      <View style={styles.shimmerGroup}>
+        <LinearGradient
+          colors={["#1A1A1A", "#363636"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientContainer}
+        >
+          <ShimmerPlaceholder
+            style={styles.shimmerLine}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+          <ShimmerPlaceholder
+            style={[styles.shimmerLine, { width: "100%" }]}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+        </LinearGradient>
       </View>
-    );
-  };
+    </View>
+  );
 
-  const renderSharpMeterCard = () => {
-    const sharpMeter = marketResult?.marketIntelligence?.sharpMeter;
-    if (!sharpMeter) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Sharp Meter ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.sharpMeterContent}>
-          <View style={styles.sharpMeterLeft}>
-            <Text style={styles.sharpMeterPrimary}>{sharpMeter.primarySignal}</Text>
-            <Text style={styles.sharpMeterSecondary}>{sharpMeter.secondarySignal}</Text>
-            <Text style={styles.sharpMeterDetail}>{sharpMeter.detailLine}</Text>
-          </View>
-          <View style={styles.sharpMeterRight}>
-            <View style={styles.circularGauge}>
-              <Text style={styles.gaugeValue}>{sharpMeter.gaugeValue}</Text>
-              <Text style={styles.gaugeLabel}>3-Way</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderFairValueCard = () => {
-    const fairValue = marketResult?.marketIntelligence?.fairValue;
-    if (!fairValue?.moneyline) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Fair Value ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.consensusLinesContent}>
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Fair Home</Text>
-                <Text style={styles.consensusLineTeam}>{getTeamDisplayName(params.team1 as string)}</Text>
-              </View>
-            </View>
-            <Text style={styles.fairValueOdds}>{formatOdds(fairValue.moneyline.fairHome)}</Text>
-          </View>
-
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Fair Draw</Text>
-                <Text style={styles.consensusLineTeam}>Vig-Free</Text>
-              </View>
-            </View>
-            <Text style={styles.fairValueOdds}>{formatOdds(fairValue.moneyline.fairDraw)}</Text>
-          </View>
-
-          <View style={styles.consensusLineItem}>
-            <View style={styles.consensusLineLeft}>
-              <View style={styles.consensusIcon} />
-              <View style={styles.consensusLineInfo}>
-                <Text style={styles.consensusLineLabel}>Fair Away</Text>
-                <Text style={styles.consensusLineTeam}>{getTeamDisplayName(params.team2 as string)}</Text>
-              </View>
-            </View>
-            <Text style={styles.fairValueOdds}>{formatOdds(fairValue.moneyline.fairAway)}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderVigAnalysisCard = () => {
-    const vigAnalysis = marketResult?.marketIntelligence?.vigAnalysis;
-    if (!vigAnalysis) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Vig Analysis ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.vigAnalysisContent}>
-          <View style={styles.vigAnalysisItem}>
-            <View style={styles.vigAnalysisLeft}>
-              <View style={styles.vigAnalysisIcon} />
-              <View style={styles.vigAnalysisInfo}>
-                <Text style={styles.vigAnalysisLabel}>Match Winner</Text>
-                <Text style={styles.vigAnalysisTeam}>Home/Draw/Away</Text>
-              </View>
-            </View>
-            <View style={styles.vigAnalysisRight}>
-              <Text style={styles.vigAnalysisSharp}>{vigAnalysis.moneyline?.sharp || 0}%</Text>
-              <Text style={styles.vigAnalysisMarket}>{vigAnalysis.moneyline?.market || 0}%</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const renderEVOpportunitiesCard = () => {
-    const evOpportunities = marketResult?.marketIntelligence?.evOpportunities;
-    if (!evOpportunities) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>EV+ & Arb Opportunities ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.evOpportunitiesContent}>
-          {!evOpportunities.hasOpportunities ? (
-            <View style={styles.noOpportunitiesContainer}>
-              <View style={styles.noOpportunitiesIcon}>
-                <Text style={styles.noOpportunitiesX}>✕</Text>
-              </View>
-              <Text style={styles.noOpportunitiesTitle}>Soccer Analysis in Progress</Text>
-              <Text style={styles.noOpportunitiesDescription}>
-                3-way betting requires specialized calculations
-              </Text>
-            </View>
-          ) : (
-            evOpportunities.opportunities?.map((opportunity, index) => (
-              <View key={index} style={styles.evOpportunityItem}>
-                <View style={styles.evOpportunityLeft}>
-                  <View style={styles.evOpportunityIcon} />
-                  <View style={styles.evOpportunityInfo}>
-                    <Text style={styles.evOpportunityTitle}>{opportunity.title}</Text>
-                    <Text style={styles.evOpportunityDescription}>{opportunity.description}</Text>
-                  </View>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  const renderOddsTableCard = () => {
-    const oddsTable = marketResult?.marketIntelligence?.oddsTable;
-    if (!oddsTable || oddsTable.length === 0) return null;
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Odds Table ⚽</Text>
-          <Text style={styles.infoIcon}>ⓘ</Text>
-        </View>
-
-        <View style={styles.oddsTableContent}>
-          {/* Header Row */}
-          <View style={styles.oddsTableHeader}>
-            <Text style={styles.oddsTableHeaderText}>Bookmaker</Text>
-            <Text style={styles.oddsTableHeaderText}>Home</Text>
-            <Text style={styles.oddsTableHeaderText}>Draw</Text>
-            <Text style={styles.oddsTableHeaderText}>Away</Text>
-          </View>
-
-          {/* Bookmaker Rows */}
-          {oddsTable.slice(0, 5).map((bookmaker, index) => (
-            <View key={index} style={styles.oddsTableRow}>
-              <View style={styles.oddsTableBookmaker}>
-                <Image
-                  source={getBookmakerLogo(bookmaker.bookmakerKey)}
-                  style={styles.oddsTableLogo}
-                />
-                <Text style={styles.oddsTableBookmakerName}>
-                  {bookmaker.bookmaker.length > 8
-                    ? bookmaker.bookmaker.substring(0, 8) + "..."
-                    : bookmaker.bookmaker}
-                </Text>
-              </View>
-              <Text style={styles.oddsTableOdds}>
-                {formatOdds(bookmaker.odds.moneyline.home)}
-              </Text>
-              <Text style={styles.oddsTableOdds}>
-                {formatOdds(bookmaker.odds.moneyline.draw || 0)}
-              </Text>
-              <Text style={styles.oddsTableOdds}>
-                {formatOdds(bookmaker.odds.moneyline.away)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <ScreenBackground>
-        <TopBar
-          title="Soccer Market Intel"
-          onBackPress={() => router.back()}
-        />
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-          <View style={styles.loadingContainer}>
-            <ShimmerPlaceholder style={styles.shimmerCard} />
-            <ShimmerPlaceholder style={styles.shimmerCard} />
-            <ShimmerPlaceholder style={styles.shimmerCard} />
-          </View>
-        </ScrollView>
-      </ScreenBackground>
-    );
-  }
-
-  if (error) {
-    return (
-      <ScreenBackground>
-        <TopBar
-          title="Soccer Market Intel"
-          onBackPress={() => router.back()}
-        />
+  // Main content rendering - Adapted for soccer
+  const renderSoccerMarketContent = () => {
+    if (error) {
+      return (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
-          <BorderButton
-            title="Try Again"
-            onPress={() => {
-              cachedMarketResult = null;
-              cachedParams = null;
-              setError(null);
-              setLoading(true);
-            }}
-          />
         </View>
-      </ScreenBackground>
+      );
+    }
+
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.analysisContent}
+      >
+        {/* Best Lines Card - Soccer: Home/Draw/Away */}
+        <View style={[styles.card, styles.bestLinesCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Best Lines 💰</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.bestLinesContent}>
+            {/* 1. Home ML */}
+            <View style={styles.bestLineItem}>
+              <Image
+                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker)}
+                style={styles.bestLineBookmakerLogo}
+              />
+              <View style={styles.bestLineTextSection}>
+                <BlurText card="best-home-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
+                  {params.team1?.split(' ').pop()} Win at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.odds || 1.43)}
+                </BlurText>
+                <BlurText card="best-home-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
+                  Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker || "Pinnacle"}
+                </BlurText>
+              </View>
+            </View>
+
+            {/* 2. Draw ML */}
+            <View style={styles.bestLineItem}>
+              <Image
+                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.bookmaker)}
+                style={styles.bestLineBookmakerLogo}
+              />
+              <View style={styles.bestLineTextSection}>
+                <BlurText card="best-draw-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
+                  Draw at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.odds || 5.0)}
+                </BlurText>
+                <BlurText card="best-draw-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
+                  Best available draw odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.bookmaker || "Fanatics"}
+                </BlurText>
+              </View>
+            </View>
+
+            {/* 3. Away ML */}
+            <View style={styles.bestLineItem}>
+              <Image
+                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.bookmaker)}
+                style={styles.bestLineBookmakerLogo}
+              />
+              <View style={styles.bestLineTextSection}>
+                <BlurText card="best-away-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
+                  {params.team2?.split(' ').pop()} Win at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.odds || 7.5)}
+                </BlurText>
+                <BlurText card="best-away-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
+                  Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.bookmaker || "FanDuel"}
+                </BlurText>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Consensus Lines Card - Soccer: Home/Draw/Away */}
+        <View style={[styles.card, styles.consensusLinesCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Consensus Lines 📊</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.consensusLinesContent}>
+            {/* Header Row */}
+            <View style={styles.consensusHeaderRow}>
+              <View style={styles.consensusHeaderSpacer} />
+              <Text style={styles.consensusHeaderText}>Home</Text>
+              <Text style={styles.consensusHeaderText}>Draw</Text>
+              <Text style={styles.consensusHeaderText}>Away</Text>
+            </View>
+
+             {/* Match Winner Row */}
+             <View style={styles.consensusTeamRow}>
+               <View style={styles.consensusTeamInfo}>
+                 <View style={styles.consensusTeamLogo} />
+                 <Text style={styles.consensusTeamName}>
+                   Match Winner
+                 </Text>
+               </View>
+               <View style={styles.consensusOddsContainer}>
+                 <View style={styles.consensusOddsBox}>
+                   <BlurText card="consensus-home" blur={!auth.currentUser} style={styles.consensusOdds}>
+                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusHomeML)}
+                   </BlurText>
+                 </View>
+                 <View style={styles.consensusOddsBox}>
+                   <BlurText card="consensus-draw" blur={!auth.currentUser} style={styles.consensusOdds}>
+                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusDrawML)}
+                   </BlurText>
+                 </View>
+                 <View style={styles.consensusOddsBox}>
+                   <BlurText card="consensus-away" blur={!auth.currentUser} style={styles.consensusOdds}>
+                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusAwayML)}
+                   </BlurText>
+                 </View>
+               </View>
+             </View>
+          </View>
+        </View>
+
+        {/* Public vs Sharp Meter Card - Soccer version */}
+        <View style={[styles.card, styles.sharpMeterCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Public vs Sharp Meter 🌡️</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.sharpMeterContent}>
+            <View style={styles.sharpMeterContainer}>
+              <View style={styles.sharpMeterTextSection}>
+                <BlurText card="sharp-primary" blur={!auth.currentUser} style={styles.sharpMeterPrimaryText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.primarySignal || "Soccer analysis"}
+                </BlurText>
+                <BlurText card="sharp-secondary" blur={!auth.currentUser} style={styles.sharpMeterSecondaryText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.secondarySignal || "3-way betting"}
+                </BlurText>
+                <BlurText card="sharp-detail" blur={!auth.currentUser} style={styles.sharpMeterDetailText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.detailLine || "Home vs Draw vs Away"}
+                </BlurText>
+              </View>
+              <View style={styles.sharpMeterGaugeSection}>
+                <View style={styles.sharpMeterCircle}>
+                  <BlurText card="sharp-gauge-main" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
+                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeValue || 50}
+                  </BlurText>
+                  <BlurText card="sharp-gauge-sub" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
+                    3-Way
+                  </BlurText>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Odds Table Card - Soccer: Home/Draw/Away columns */}
+        <View style={[styles.card, styles.oddsTableCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Odds Table 🔎</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.oddsTableContent}>
+            {/* Header Row */}
+            <View style={styles.oddsTableHeaderRow}>
+              <Text style={styles.oddsTableHeaderText}>Bookmaker</Text>
+              <Text style={styles.oddsTableHeaderText}>Home</Text>
+              <Text style={styles.oddsTableHeaderText}>Draw</Text>
+              <Text style={styles.oddsTableHeaderText}>Away</Text>
+            </View>
+
+            {/* Bookmaker Rows */}
+            {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
+              <View key={index} style={styles.oddsTableRow}>
+                <View style={styles.oddsTableCell}>
+                  <Image source={getBookmakerLogo(bookmaker.bookmaker)} style={styles.oddsTableBookmakerLogo} />
+                  <Text style={styles.oddsTableBookmakerName}>{bookmaker.bookmaker}</Text>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-home-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.home)}
+                  </BlurText>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-draw-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.draw)}
+                  </BlurText>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-away-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.away)}
+                  </BlurText>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Vig Analysis Card - Soccer version */}
+        <View style={[styles.card, styles.vigAnalysisCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Vig Analysis 🧃</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.vigAnalysisContent}>
+            {/* Header Row - Match Consensus Lines layout */}
+            <View style={styles.vigHeaderRow}>
+              <View style={styles.vigHeaderSpacer} />
+              <Text style={styles.vigHeaderText}>Home ML</Text>
+              <Text style={styles.vigHeaderText}>Draw</Text>
+              <Text style={styles.vigHeaderText}>Away ML</Text>
+            </View>
+
+            {/* Sharp Books Row - Match team row layout */}
+            <View style={styles.vigTeamRow}>
+              <View style={styles.vigTeamInfo}>
+                <Text style={styles.vigTeamIcon}>🎯</Text>
+                <Text style={styles.vigTeamName}>Sharp Books</Text>
+              </View>
+              <View style={styles.vigOddsContainer}>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-sharp-home" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.sharp?.toFixed(1) || "5.8"}%
+                  </BlurText>
+                </View>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-sharp-draw" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.sharp?.toFixed(1) || "5.8"}%
+                  </BlurText>
+                </View>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-sharp-away" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.sharp?.toFixed(1) || "5.8"}%
+                  </BlurText>
+                </View>
+              </View>
+            </View>
+
+            {/* All Books Row - Match team row layout */}
+            <View style={styles.vigTeamRow}>
+              <View style={styles.vigTeamInfo}>
+                <Text style={styles.vigTeamIcon}>👥</Text>
+                <Text style={styles.vigTeamName}>All Books</Text>
+              </View>
+              <View style={styles.vigOddsContainer}>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-market-home" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.market?.toFixed(1) || "6.2"}%
+                  </BlurText>
+                </View>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-market-draw" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.market?.toFixed(1) || "6.2"}%
+                  </BlurText>
+                </View>
+                <View style={styles.vigOddsBox}>
+                  <BlurText card="vig-market-away" blur={!auth.currentUser} style={styles.vigOdds}>
+                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.market?.toFixed(1) || "6.2"}%
+                  </BlurText>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Fair Value Card - Soccer: Home/Draw/Away */}
+        <View style={[styles.card, styles.fairValueCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Fair Value ⚖️</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.fairValueContent}>
+            {/* Header Row */}
+            <View style={styles.fairValueHeader}>
+              <View style={styles.fairValueHeaderSpacer} />
+              <Text style={styles.fairValueHeaderText}>Home</Text>
+              <Text style={styles.fairValueHeaderText}>Draw</Text>
+              <Text style={styles.fairValueHeaderText}>Away</Text>
+            </View>
+
+            {/* Fair Value Row */}
+            <View style={styles.fairValueTeamRow}>
+              <View style={styles.fairValueTeamInfo}>
+                <View style={styles.fairValueTeamLogo} />
+                <Text style={styles.fairValueTeamName}>Vig-Free Odds</Text>
+              </View>
+              <View style={styles.fairValueOddsContainer}>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-home" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairHome)}
+                  </BlurText>
+                </View>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-draw" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairDraw)}
+                  </BlurText>
+                </View>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-away" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairAway)}
+                  </BlurText>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* EV+ & Arb Opportunities Card - Soccer version */}
+        <View style={[styles.card, styles.evOpportunitiesCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>EV+ & Arb Opportunities 💸</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.evOpportunitiesContent}>
+            <SoccerEVSection marketData={marketResult} params={params} />
+          </View>
+        </View>
+
+        {/* Odds Table Card - Soccer: Home/Draw/Away columns */}
+        <View style={[styles.card, styles.oddsTableCard]}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Odds Table 🔎</Text>
+            <Text style={styles.infoIcon}>ⓘ</Text>
+          </View>
+          <View style={styles.oddsTableContent}>
+            {/* Header Row */}
+            <View style={styles.oddsTableHeaderRow}>
+              <Text style={styles.oddsTableHeaderText}>Bookmaker</Text>
+              <Text style={styles.oddsTableHeaderText}>Home</Text>
+              <Text style={styles.oddsTableHeaderText}>Draw</Text>
+              <Text style={styles.oddsTableHeaderText}>Away</Text>
+            </View>
+
+            {/* Bookmaker Rows */}
+            {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
+              <View key={index} style={styles.oddsTableRow}>
+                <View style={styles.oddsTableCell}>
+                  <Image source={getBookmakerLogo(bookmaker.bookmaker)} style={styles.oddsTableBookmakerLogo} />
+                  <Text style={styles.oddsTableBookmakerName}>{bookmaker.bookmaker}</Text>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-home-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.home)}
+                  </BlurText>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-draw-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.draw)}
+                  </BlurText>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <BlurText card={`odds-away-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
+                    {formatOdds(bookmaker.odds?.moneyline?.away)}
+                  </BlurText>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.debateContainer}>
+          <BorderButton
+            onPress={() => {
+              router.back();
+            }}
+            containerStyle={styles.floatingButton}
+            borderColor="#00C2E0"
+            backgroundColor="#00C2E020"
+            opacity={1}
+            borderWidth={1}
+          >
+            <Text style={styles.buttonText}>Back to Analysis</Text>
+          </BorderButton>
+
+          <GradientButton
+            onPress={getMarketIntelligence}
+            style={{ marginTop: 16 }}
+          >
+            <Text style={styles.buttonText}>Get Fresh Odds ⚽</Text>
+          </GradientButton>
+        </View>
+      </ScrollView>
     );
-  }
+  };
 
+  // Main render - EXACT same structure as NFL
   return (
-    <ScreenBackground>
-      <TopBar
-        title="Soccer Market Intel"
-        onBackPress={() => router.back()}
-      />
+    <ScreenBackground hideBg>
+      <TopBar />
 
-      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <Animated.View style={[styles.content, { transform: [{ translateY: slideAnim }] }]}>
+      <View style={styles.container}>
+        <Animated.ScrollView
+          showsVerticalScrollIndicator={false}
+          style={[styles.scrollView, animatedStyle]}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.analysisContainer}>
+            {isLoading ? renderShimmer() : renderSoccerMarketContent()}
+          </View>
+        </Animated.ScrollView>
 
-            {/* Best Lines Card */}
-            {renderBestLinesCard()}
-
-            {/* Consensus Lines Card */}
-            {renderConsensusLinesCard()}
-
-            {/* Fair Value Card */}
-            {renderFairValueCard()}
-
-            {/* Sharp Meter Card */}
-            {renderSharpMeterCard()}
-
-            {/* Vig Analysis Card */}
-            {renderVigAnalysisCard()}
-
-            {/* EV+ & Arb Opportunities Card */}
-            {renderEVOpportunitiesCard()}
-
-            {/* Odds Table Card */}
-            {renderOddsTableCard()}
-
-            <View style={styles.bottomPadding} />
-          </Animated.View>
-        </ScrollView>
-      </Animated.View>
-
-      <FloatingBottomNav
-        activeTab="market"
-        analysisData={{
-          team1: params.team1 as string,
-          team2: params.team2 as string,
-          sport: "soccer",
-          team1Logo: params.team1Logo as string,
-          team2Logo: params.team2Logo as string,
-        }}
-      />
+        {/* Floating Bottom Navigation */}
+        <FloatingBottomNav
+          activeTab="market"
+          analysisData={{
+            team1: params.team1,
+            team2: params.team2,
+            sport: params.sport,
+            team1Logo: params.team1Logo,
+            team2Logo: params.team2Logo,
+            analysisId: params.analysisId,
+          }}
+        />
+      </View>
     </ScreenBackground>
   );
 }
 
+// Soccer EV Section Component
+const SoccerEVSection: React.FC<{
+  marketData: SoccerMarketIntelResult | null;
+  params: SoccerMarketIntelParams;
+}> = ({ marketData, params }) => {
+  const opportunities = marketData?.marketIntelligence?.evOpportunities?.opportunities || [];
+
+  if (opportunities.length === 0 || !marketData?.marketIntelligence?.evOpportunities?.hasOpportunities) {
+    return (
+      <View style={evStyles.evArbContainer}>
+        <View style={evStyles.noEvArbItem}>
+          <Image
+            source={require("../assets/images/noevopps.png")}
+            style={evStyles.noEvIcon}
+          />
+          <View style={evStyles.noEvInfo}>
+            <BlurText card="no-ev-title" blur={!auth.currentUser} style={evStyles.noEvTitle}>
+              Market efficiently priced
+            </BlurText>
+            <BlurText card="no-ev-desc" blur={!auth.currentUser} style={evStyles.noEvDescription}>
+              No +EV or Arb opportunities found
+            </BlurText>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={evStyles.evArbContainer}>
+      {opportunities.map((opportunity, index) => (
+        <View key={index} style={evStyles.opportunityItem}>
+          <Image
+            source={getBookmakerLogo(opportunity.bookmaker)}
+            style={evStyles.bookmakerLogo}
+          />
+          <View style={evStyles.opportunityInfo}>
+            <BlurText card={`ev-title-${index}`} blur={!auth.currentUser} style={evStyles.opportunityTitle}>
+              {opportunity.title}
+            </BlurText>
+            <BlurText card={`ev-desc-${index}`} blur={!auth.currentUser} style={evStyles.opportunityDescription}>
+              {opportunity.description}
+            </BlurText>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+};
+
+// Styles - EXACT same as NFL
 const styles = StyleSheet.create({
+  debateContainer: {
+    marginBottom: 0,
+  },
+  buttonText: {
+    fontSize: 20,
+    color: "#FFFFFF",
+    fontFamily: "Aeonik-Medium",
+  },
   container: {
     flex: 1,
+    paddingBottom: 0,
   },
-  content: {
+  scrollView: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
   },
-  loadingContainer: {
-    paddingHorizontal: 20,
+  scrollContent: {
+    paddingBottom: 120,
+  },
+  analysisContainer: {
     paddingTop: 20,
+    flex: 1,
+  },
+  shimmerContainer: {
+    width: "100%",
+  },
+  shimmerGroup: {
+    width: "100%",
+    marginBottom: 20,
+    borderRadius: 12,
+    borderWidth: 0.3,
+    borderColor: "#888888",
+    overflow: "hidden",
+  },
+  gradientContainer: {
+    width: "100%",
+    padding: 15,
+    opacity: 0.6,
+    gap: 8,
+  },
+  shimmerLine: {
+    height: 20,
+    borderRadius: 15,
+    marginBottom: 0,
+    width: "100%",
+  },
+  analysisContent: {
+    flex: 1,
+    paddingBottom: 40,
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
   },
   errorText: {
-    color: "#FFFFFF",
+    color: "#424242",
     fontSize: 16,
+    marginTop: 30,
     textAlign: "center",
-    marginBottom: 20,
-  },
-  shimmerCard: {
-    height: 120,
-    borderRadius: 20,
-    marginBottom: 16,
+    fontFamily: "Aeonik-Regular",
   },
   card: {
-    backgroundColor: "#1A1A1A",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#212121",
+    backgroundColor: "#101010",
+    borderWidth: 0.2,
+    borderColor: "#505050",
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
   },
   cardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    justifyContent: "space-between",
+    marginBottom: 20,
   },
   cardTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "bold",
+    fontFamily: "Aeonik-Medium",
   },
   infoIcon: {
-    color: "#666666",
-    fontSize: 16,
+    fontSize: 20,
+    color: "#00c2e0",
   },
-
-  // Best Lines Styles
+  bestLinesCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    borderColor: "#212121",
+    padding: 20,
+  },
   bestLinesContent: {
-    gap: 12,
+    gap: 20,
   },
   bestLineItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    backgroundColor: "rgba(22, 22, 22, 0.95)",
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 60,
   },
-  bestLineLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  bookmakerLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  bestLineBookmakerLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     marginRight: 12,
   },
-  bestLineInfo: {
+  bestLineTextSection: {
     flex: 1,
-  },
-  bestLineLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  bestLineTeam: {
-    color: "#999999",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  bestLineOdds: {
-    color: "#00FF88",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  // Consensus Lines Styles
-  consensusLinesContent: {
-    gap: 12,
-  },
-  consensusLineItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  consensusLineLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  consensusIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#333333",
-    marginRight: 12,
-  },
-  consensusLineInfo: {
-    flex: 1,
-  },
-  consensusLineLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  consensusLineTeam: {
-    color: "#999999",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  consensusLineOdds: {
-    color: "#00DDFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  fairValueOdds: {
-    color: "#FF9500",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  // Sharp Meter Styles
-  sharpMeterContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sharpMeterLeft: {
-    flex: 1,
-  },
-  sharpMeterPrimary: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  sharpMeterSecondary: {
-    color: "#999999",
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  sharpMeterDetail: {
-    color: "#666666",
-    fontSize: 12,
-  },
-  sharpMeterRight: {
-    alignItems: "center",
-  },
-  circularGauge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#333333",
     justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#00DDFF",
   },
-  gaugeValue: {
-    color: "#FFFFFF",
+  bestLineMainText: {
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: "Aeonik-Medium",
+    color: "#ffffff",
+    lineHeight: 22,
+    marginBottom: 8,
   },
-  gaugeLabel: {
-    color: "#999999",
-    fontSize: 10,
-  },
-
-  // Vig Analysis Styles
-  vigAnalysisContent: {
-    gap: 12,
-  },
-  vigAnalysisItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  vigAnalysisLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  vigAnalysisIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#333333",
-    marginRight: 12,
-  },
-  vigAnalysisInfo: {
-    flex: 1,
-  },
-  vigAnalysisLabel: {
+  bestLineDescription: {
     color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  vigAnalysisTeam: {
-    color: "#999999",
     fontSize: 12,
-    marginTop: 2,
+    fontFamily: "Aeonik-Light",
+    opacity: 0.7,
+    lineHeight: 18,
   },
-  vigAnalysisRight: {
-    alignItems: "flex-end",
+  consensusLinesCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
   },
-  vigAnalysisSharp: {
-    color: "#00FF88",
-    fontSize: 14,
-    fontWeight: "600",
+  consensusLinesContent: {
+    gap: 15,
   },
-  vigAnalysisMarket: {
-    color: "#999999",
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  // EV Opportunities Styles
-  evOpportunitiesContent: {
-    gap: 12,
-  },
-  noOpportunitiesContainer: {
+  consensusHeaderRow: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 10,
   },
-  noOpportunitiesIcon: {
+  consensusHeaderSpacer: {
+    flex: 1,
+  },
+  consensusHeaderText: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    flex: 1,
+    textAlign: "center",
+  },
+  consensusTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+  },
+  consensusTeamInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  consensusTeamLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "#333333",
+    marginRight: 12,
+  },
+  consensusTeamName: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Medium",
+    color: "#ffffff",
+  },
+  consensusOddsContainer: {
+    flexDirection: "row",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  consensusOddsBox: {
+    backgroundColor: "#161616",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#212121",
+    width: 66,
+    height: 66,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
   },
-  noOpportunitiesX: {
-    color: "#FF6B6B",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  noOpportunitiesTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  noOpportunitiesDescription: {
-    color: "#999999",
+  consensusOdds: {
     fontSize: 14,
+    fontFamily: "Aeonik-Medium",
+    color: "#ffffff",
+  },
+  sharpMeterCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
+  },
+  sharpMeterContent: {
+    height: 324,
+  },
+  sharpMeterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: "100%",
+  },
+  sharpMeterTextSection: {
+    flex: 1,
+    height: "100%",
+    justifyContent: "space-between",
+  },
+  sharpMeterPrimaryText: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Light",
+    color: "#ffffff",
+  },
+  sharpMeterSecondaryText: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Light",
+    color: "#ffffff",
+  },
+  sharpMeterDetailText: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Light",
+    color: "#ffffff",
+  },
+  sharpMeterGaugeSection: {
+    width: 120,
+    height: 120,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 20,
+  },
+  sharpMeterCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: "#00c2e0",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 194, 224, 0.1)",
+  },
+  sharpMeterGaugeText: {
+    fontSize: 24,
+    fontFamily: "Aeonik-Medium",
+    color: "#ffffff",
+    marginBottom: 8,
+  },
+  sharpMeterGaugeSubtext: {
+    fontSize: 12,
+    fontFamily: "Aeonik-Light",
+    color: "#ffffff",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  fairValueCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
+  },
+  fairValueContent: {
+    gap: 15,
+  },
+  fairValueHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  fairValueHeaderSpacer: {
+    flex: 1,
+  },
+  fairValueHeaderText: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    flex: 1,
     textAlign: "center",
   },
-  evOpportunityItem: {
+  fairValueTeamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+  },
+  fairValueTeamInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  fairValueTeamLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#333333",
+    marginRight: 12,
+  },
+  fairValueTeamName: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Medium",
+    color: "#ffffff",
+  },
+  fairValueOddsContainer: {
+    flexDirection: "row",
+    flex: 2,
+    justifyContent: "space-around",
+  },
+  fairValueOddsBox: {
+    backgroundColor: "#161616",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#212121",
+    width: 66,
+    height: 66,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fairValueOdds: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Medium",
+    color: "#FF9500",
+  },
+  vigAnalysisCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
+  },
+  vigAnalysisContent: {
+    gap: 15,
+  },
+  vigHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  vigHeaderSpacer: {
+    flex: 1,
+  },
+  vigHeaderText: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    flex: 1,
+    textAlign: "center",
+  },
+  vigTeamRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
   },
-  evOpportunityLeft: {
+  vigTeamInfo: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
   },
-  evOpportunityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#333333",
-    marginRight: 12,
+  vigTeamIcon: {
+    fontSize: 16,
+    marginRight: 8,
+    width: 24,
+    textAlign: "center",
   },
-  evOpportunityInfo: {
-    flex: 1,
-  },
-  evOpportunityTitle: {
-    color: "#FFFFFF",
+  vigTeamName: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    minWidth: 60,
   },
-  evOpportunityDescription: {
-    color: "#999999",
-    fontSize: 12,
-    marginTop: 2,
-  },
-
-  // Odds Table Styles
-  oddsTableContent: {
-    gap: 8,
-  },
-  oddsTableHeader: {
+  vigOddsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    flex: 2,
+  },
+  vigOddsBox: {
+    flex: 1,
+    alignItems: "center",
+  },
+  vigOdds: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Bold",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  evOpportunitiesCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
+  },
+  evOpportunitiesContent: {
+    gap: 24,
+  },
+  oddsTableCard: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 20,
+  },
+  oddsTableContent: {
+    gap: 0,
+  },
+  oddsTableHeaderRow: {
+    flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#333333",
   },
   oddsTableHeaderText: {
-    color: "#999999",
-    fontSize: 12,
-    fontWeight: "600",
-    flex: 1,
+    fontSize: 14,
+    fontFamily: "Aeonik-Bold",
+    color: "#ffffff",
     textAlign: "center",
+    flex: 1,
   },
   oddsTableRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#222222",
+    minHeight: 50,
   },
-  oddsTableBookmaker: {
-    flexDirection: "row",
-    alignItems: "center",
+  oddsTableCell: {
     flex: 1,
+    alignItems: "center",
+    gap: 6,
   },
-  oddsTableLogo: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
+  oddsTableBookmakerLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   oddsTableBookmakerName: {
-    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "500",
-  },
-  oddsTableOdds: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "500",
-    flex: 1,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
     textAlign: "center",
   },
-  bottomPadding: {
-    height: 100,
+  oddsTableOdds: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Bold",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  floatingButton: {
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    padding: 10,
+  },
+});
+
+// EV Section Styles - EXACT same as NFL
+const evStyles = StyleSheet.create({
+  evArbContainer: {
+    gap: 15,
+  },
+  noEvArbItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(22, 22, 22, 0.95)",
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 60,
+  },
+  noEvIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+  },
+  noEvInfo: {
+    flex: 1,
+  },
+  noEvTitle: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Bold",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  noEvDescription: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#888888",
+  },
+  opportunityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(22, 22, 22, 0.95)",
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 60,
+  },
+  bookmakerLogo: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+  },
+  opportunityInfo: {
+    flex: 1,
+  },
+  opportunityTitle: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Bold",
+    color: "#00ff41",
+    marginBottom: 4,
+  },
+  opportunityDescription: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
   },
 });

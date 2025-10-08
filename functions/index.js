@@ -3054,10 +3054,11 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
       marketIntelligence: {
         bestLines: marketIntelligence.bestLines,
         sharpMeter: marketIntelligence.sharpMeter,
-        vigAnalysis: marketIntelligence.evAnalysis?.vigAnalysis,
-        evOpportunities: marketIntelligence.evAnalysis?.uiOpportunities,
-        fairValue: marketIntelligence.evAnalysis?.fairValue, // Add fair value data
-        sharpConsensus: marketIntelligence.evAnalysis?.sharpConsensus, // MISSING - add sharp consensus data
+        // Handle both flattened (soccer) and nested (NFL) structures
+        vigAnalysis: marketIntelligence.vigAnalysis || marketIntelligence.evAnalysis?.vigAnalysis,
+        evOpportunities: marketIntelligence.evOpportunities || marketIntelligence.evAnalysis?.uiOpportunities,
+        fairValue: marketIntelligence.fairValue || marketIntelligence.evAnalysis?.fairValue,
+        sharpConsensus: marketIntelligence.sharpConsensus || marketIntelligence.evAnalysis?.sharpConsensus,
         marketTightness: marketIntelligence.marketTightness,
         oddsTable: marketIntelligence.oddsTable
       },
@@ -3216,6 +3217,8 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
     const bestLines = calculateSoccerBestLines(bookmakers, event);
     const evAnalysis = calculateSoccerEVOpportunities(bookmakers, event);
 
+    console.log("Soccer EV Analysis Result:", JSON.stringify(evAnalysis, null, 2));
+
     const marketData = {
       bestLines,
       sharpMeter: {
@@ -3228,10 +3231,8 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
         avgPublicSpread: 0,
         dataQuality: "good"
       },
-      vigAnalysis: evAnalysis.vigAnalysis,
-      fairValue: evAnalysis.fairValue,
-      sharpConsensus: evAnalysis.sharpConsensus,
-      evOpportunities: evAnalysis.uiOpportunities,
+      // Flatten the EV analysis to match NFL structure
+      ...evAnalysis,
       marketTightness: {
         tightness: "Normal",
         pointRange: 0,
@@ -3248,6 +3249,10 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
         commence_time: event.commence_time
       }
     };
+
+    console.log("Final Soccer Market Data Keys:", Object.keys(marketData));
+    console.log("Final Soccer Market Data vigAnalysis:", marketData.vigAnalysis);
+    console.log("Final Soccer Market Data fairValue:", marketData.fairValue);
 
     return marketData;
 
@@ -5298,8 +5303,8 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
         spread: { sharp: null, market: null },
         total: { sharp: null, market: null }
       },
-      uiOpportunities,
-      evOpportunities: evOpportunities.slice(0, 5),
+      evOpportunities: uiOpportunities,
+      rawEvOpportunities: evOpportunities.slice(0, 5),
       arbitrageOpportunities
     };
 
