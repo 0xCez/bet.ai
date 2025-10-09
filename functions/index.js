@@ -3221,16 +3221,7 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
 
     const marketData = {
       bestLines,
-      sharpMeter: {
-        primarySignal: "Soccer analysis",
-        secondarySignal: "3-way betting",
-        detailLine: "Home vs Draw vs Away",
-        gaugeValue: 50,
-        pointGap: 0,
-        avgSharpSpread: 0,
-        avgPublicSpread: 0,
-        dataQuality: "good"
-      },
+      sharpMeter: calculateSoccerSharpMeter(bookmakers, event),
       // Flatten the EV analysis to match NFL structure
       ...evAnalysis,
       marketTightness: {
@@ -3567,52 +3558,78 @@ function calculateSharpMeterTest(bookmakers, event) {
 
   const vigGap = avgPublicVig - avgSharpVig;
 
-  // Signal 3: Generate interpretations
-  let primarySignal;
-  let secondarySignal;
-  let sharpLean;
-  let gaugeValue;
+  // Step 5: Generate display text (NEW FORMAT - 3 sentences)
+  let line1 = "No clear sharp lean";
+  let line2 = "Limited data";
+  let line3 = "No comparison available";
 
-  if (Math.abs(pointGap) < 0.1) {
-    primarySignal = "Neutral alignment";
-    sharpLean = "neutral";
-    gaugeValue = 50;
-  } else if (pointGap < 0) {
-    // Sharp spread is more negative = sharps lean FAVORITE
-    primarySignal = `Sharps Lean Favorite ${Math.abs(pointGap).toFixed(1)}`;
-    sharpLean = "favorite";
-    gaugeValue = Math.max(0, 50 - (Math.abs(pointGap) * 20)); // 0-50 scale
-  } else {
-    // Sharp spread is less negative = sharps lean DOG
-    primarySignal = `Sharps Lean Dog +${Math.abs(pointGap).toFixed(1)}`;
-    sharpLean = "dog";
-    gaugeValue = Math.min(100, 50 + (pointGap * 20)); // 50-100 scale
+  if (pointGap !== 0) { // Use pointGap instead of null check since we have defaults
+    // Line 1: Primary signal
+    if (Math.abs(pointGap) < 0.3) {
+      line1 = "No clear sharp lean";
+    } else if (pointGap > 0) {
+      line1 = "Sharps Lean Dog";
+    } else {
+      line1 = "Sharps Lean Favorite";
+    }
+
+    // Line 2: Secondary signal (vig confidence) - Remove brackets as requested
+    if (vigGap > 1.0) {
+      line2 = "Market uncertainty";
+    } else if (vigGap < -1.0) {
+      line2 = "Sharp confidence";
+    } else {
+      line2 = `${Math.abs(pointGap).toFixed(1)} point edge`;
+    }
+
+    // Line 3: Detail line
+    line3 = `Sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
   }
 
-  // Secondary signal about vig confidence
-  if (vigGap > 1.0) {
-    secondarySignal = `(High public vig ${avgPublicVig.toFixed(1)}% vs ${avgSharpVig.toFixed(1)}%)`;
-  } else {
-    secondarySignal = `(Similar vig levels)`;
+  // Step 6: Calculate gauge value (0-100)
+  let gaugeValue = 50; // Default neutral
+  if (pointGap !== 0) {
+    // Scale: 1 point gap = 20 gauge points
+    gaugeValue = 50 + (pointGap * 20);
+    gaugeValue = Math.max(0, Math.min(100, gaugeValue));
   }
 
-  const detailLine = `Sharp avg ${avgSharpSpread.toFixed(1)} vs public ${avgPublicSpread.toFixed(1)}`;
+  // Step 7: Determine confidence level and gauge label
+  let confidenceLevel = "low";
+  let gaugeLabel = "LOW";
+
+  if (sharpSpreads.length >= 2 && publicSpreads.length >= 2) {
+    confidenceLevel = "high";
+    gaugeLabel = "HIGH";
+  } else if (sharpSpreads.length >= 1 && publicSpreads.length >= 1) {
+    confidenceLevel = "medium";
+    gaugeLabel = "MED";
+  }
 
   return {
-    primarySignal,
-    secondarySignal,
-    detailLine,
+    // Display text (3 sentences) - NEW FORMAT
+    line1,
+    line2,
+    line3,
+
+    // Gauge data
     gaugeValue: Math.round(gaugeValue),
+    gaugeLabel,
+
+    // Backend calculation data
     pointGap: Math.round(pointGap * 10) / 10,
     avgSharpSpread: Math.round(avgSharpSpread * 10) / 10,
     avgPublicSpread: Math.round(avgPublicSpread * 10) / 10,
     avgSharpVig: Math.round(avgSharpVig * 10) / 10,
     avgPublicVig: Math.round(avgPublicVig * 10) / 10,
     vigGap: Math.round(vigGap * 10) / 10,
-    sharpLean,
-    sharpBooksCount: sharpSpreads.length,
-    publicBooksCount: publicSpreads.length,
-    dataQuality: sharpSpreads.length > 0 && publicSpreads.length > 0 ? "good" : "insufficient"
+    confidenceLevel,
+    dataQuality: confidenceLevel === "high" ? "excellent" :
+                 confidenceLevel === "medium" ? "good" : "limited",
+
+    // Metadata
+    sharpBookCount: sharpSpreads.length,
+    publicBookCount: publicSpreads.length
   };
 }
 
@@ -5000,6 +5017,182 @@ function formatOpportunitiesForUI(evOpportunities, arbitrageData, lowestVigBooks
 // ====================================================================
 // SOCCER-SPECIFIC MARKET INTELLIGENCE FUNCTIONS (3-WAY BETTING)
 // ====================================================================
+
+// Soccer Sharp Meter - 3-Way Betting Analysis
+function calculateSoccerSharpMeter(bookmakers, event) {
+  const sharpBooks = ['pinnacle', 'betfair']; // Soccer sharp books
+  const publicBooks = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers', 'bovada', 'betus', 'mybookieag'];
+
+  // Extract 3-way odds (Home/Draw/Away)
+  const homeOdds = { sharp: [], public: [] };
+  const drawOdds = { sharp: [], public: [] };
+  const awayOdds = { sharp: [], public: [] };
+
+  bookmakers.forEach(bookmaker => {
+    const h2hMarket = bookmaker.markets.find(m => m.key === 'h2h');
+    if (!h2hMarket || !h2hMarket.outcomes || h2hMarket.outcomes.length !== 3) return;
+
+    const isSharp = sharpBooks.includes(bookmaker.key);
+    const isPublic = publicBooks.includes(bookmaker.key);
+
+    const homeOutcome = h2hMarket.outcomes.find(o => o.name === event.home_team);
+    const awayOutcome = h2hMarket.outcomes.find(o => o.name === event.away_team);
+    const drawOutcome = h2hMarket.outcomes.find(o => o.name === 'Draw');
+
+    if (homeOutcome && drawOutcome && awayOutcome) {
+      if (isSharp) {
+        homeOdds.sharp.push(homeOutcome.price);
+        drawOdds.sharp.push(drawOutcome.price);
+        awayOdds.sharp.push(awayOutcome.price);
+      }
+      if (isPublic) {
+        homeOdds.public.push(homeOutcome.price);
+        drawOdds.public.push(drawOutcome.price);
+        awayOdds.public.push(awayOutcome.price);
+      }
+    }
+  });
+
+  // Calculate averages
+  const avgSharpHome = homeOdds.sharp.length > 0 ? homeOdds.sharp.reduce((a, b) => a + b, 0) / homeOdds.sharp.length : null;
+  const avgPublicHome = homeOdds.public.length > 0 ? homeOdds.public.reduce((a, b) => a + b, 0) / homeOdds.public.length : null;
+
+  const avgSharpDraw = drawOdds.sharp.length > 0 ? drawOdds.sharp.reduce((a, b) => a + b, 0) / drawOdds.sharp.length : null;
+  const avgPublicDraw = drawOdds.public.length > 0 ? drawOdds.public.reduce((a, b) => a + b, 0) / drawOdds.public.length : null;
+
+  const avgSharpAway = awayOdds.sharp.length > 0 ? awayOdds.sharp.reduce((a, b) => a + b, 0) / awayOdds.sharp.length : null;
+  const avgPublicAway = awayOdds.public.length > 0 ? awayOdds.public.reduce((a, b) => a + b, 0) / awayOdds.public.length : null;
+
+  // If we don't have enough data, return placeholder
+  if (!avgSharpHome || !avgPublicHome || !avgSharpDraw || !avgPublicDraw || !avgSharpAway || !avgPublicAway) {
+    return {
+      line1: "Insufficient data for soccer sharp meter",
+      line2: "Need sharp and public books",
+      line3: "No comparison available",
+      gaugeValue: 50,
+      gaugeLabel: "LOW",
+      dataQuality: "insufficient",
+      sharpBookCount: homeOdds.sharp.length,
+      publicBookCount: homeOdds.public.length
+    };
+  }
+
+  // OPTION 1: Odds Movement Analysis - Calculate implied probability differences
+  const sharpImpliedHome = 1 / avgSharpHome;
+  const publicImpliedHome = 1 / avgPublicHome;
+  const homeDiff = (publicImpliedHome - sharpImpliedHome) * 100; // Positive = sharps getting better odds (public overpricing)
+
+  const sharpImpliedDraw = 1 / avgSharpDraw;
+  const publicImpliedDraw = 1 / avgPublicDraw;
+  const drawDiff = (publicImpliedDraw - sharpImpliedDraw) * 100;
+
+  const sharpImpliedAway = 1 / avgSharpAway;
+  const publicImpliedAway = 1 / avgPublicAway;
+  const awayDiff = (publicImpliedAway - sharpImpliedAway) * 100;
+
+  // OPTION 2: Market Distribution - Find which outcome has the biggest sharp edge
+  const edges = [
+    { outcome: 'Home', diff: homeDiff, sharpOdds: avgSharpHome, publicOdds: avgPublicHome },
+    { outcome: 'Draw', diff: drawDiff, sharpOdds: avgSharpDraw, publicOdds: avgPublicDraw },
+    { outcome: 'Away', diff: awayDiff, sharpOdds: avgSharpAway, publicOdds: avgPublicAway }
+  ];
+
+  // Sort by absolute difference to find where sharps disagree most with public
+  edges.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const biggestEdge = edges[0];
+
+  // OPTION 3: Vig Confidence Analysis
+  const sharpVig = ((sharpImpliedHome + sharpImpliedDraw + sharpImpliedAway) - 1) * 100;
+  const publicVig = ((publicImpliedHome + publicImpliedDraw + publicImpliedAway) - 1) * 100;
+  const vigGap = publicVig - sharpVig;
+
+  // Generate Line 1: Primary Signal (which outcome sharps favor)
+  let line1 = "No clear sharp lean";
+  if (Math.abs(biggestEdge.diff) > 0.5) {
+    if (biggestEdge.diff > 0) {
+      // Public overpricing this outcome = sharps getting better odds elsewhere
+      line1 = `Sharps fade ${biggestEdge.outcome}`;
+    } else {
+      // Sharps getting worse odds = they're driving the price down = they favor this outcome
+      line1 = `Sharps favor ${biggestEdge.outcome}`;
+    }
+  }
+
+  // Generate Line 2: Secondary Signal (vig confidence or probability edge)
+  let line2 = "Limited data";
+  if (Math.abs(biggestEdge.diff) > 0.5) {
+    line2 = `${Math.abs(biggestEdge.diff).toFixed(1)}% implied probability edge`;
+  } else if (vigGap > 1.0) {
+    line2 = "Market uncertainty";
+  } else {
+    line2 = "Tight market";
+  }
+
+  // Generate Line 3: Detail Line (show the actual odds comparison)
+  const line3 = `Sharp ${biggestEdge.outcome.toLowerCase()} ${biggestEdge.sharpOdds.toFixed(2)} vs public ${biggestEdge.publicOdds.toFixed(2)}`;
+
+  // Calculate Gauge Value (0-100 scale)
+  // 0 = Strong Home, 50 = Neutral/Draw, 100 = Strong Away
+  let gaugeValue = 50; // Default neutral
+
+  if (biggestEdge.outcome === 'Home') {
+    // Sharps favor home: gauge should be lower (0-40 range)
+    gaugeValue = 50 - Math.min(Math.abs(biggestEdge.diff) * 8, 40);
+  } else if (biggestEdge.outcome === 'Away') {
+    // Sharps favor away: gauge should be higher (60-100 range)
+    gaugeValue = 50 + Math.min(Math.abs(biggestEdge.diff) * 8, 40);
+  } else {
+    // Draw: stay near 50 (45-55 range)
+    gaugeValue = 50;
+  }
+
+  gaugeValue = Math.max(0, Math.min(100, Math.round(gaugeValue)));
+
+  // Determine confidence level and gauge label
+  let confidenceLevel = "low";
+  let gaugeLabel = "LOW";
+
+  if (homeOdds.sharp.length >= 2 && homeOdds.public.length >= 3) {
+    confidenceLevel = "high";
+    gaugeLabel = "HIGH";
+  } else if (homeOdds.sharp.length >= 1 && homeOdds.public.length >= 2) {
+    confidenceLevel = "medium";
+    gaugeLabel = "MED";
+  }
+
+  return {
+    // Display text (3 sentences) - NEW FORMAT
+    line1,
+    line2,
+    line3,
+
+    // Gauge data
+    gaugeValue,
+    gaugeLabel,
+
+    // Backend calculation data
+    homeDiff: Math.round(homeDiff * 10) / 10,
+    drawDiff: Math.round(drawDiff * 10) / 10,
+    awayDiff: Math.round(awayDiff * 10) / 10,
+    avgSharpHome: Math.round(avgSharpHome * 100) / 100,
+    avgPublicHome: Math.round(avgPublicHome * 100) / 100,
+    avgSharpDraw: Math.round(avgSharpDraw * 100) / 100,
+    avgPublicDraw: Math.round(avgPublicDraw * 100) / 100,
+    avgSharpAway: Math.round(avgSharpAway * 100) / 100,
+    avgPublicAway: Math.round(avgPublicAway * 100) / 100,
+    sharpVig: Math.round(sharpVig * 10) / 10,
+    publicVig: Math.round(publicVig * 10) / 10,
+    vigGap: Math.round(vigGap * 10) / 10,
+    confidenceLevel,
+    dataQuality: confidenceLevel === "high" ? "excellent" :
+                 confidenceLevel === "medium" ? "good" : "limited",
+
+    // Metadata
+    sharpBookCount: homeOdds.sharp.length,
+    publicBookCount: homeOdds.public.length,
+    biggestEdgeOutcome: biggestEdge.outcome
+  };
+}
 
 function calculateSoccerBestLines(bookmakers, event) {
   const moneylines = { home: [], draw: [], away: [] };

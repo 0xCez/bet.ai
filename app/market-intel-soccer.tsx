@@ -61,11 +61,35 @@ interface SoccerMarketIntelResult {
       };
     };
     sharpMeter: {
-      primarySignal: string;
-      secondarySignal: string;
-      detailLine: string;
+      // Display text (3 sentences) - NEW FORMAT
+      line1: string;
+      line2: string;
+      line3: string;
+
+      // Gauge data
       gaugeValue: number;
+      gaugeLabel: string;
+
+      // Backend calculation data (Soccer-specific)
+      homeDiff: number;
+      drawDiff: number;
+      awayDiff: number;
+      avgSharpHome: number;
+      avgPublicHome: number;
+      avgSharpDraw: number;
+      avgPublicDraw: number;
+      avgSharpAway: number;
+      avgPublicAway: number;
+      sharpVig: number;
+      publicVig: number;
+      vigGap: number;
+      confidenceLevel: string;
       dataQuality: string;
+
+      // Metadata
+      sharpBookCount: number;
+      publicBookCount: number;
+      biggestEdgeOutcome: string;
     };
     vigAnalysis: {
       moneyline: {
@@ -433,7 +457,7 @@ export default function SoccerMarketIntelScreen() {
           </View>
         </View>
 
-        {/* Public vs Sharp Meter Card - Soccer version */}
+        {/* Sharp Meter Card - Soccer 3-Way Analysis */}
         <View style={[styles.card, styles.sharpMeterCard]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Public vs Sharp Meter 🌡️</Text>
@@ -441,24 +465,32 @@ export default function SoccerMarketIntelScreen() {
           </View>
           <View style={styles.sharpMeterContent}>
             <View style={styles.sharpMeterContainer}>
+              {/* Left Side - Text Information (NEW FORMAT: 3 sentences) */}
               <View style={styles.sharpMeterTextSection}>
-                <BlurText card="sharp-primary" blur={!auth.currentUser} style={styles.sharpMeterPrimaryText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.primarySignal || "Soccer analysis"}
+                {/* Line 1: Primary Signal */}
+                <BlurText card="sharp-line-1" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line1 || "No clear sharp lean"}
                 </BlurText>
-                <BlurText card="sharp-secondary" blur={!auth.currentUser} style={styles.sharpMeterSecondaryText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.secondarySignal || "3-way betting"}
+
+                {/* Line 2: Secondary Signal */}
+                <BlurText card="sharp-line-2" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line2 || "Limited data"}
                 </BlurText>
-                <BlurText card="sharp-detail" blur={!auth.currentUser} style={styles.sharpMeterDetailText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.detailLine || "Home vs Draw vs Away"}
+
+                {/* Line 3: Detail Line */}
+                <BlurText card="sharp-line-3" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line3 || "No comparison available"}
                 </BlurText>
               </View>
+
+              {/* Right Side - Circular Gauge (NEW FORMAT: shows gauge value) */}
               <View style={styles.sharpMeterGaugeSection}>
                 <View style={styles.sharpMeterCircle}>
-                  <BlurText card="sharp-gauge-main" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeValue || 50}
+                  <BlurText card="sharp-gauge-value" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
+                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeValue || "50"}
                   </BlurText>
-                  <BlurText card="sharp-gauge-sub" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
-                    3-Way
+                  <BlurText card="sharp-gauge-label" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
+                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeLabel || "MED"}
                   </BlurText>
                 </View>
               </View>
@@ -466,45 +498,57 @@ export default function SoccerMarketIntelScreen() {
           </View>
         </View>
 
-        {/* Odds Table Card - Soccer: Home/Draw/Away columns */}
-        <View style={[styles.card, styles.oddsTableCard]}>
+        {/* Fair Value Card - Soccer: Home/Draw/Away */}
+        <View style={[styles.card, styles.fairValueCard]}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Odds Table 🔎</Text>
+            <Text style={styles.cardTitle}>Fair Value ⚖️</Text>
             <Text style={styles.infoIcon}>ⓘ</Text>
           </View>
-          <View style={styles.oddsTableContent}>
-            {/* Header Row */}
-            <View style={styles.oddsTableHeaderRow}>
-              <Text style={styles.oddsTableHeaderText}>Bookmaker</Text>
-              <Text style={styles.oddsTableHeaderText}>Home</Text>
-              <Text style={styles.oddsTableHeaderText}>Draw</Text>
-              <Text style={styles.oddsTableHeaderText}>Away</Text>
-            </View>
-
-            {/* Bookmaker Rows */}
-            {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
-              <View key={index} style={styles.oddsTableRow}>
-                <View style={styles.oddsTableCell}>
-                  <Image source={getBookmakerLogo(bookmaker.bookmaker)} style={styles.oddsTableBookmakerLogo} />
-                  <Text style={styles.oddsTableBookmakerName}>{bookmaker.bookmaker}</Text>
-                </View>
-                <View style={styles.oddsTableCell}>
-                  <BlurText card={`odds-home-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-                    {formatOdds(bookmaker.odds?.moneyline?.home)}
-                  </BlurText>
-                </View>
-                <View style={styles.oddsTableCell}>
-                  <BlurText card={`odds-draw-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-                    {formatOdds(bookmaker.odds?.moneyline?.draw)}
-                  </BlurText>
-                </View>
-                <View style={styles.oddsTableCell}>
-                  <BlurText card={`odds-away-${index}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-                    {formatOdds(bookmaker.odds?.moneyline?.away)}
+          <View style={styles.fairValueContent}>
+            {/* Home */}
+            <View style={styles.fairValueTeamRow}>
+              <View style={styles.fairValueTeamInfo}>
+                <View style={styles.fairValueTeamLogo} />
+                <Text style={styles.fairValueTeamName}>Home</Text>
+              </View>
+              <View style={styles.fairValueOddsContainer}>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-home" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairHome)}
                   </BlurText>
                 </View>
               </View>
-            ))}
+            </View>
+
+            {/* Draw */}
+            <View style={styles.fairValueTeamRow}>
+              <View style={styles.fairValueTeamInfo}>
+                <View style={styles.fairValueTeamLogo} />
+                <Text style={styles.fairValueTeamName}>Draw</Text>
+              </View>
+              <View style={styles.fairValueOddsContainer}>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-draw" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairDraw)}
+                  </BlurText>
+                </View>
+              </View>
+            </View>
+
+            {/* Away */}
+            <View style={styles.fairValueTeamRow}>
+              <View style={styles.fairValueTeamInfo}>
+                <View style={styles.fairValueTeamLogo} />
+                <Text style={styles.fairValueTeamName}>Away</Text>
+              </View>
+              <View style={styles.fairValueOddsContainer}>
+                <View style={styles.fairValueOddsBox}>
+                  <BlurText card="fair-away" blur={!auth.currentUser} style={styles.fairValueOdds}>
+                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairAway)}
+                  </BlurText>
+                </View>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -568,48 +612,6 @@ export default function SoccerMarketIntelScreen() {
                 <View style={styles.vigOddsBox}>
                   <BlurText card="vig-market-away" blur={!auth.currentUser} style={styles.vigOdds}>
                     {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.market?.toFixed(1) || "6.2"}%
-                  </BlurText>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Fair Value Card - Soccer: Home/Draw/Away */}
-        <View style={[styles.card, styles.fairValueCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Fair Value ⚖️</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
-          <View style={styles.fairValueContent}>
-            {/* Header Row */}
-            <View style={styles.fairValueHeader}>
-              <View style={styles.fairValueHeaderSpacer} />
-              <Text style={styles.fairValueHeaderText}>Home</Text>
-              <Text style={styles.fairValueHeaderText}>Draw</Text>
-              <Text style={styles.fairValueHeaderText}>Away</Text>
-            </View>
-
-            {/* Fair Value Row */}
-            <View style={styles.fairValueTeamRow}>
-              <View style={styles.fairValueTeamInfo}>
-                <View style={styles.fairValueTeamLogo} />
-                <Text style={styles.fairValueTeamName}>Vig-Free Odds</Text>
-              </View>
-              <View style={styles.fairValueOddsContainer}>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-home" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairHome)}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-draw" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairDraw)}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-away" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fairAway)}
                   </BlurText>
                 </View>
               </View>
@@ -1036,6 +1038,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 16,
   },
+  // Sharp Meter NEW FORMAT - 3 line text style
+  sharpMeterLineText: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
   fairValueCard: {
     backgroundColor: "rgba(18, 18, 18, 0.95)",
     borderRadius: 40,
@@ -1043,21 +1053,6 @@ const styles = StyleSheet.create({
   },
   fairValueContent: {
     gap: 15,
-  },
-  fairValueHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  fairValueHeaderSpacer: {
-    flex: 1,
-  },
-  fairValueHeaderText: {
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    flex: 1,
-    textAlign: "center",
   },
   fairValueTeamRow: {
     flexDirection: "row",
@@ -1083,8 +1078,8 @@ const styles = StyleSheet.create({
   },
   fairValueOddsContainer: {
     flexDirection: "row",
-    flex: 2,
-    justifyContent: "space-around",
+    flex: 1,
+    justifyContent: "flex-end",
   },
   fairValueOddsBox: {
     backgroundColor: "#161616",

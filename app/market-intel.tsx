@@ -66,15 +66,29 @@ interface MarketIntelResult {
       };
     };
     sharpMeter: {
-      primarySignal: string;
-      secondarySignal: string;
-      detailLine: string;
+
+      // Display text (3 sentences) - NEW FORMAT
+      line1: string;
+      line2: string;
+      line3: string;
+
+      // Gauge data
       gaugeValue: number;
+      gaugeLabel: string;
+
+      // Backend calculation data
       pointGap: number;
-      sharpLean: string;
       avgSharpSpread: number;
       avgPublicSpread: number;
+      avgSharpVig: number;
+      avgPublicVig: number;
+      vigGap: number;
+      confidenceLevel: string;
       dataQuality: string;
+
+      // Metadata
+      sharpBookCount: number;
+      publicBookCount: number;
     };
     vigAnalysis: {
       moneyline: { sharp: number; market: number };
@@ -648,41 +662,32 @@ export default function MarketIntelScreen() {
           </View>
           <View style={styles.sharpMeterContent}>
             <View style={styles.sharpMeterContainer}>
-              {/* Left Side - Text Information (matching Figma exactly) */}
+              {/* Left Side - Text Information (NEW FORMAT: 3 sentences) */}
               <View style={styles.sharpMeterTextSection}>
-                <View style={styles.sharpMeterTextRow}>
-                  <BlurText card="sharp-primary" blur={!auth.currentUser} style={styles.sharpMeterPrimaryText}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.primarySignal?.split(' ').slice(0, 3).join(' ') || "Sharps Lean Dog"}
-                  </BlurText>
-                  <BlurText card="sharp-value" blur={!auth.currentUser} style={styles.sharpMeterValueText}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.pointGap ?
-                      `${marketResult.marketIntelligence.sharpMeter.pointGap > 0 ? '+' : ''}${marketResult.marketIntelligence.sharpMeter.pointGap}`
-                      : "+0.5"}
-                  </BlurText>
-                </View>
+                {/* Line 1: Primary Signal */}
+                <BlurText card="sharp-line-1" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line1 || "No clear sharp lean"}
+                </BlurText>
 
-                <View style={styles.sharpMeterTextRow}>
-                  <BlurText card="sharp-secondary" blur={!auth.currentUser} style={styles.sharpMeterSecondaryText}>
-                    (RLM suspected)
-                  </BlurText>
-                  <BlurText card="sharp-spread" blur={!auth.currentUser} style={styles.sharpMeterSpreadText}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.avgPublicSpread || "-3.5"}
-                  </BlurText>
-                </View>
+                {/* Line 2: Secondary Signal */}
+                <BlurText card="sharp-line-2" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line2 || "Limited data"}
+                </BlurText>
 
-                <BlurText card="sharp-detail" blur={!auth.currentUser} style={styles.sharpMeterDetailText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.detailLine || "Sharp avg −3.0 vs public −3.5"}
+                {/* Line 3: Detail Line */}
+                <BlurText card="sharp-line-3" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
+                  {marketResult?.marketIntelligence?.sharpMeter?.line3 || "No comparison available"}
                 </BlurText>
               </View>
 
-              {/* Right Side - Circular Gauge (matching Figma exactly) */}
+              {/* Right Side - Circular Gauge (NEW FORMAT: shows gauge value) */}
               <View style={styles.sharpMeterGaugeSection}>
                 <View style={styles.sharpMeterCircle}>
-                  <BlurText card="sharp-gauge-main" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
-                    3W
+                  <BlurText card="sharp-gauge-value" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
+                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeValue || "50"}
                   </BlurText>
-                  <BlurText card="sharp-gauge-sub" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
-                    3-game win streak
+                  <BlurText card="sharp-gauge-label" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
+                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeLabel || "MED"}
                   </BlurText>
                 </View>
               </View>
@@ -1451,6 +1456,14 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     textAlign: "center",
     lineHeight: 16,
+  },
+  // Sharp Meter NEW FORMAT - 3 line text style
+  sharpMeterLineText: {
+    fontSize: 14,
+    fontFamily: "Aeonik-Regular",
+    color: "#ffffff",
+    marginBottom: 8,
+    lineHeight: 20,
   },
   // Market Efficiency Card Styles - PERFECT Figma alignment
   marketEfficiencyCard: {
