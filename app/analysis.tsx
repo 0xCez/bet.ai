@@ -330,9 +330,61 @@ export default function AnalysisScreen() {
         console.log("Fetched analysis data:", data);
         // Ensure the fetched data has the nested 'analysis' object
         if (data && data.analysis) {
-          setAnalysisResult(data.analysis as AnalysisResult);
-          cachedAnalysisResult = data.analysis as AnalysisResult; // Cache the result
-          console.log("Set analysis result from history:", data.analysis);
+          // Handle old analyses that don't have sport field - infer from team names
+          let analysisData = data.analysis as AnalysisResult;
+
+          // If no sport field, try to infer from team names or top-level
+          if (!analysisData.sport) {
+            console.warn("Analysis missing sport field, inferring from team names...");
+
+            // Infer sport from team names
+            const teamNames = (analysisData.teams?.home + " " + analysisData.teams?.away).toLowerCase();
+
+            // NBA team keywords (unique identifiers)
+            if (teamNames.includes("lakers") || teamNames.includes("celtics") ||
+                teamNames.includes("warriors") || teamNames.includes("bulls") ||
+                teamNames.includes("knicks") || teamNames.includes("heat") ||
+                teamNames.includes("spurs") || teamNames.includes("mavericks") ||
+                teamNames.includes("76ers") || teamNames.includes("nets") ||
+                teamNames.includes("clippers") || teamNames.includes("nuggets") ||
+                teamNames.includes("bucks") || teamNames.includes("suns") ||
+                teamNames.includes("rockets") || teamNames.includes("cavaliers") ||
+                teamNames.includes("raptors") || teamNames.includes("thunder") ||
+                teamNames.includes("pelicans") || teamNames.includes("wizards") ||
+                teamNames.includes("hornets") || teamNames.includes("jazz") ||
+                teamNames.includes("kings") || teamNames.includes("trail blazers") ||
+                teamNames.includes("grizzlies") || teamNames.includes("pacers") ||
+                teamNames.includes("pistons") || teamNames.includes("timberwolves") ||
+                teamNames.includes("magic") || teamNames.includes("hawks")) {
+              analysisData.sport = "nba";
+              console.log("Inferred sport as nba from team names");
+            }
+            // Soccer team keywords
+            else if (teamNames.includes("palace") || teamNames.includes("bournemouth") ||
+                teamNames.includes("united") || teamNames.includes("arsenal") ||
+                teamNames.includes("chelsea") || teamNames.includes("liverpool") ||
+                teamNames.includes("madrid") || teamNames.includes("barcelona") ||
+                teamNames.includes("milan") || teamNames.includes("juventus") ||
+                teamNames.includes("bayern") || teamNames.includes("everton") ||
+                teamNames.includes("ajax") || teamNames.includes("brighton") ||
+                teamNames.includes("fulham") || teamNames.includes("newcastle") ||
+                teamNames.includes("southampton") || teamNames.includes("wolves") ||
+                teamNames.includes("brentford") || teamNames.includes("villa") ||
+                teamNames.includes("forest") || teamNames.includes("tottenham") ||
+                teamNames.includes("leicester") || teamNames.includes("west ham")) {
+              analysisData.sport = "soccer_epl";
+              console.log("Inferred sport as soccer_epl from team names");
+            } else {
+              // Check top-level or default to nfl
+              analysisData.sport = data.sport || "nfl";
+              console.log(`Using top-level sport or defaulting to nfl: ${analysisData.sport}`);
+            }
+          }
+
+          setAnalysisResult(analysisData);
+          cachedAnalysisResult = analysisData; // Cache the result
+          console.log("Set analysis result from history:", analysisData);
+          console.log("SPORT FROM HISTORY:", analysisData.sport);
           // Set the display image URL from the fetched data
           if (data.imageUrl) {
             setDisplayImageUrl(data.imageUrl);
@@ -454,6 +506,7 @@ export default function AnalysisScreen() {
           const analysisDataToSave = {
             teams: `${analysisData.teams.home} vs ${analysisData.teams.away}`,
             confidence: parseInt(analysisData.aiAnalysis.confidenceScore) || 50,
+            sport: analysisData.sport || "nfl", // Add sport to top level for easier access
             imageUrl: downloadURL,
             createdAt: serverTimestamp(),
             analysis: analysisData,
@@ -1123,16 +1176,20 @@ export default function AnalysisScreen() {
               <View style={{ marginTop: 16 }}>
                 <BorderButton
                   onPress={() => {
-                    // Navigate to team stats with game data
+                    // Navigate to sport-specific team stats page
+                    const sportLower = (analysisResult?.sport || "").toLowerCase();
+                    const isSoccer = sportLower.startsWith("soccer");
+                    const teamStatsPath = isSoccer ? "/team-stats-soccer" : "/team-stats-nfl";
+
                     router.push({
-                      pathname: "/team-stats",
+                      pathname: teamStatsPath as any,
                       params: {
                         team1: analysisResult?.teams?.home || "",
                         team2: analysisResult?.teams?.away || "",
                         sport: analysisResult?.sport || "nfl",
                         team1Logo: analysisResult?.teams?.logos?.home || "",
                         team2Logo: analysisResult?.teams?.logos?.away || "",
-                        selectedTeam: "team1" // Default to team1, can be changed later
+                        selectedTeam: "team1"
                       }
                     });
                   }}
@@ -1151,9 +1208,13 @@ export default function AnalysisScreen() {
               <View style={{ marginTop: 16 }}>
                 <BorderButton
                   onPress={() => {
-                    // Navigate to player stats with game data
+                    // Navigate to sport-specific player stats page
+                    const sportLower = (analysisResult?.sport || "").toLowerCase();
+                    const isSoccer = sportLower.startsWith("soccer");
+                    const playerStatsPath = isSoccer ? "/player-stats-soccer" : "/player-stats-nfl";
+
                     router.push({
-                      pathname: "/player-stats",
+                      pathname: playerStatsPath as any,
                       params: {
                         team1: analysisResult?.teams?.home || "",
                         team2: analysisResult?.teams?.away || "",
@@ -1221,7 +1282,7 @@ export default function AnalysisScreen() {
         {/* Floating Bottom Navigation - Only show for non-demo */}
         {!isDemo && (
           <FloatingBottomNav
-            activeTab="intel"
+            activeTab="insight"
             analysisData={{
               team1: analysisResult?.teams?.home,
               team2: analysisResult?.teams?.away,

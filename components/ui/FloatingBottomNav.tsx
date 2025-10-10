@@ -53,6 +53,9 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
 
     // Add slight delay for animation to be visible
     setTimeout(() => {
+      const sportLower = (analysisData?.sport || "").toLowerCase();
+      const isSoccer = sportLower.startsWith("soccer");
+      const isNFL = sportLower.includes("nfl");
       switch (tab) {
         case "insight":
           // Navigate back to the SAME analysis page
@@ -71,7 +74,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         case "market":
           // Route to sport-specific market intel page
           console.log("FloatingBottomNav Market - Sport:", analysisData?.sport);
-          const marketIntelPath = analysisData?.sport === "soccer" ? "/market-intel-soccer" :
+          const marketIntelPath = isSoccer ? "/market-intel-soccer" :
                                  "/market-intel"; // NFL, NBA, MLB use main page
           console.log("FloatingBottomNav Market - Path:", marketIntelPath);
           router.push({
@@ -81,9 +84,10 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           break;
         case "teams":
           // Route to sport-specific team stats page
-          const teamStatsPath = analysisData?.sport === "soccer" ? "/team-stats-soccer" :
-                               analysisData?.sport === "nfl" ? "/team-stats-nfl" :
-                               "/team-stats-nfl"; // Default to NFL for now
+          const isNBA = sportLower === "nba";
+          const teamStatsPath = isSoccer ? "/team-stats-soccer" :
+                               isNBA ? "/team-stats-nba" :
+                               "/team-stats-nfl"; // Default to NFL
           router.push({
             pathname: teamStatsPath,
             params: baseParams,
@@ -91,9 +95,10 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           break;
         case "players":
           // Route to sport-specific player stats page
-          const playerStatsPath = analysisData?.sport === "soccer" ? "/player-stats-soccer" :
-                                 analysisData?.sport === "nfl" ? "/player-stats-nfl" :
-                                 "/player-stats-nfl"; // Default to NFL for now
+          const isNBAPlayers = sportLower === "nba";
+          const playerStatsPath = isSoccer ? "/player-stats-soccer" :
+                                 isNBAPlayers ? "/player-stats-nba" :
+                                 "/player-stats-nfl"; // Default to NFL
           router.push({
             pathname: playerStatsPath,
             params: baseParams,

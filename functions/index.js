@@ -352,6 +352,7 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
           if not data is compilable, for a field use your best judgement to return the best answer in short
           **Return JSON in this structure:**
           {
+            sport: '${sport}',
             teams: {
               home: event.home_team,
               away: event.away_team,
@@ -537,37 +538,30 @@ async function findTeamIds(sport, team1Name, team1Code, team2Name, team2Code, so
     // Normalize sport name to lowercase for consistent comparison
     const normalizedSport = sport.toLowerCase();
 
-    // Determine the correct JSON file path based on the sport
-    switch (normalizedSport) {
-        case 'nba':
+    // Determine the correct JSON file path based on the sport (use startsWith for variants)
+    if (normalizedSport === 'nba') {
             teamFilePath = path.join(__dirname, 'nba_teams.json');
             sport_type_odds = 'basketball_nba';
-            break;
-        case 'mlb':
+    } else if (normalizedSport === 'mlb') {
             teamFilePath = path.join(__dirname, 'mlb_teams.json');
             sport_type_odds = 'baseball_mlb';
-            break;
-        case 'nfl':
+    } else if (normalizedSport.includes('nfl')) {
             teamFilePath = path.join(__dirname, 'nfl_teams.json');
             sport_type_odds = 'americanfootball_nfl';
-            break;
-        case 'ncaaf':
+    } else if (normalizedSport === 'ncaaf') {
             teamFilePath = path.join(__dirname, 'ncaaf_teams.json');
             sport_type_odds = 'americanfootball_ncaaf';
-            break;
-        case 'soccer':
+    } else if (normalizedSport.startsWith('soccer') || normalizedSport.includes('football')) {
             teamFilePath = path.join(__dirname, 'soccer_teams.json');
-            sport_type_odds = soccer_odds_type || 'soccer_epl';
-            break;
-        case 'mma':
+        // If soccer_epl or other variant is passed, use it; otherwise use provided or default
+        sport_type_odds = normalizedSport.startsWith('soccer_') ? normalizedSport : (soccer_odds_type || 'soccer_epl');
+    } else if (normalizedSport === 'mma') {
             teamFilePath = path.join(__dirname, 'mma_fighters.json');
             sport_type_odds = 'mma_mixed_martial_arts';
-            break;
-        case 'tennis':
+    } else if (normalizedSport === 'tennis') {
             teamFilePath = path.join(__dirname, 'tennis_players.json');
             sport_type_odds = 'tennis';
-            break;
-        default:
+    } else {
             throw new Error(`Unsupported sport: ${sport}. Supported sports are: nba, mlb, nfl, ncaaf, soccer, mma, tennis`);
     }
 
@@ -3569,16 +3563,16 @@ function calculateSharpMeterTest(bookmakers, event) {
       line1 = "No clear sharp lean";
     } else if (pointGap > 0) {
       line1 = "Sharps Lean Dog";
-    } else {
+  } else {
       line1 = "Sharps Lean Favorite";
-    }
+  }
 
     // Line 2: Secondary signal (vig confidence) - Remove brackets as requested
-    if (vigGap > 1.0) {
+  if (vigGap > 1.0) {
       line2 = "Market uncertainty";
     } else if (vigGap < -1.0) {
       line2 = "Sharp confidence";
-    } else {
+  } else {
       line2 = `${Math.abs(pointGap).toFixed(1)} point edge`;
     }
 
@@ -3753,8 +3747,8 @@ function formatOddsTableTest(bookmakers, event) {
   // Extract odds using EXACT same pattern as calculateBestLinesTest
   return selectedBookmakers.map(bookmaker => {
     const oddsData = {
-      bookmaker: bookmaker.title,
-      bookmakerKey: bookmaker.key,
+    bookmaker: bookmaker.title,
+    bookmakerKey: bookmaker.key,
       isSharp: sharpBooks.includes(bookmaker.key),
       odds: {}
     };
@@ -3980,29 +3974,31 @@ async function getTeamStatsDataTest(sport, team1Id, team2Id) {
 
 async function getSingleTeamStatsTest(sport, teamId) {
   try {
-    const currentSeason = sport.toLowerCase() === 'nba' ? 2024 : 2025; // Use 2024 for NBA, 2025 for others
+    const sportLower = sport.toLowerCase();
+    const currentSeason = sportLower === 'nba' ? 2024 : 2025; // Use 2024 for NBA, 2025 for others
     let apiUrl;
 
-    switch (sport.toLowerCase()) {
-      case 'nba':
-        // Based on official API-Sports.io documentation - correct parameters
-        apiUrl = `https://v2.nba.api-sports.io/teams/statistics?season=${currentSeason}&id=${teamId}`;
-        break;
-      case 'nfl':
-      case 'ncaaf':
-        // NFL uses StatPal API for comprehensive team stats
-        return await getStatPalTeamStatsTest(teamId);
-        break;
-      case 'mlb':
-        // MLB uses StatPal API for comprehensive team stats
-        return await getStatPalMLBTeamStatsTest(teamId);
-        break;
-      case 'soccer':
-        // For soccer, we need league ID - using EPL as default
-        apiUrl = `https://v3.football.api-sports.io/teams/statistics?season=${currentSeason}&team=${teamId}&league=39`;
-        break;
-      default:
-        return { stats: null, error: `Team stats not supported for ${sport}` };
+    // Handle NFL/NCAAF
+    if (sportLower.includes('nfl') || sportLower === 'ncaaf') {
+      // NFL uses StatPal API for comprehensive team stats
+      return await getStatPalTeamStatsTest(teamId);
+    }
+
+    // Handle MLB
+    if (sportLower === 'mlb') {
+      // MLB uses StatPal API for comprehensive team stats
+      return await getStatPalMLBTeamStatsTest(teamId);
+    }
+
+    // Handle Soccer (all variants: soccer, soccer_epl, soccer_uefa, etc.)
+    if (sportLower.startsWith('soccer') || sportLower.includes('football')) {
+      // For soccer, we need league ID - using EPL as default
+      apiUrl = `https://v3.football.api-sports.io/teams/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+    } else if (sportLower === 'nba') {
+      // Based on official API-Sports.io documentation - correct parameters
+      apiUrl = `https://v2.nba.api-sports.io/teams/statistics?season=${currentSeason}&id=${teamId}`;
+    } else {
+      return { stats: null, error: `Team stats not supported for ${sport}` };
     }
 
     console.log(`Fetching team stats from: ${apiUrl}`);
@@ -4026,8 +4022,13 @@ async function getSingleTeamStatsTest(sport, teamId) {
       return { stats: null, error: "No data found" };
     }
 
-    const stats = response.data.response[0] || response.data.response;
+    let stats = response.data.response[0] || response.data.response;
     console.log(`Found team stats for team ${teamId}`);
+
+    // Transform NBA stats to match expected structure
+    if (sportLower === 'nba' && stats) {
+      stats = transformNBATeamStats(stats);
+    }
 
     return { stats, error: null };
 
@@ -4035,6 +4036,49 @@ async function getSingleTeamStatsTest(sport, teamId) {
     console.error(`Error fetching team stats for team ${teamId}:`, error);
     return { stats: null, error: error.message };
   }
+}
+
+// Transform NBA Team Stats to structured format for UI
+function transformNBATeamStats(nbaStats) {
+  const games = nbaStats.games || 1;
+
+  return {
+    team: nbaStats.team,
+
+    // Core Stats (already calculated per game by API)
+    points: nbaStats.points || 0,
+    fgp: parseFloat(nbaStats.fgp || 0),
+    tpp: parseFloat(nbaStats.tpp || 0),
+    ftp: parseFloat(nbaStats.ftp || 0),
+
+    // Rebounds
+    totReb: nbaStats.totReb || 0,
+    offReb: nbaStats.offReb || 0,
+    defReb: nbaStats.defReb || 0,
+
+    // Assists and other stats
+    assists: nbaStats.assists || 0,
+    steals: nbaStats.steals || 0,
+    blocks: nbaStats.blocks || 0,
+    turnovers: nbaStats.turnovers || 0,
+    pFouls: nbaStats.pFouls || 0,
+    plusMinus: nbaStats.plusMinus || 0,
+
+    // Calculated metrics (return as numbers, not strings)
+    calculated: {
+      reboundsPerGame: games > 0 ? parseFloat((nbaStats.totReb / games).toFixed(1)) : 0,
+      assistsPerGame: games > 0 ? parseFloat((nbaStats.assists / games).toFixed(1)) : 0,
+      stealsPerGame: games > 0 ? parseFloat((nbaStats.steals / games).toFixed(1)) : 0,
+      blocksPerGame: games > 0 ? parseFloat((nbaStats.blocks / games).toFixed(1)) : 0,
+      turnoversPerGame: games > 0 ? parseFloat((nbaStats.turnovers / games).toFixed(1)) : 0,
+      turnoverDifferential: games > 0 ? parseFloat(((nbaStats.steals - nbaStats.turnovers) / games).toFixed(1)) : 0,
+      offRebPerGame: games > 0 ? parseFloat((nbaStats.offReb / games).toFixed(1)) : 0,
+      defRebPerGame: games > 0 ? parseFloat((nbaStats.defReb / games).toFixed(1)) : 0,
+      foulsPerGame: games > 0 ? parseFloat((nbaStats.pFouls / games).toFixed(1)) : 0
+    },
+
+    games: games
+  };
 }
 
 // StatPal NFL Team Statistics Function
@@ -4623,33 +4667,33 @@ function calculateEVOpportunities(bookmakers, event) {
     }
 
     try {
-      // Step 1: Calculate implied probabilities
-      const implied1 = 1 / odds1;
-      const implied2 = 1 / odds2;
-      const totalImplied = implied1 + implied2;
+    // Step 1: Calculate implied probabilities
+    const implied1 = 1 / odds1;
+    const implied2 = 1 / odds2;
+    const totalImplied = implied1 + implied2;
 
       // BULLETPROOF: Check for division by zero or invalid total
       if (totalImplied <= 0 || !isFinite(totalImplied)) {
         return { fair1: null, fair2: null };
       }
 
-      // Step 2: Remove vig (multiplicative method)
-      const fairProb1 = implied1 / totalImplied;
-      const fairProb2 = implied2 / totalImplied;
+    // Step 2: Remove vig (multiplicative method)
+    const fairProb1 = implied1 / totalImplied;
+    const fairProb2 = implied2 / totalImplied;
 
-      // Step 3: Convert back to fair odds
-      const fairOdds1 = 1 / fairProb1;
-      const fairOdds2 = 1 / fairProb2;
+    // Step 3: Convert back to fair odds
+    const fairOdds1 = 1 / fairProb1;
+    const fairOdds2 = 1 / fairProb2;
 
       // BULLETPROOF: Validate final results
       if (!isFinite(fairOdds1) || !isFinite(fairOdds2) || fairOdds1 <= 0 || fairOdds2 <= 0) {
         return { fair1: null, fair2: null };
       }
 
-      return {
-        fair1: parseFloat(fairOdds1.toFixed(2)),
-        fair2: parseFloat(fairOdds2.toFixed(2))
-      };
+    return {
+      fair1: parseFloat(fairOdds1.toFixed(2)),
+      fair2: parseFloat(fairOdds2.toFixed(2))
+    };
     } catch (error) {
       console.error('Error calculating fair value:', error);
       return { fair1: null, fair2: null };
@@ -4734,19 +4778,19 @@ function calculateEVOpportunities(bookmakers, event) {
     // Home team EV opportunities
     moneylineOdds.home.filter(o => o && !o.isSharp && typeof o.odds === 'number' && o.odds > 0).forEach(book => {
       try {
-        const ev = ((book.odds - fairValue.moneyline.fair1) / fairValue.moneyline.fair1) * 100;
+      const ev = ((book.odds - fairValue.moneyline.fair1) / fairValue.moneyline.fair1) * 100;
 
         // BULLETPROOF: Validate EV calculation and set reasonable limits (max 22% EV)
         if (isFinite(ev) && ev > 1.0 && ev < 22.0) {
-          evOpportunities.push({
-            market: "Moneyline",
-            team: event.home_team,
-            bookmaker: book.bookmaker,
-            bookOdds: book.odds,
-            fairOdds: fairValue.moneyline.fair1,
-            sharpConsensus: sharpConsensus.moneyline.home,
-            ev: parseFloat(ev.toFixed(1))
-          });
+        evOpportunities.push({
+          market: "Moneyline",
+          team: event.home_team,
+          bookmaker: book.bookmaker,
+          bookOdds: book.odds,
+          fairOdds: fairValue.moneyline.fair1,
+          sharpConsensus: sharpConsensus.moneyline.home,
+          ev: parseFloat(ev.toFixed(1))
+        });
         }
       } catch (error) {
         console.error('Error calculating home ML EV:', error);
@@ -4756,19 +4800,19 @@ function calculateEVOpportunities(bookmakers, event) {
     // Away team EV opportunities
     moneylineOdds.away.filter(o => o && !o.isSharp && typeof o.odds === 'number' && o.odds > 0).forEach(book => {
       try {
-        const ev = ((book.odds - fairValue.moneyline.fair2) / fairValue.moneyline.fair2) * 100;
+      const ev = ((book.odds - fairValue.moneyline.fair2) / fairValue.moneyline.fair2) * 100;
 
         // BULLETPROOF: Validate EV calculation and set reasonable limits (max 22% EV)
         if (isFinite(ev) && ev > 1.0 && ev < 22.0) {
-          evOpportunities.push({
-            market: "Moneyline",
-            team: event.away_team,
-            bookmaker: book.bookmaker,
-            bookOdds: book.odds,
-            fairOdds: fairValue.moneyline.fair2,
-            sharpConsensus: sharpConsensus.moneyline.away,
-            ev: parseFloat(ev.toFixed(1))
-          });
+        evOpportunities.push({
+          market: "Moneyline",
+          team: event.away_team,
+          bookmaker: book.bookmaker,
+          bookOdds: book.odds,
+          fairOdds: fairValue.moneyline.fair2,
+          sharpConsensus: sharpConsensus.moneyline.away,
+          ev: parseFloat(ev.toFixed(1))
+        });
         }
       } catch (error) {
         console.error('Error calculating away ML EV:', error);
@@ -4796,44 +4840,44 @@ function calculateEVOpportunities(bookmakers, event) {
 
       // BULLETPROOF: Validate best odds are reasonable
       if (bestHomeOdds > 1.01 && bestAwayOdds > 1.01 && isFinite(bestHomeOdds) && isFinite(bestAwayOdds)) {
-        const arbCheck = (1 / bestHomeOdds) + (1 / bestAwayOdds);
+  const arbCheck = (1 / bestHomeOdds) + (1 / bestAwayOdds);
         hasArbitrage = arbCheck < 1.0 && arbCheck > 0.5; // Reasonable arbitrage range
 
-        if (hasArbitrage) {
-          const profit = ((1 - arbCheck) * 100);
+  if (hasArbitrage) {
+    const profit = ((1 - arbCheck) * 100);
 
           // BULLETPROOF: Validate profit is reasonable (max 14%)
           if (profit > 0 && profit < 14) {
-            const bankroll = 100; // $100 example
-            const bet1 = bankroll / (1 + (bestHomeOdds / bestAwayOdds));
-            const bet2 = bankroll - bet1;
+    const bankroll = 100; // $100 example
+    const bet1 = bankroll / (1 + (bestHomeOdds / bestAwayOdds));
+    const bet2 = bankroll - bet1;
 
             // BULLETPROOF: Validate bet amounts
             if (bet1 > 0 && bet2 > 0 && isFinite(bet1) && isFinite(bet2)) {
-              arbitrageData = {
-                detected: true,
-                profit: parseFloat(profit.toFixed(1)),
-                bets: [
-                  {
-                    team: event.home_team,
-                    amount: parseFloat(bet1.toFixed(2)),
-                    percentage: parseFloat((bet1/bankroll * 100).toFixed(2)),
-                    odds: bestHomeOdds,
-                    bookmaker: bestHomeBook?.bookmaker,
-                    bookmakerKey: bestHomeBook?.bookmakerKey,
-                    icon: getBookmakerIcon(bestHomeBook?.bookmakerKey)
-                  },
-                  {
-                    team: event.away_team,
-                    amount: parseFloat(bet2.toFixed(2)),
-                    percentage: parseFloat((bet2/bankroll * 100).toFixed(2)),
-                    odds: bestAwayOdds,
-                    bookmaker: bestAwayBook?.bookmaker,
-                    bookmakerKey: bestAwayBook?.bookmakerKey,
-                    icon: getBookmakerIcon(bestAwayBook?.bookmakerKey)
-                  }
-                ]
-              };
+    arbitrageData = {
+      detected: true,
+      profit: parseFloat(profit.toFixed(1)),
+      bets: [
+        {
+          team: event.home_team,
+          amount: parseFloat(bet1.toFixed(2)),
+          percentage: parseFloat((bet1/bankroll * 100).toFixed(2)),
+          odds: bestHomeOdds,
+          bookmaker: bestHomeBook?.bookmaker,
+          bookmakerKey: bestHomeBook?.bookmakerKey,
+          icon: getBookmakerIcon(bestHomeBook?.bookmakerKey)
+        },
+        {
+          team: event.away_team,
+          amount: parseFloat(bet2.toFixed(2)),
+          percentage: parseFloat((bet2/bankroll * 100).toFixed(2)),
+          odds: bestAwayOdds,
+          bookmaker: bestAwayBook?.bookmaker,
+          bookmakerKey: bestAwayBook?.bookmakerKey,
+          icon: getBookmakerIcon(bestAwayBook?.bookmakerKey)
+        }
+      ]
+    };
             }
           }
         }
@@ -5589,15 +5633,33 @@ function enhanceTeamStatsWithGameData(teamStats, gameData) {
     games.forEach(game => {
       let teamScore = 0, oppScore = 0, isHome = false;
 
-      // Extract scores based on NFL game structure
+      // Extract scores based on game structure (NFL vs NBA vs Soccer)
       if (game.teams?.home?.id === parseInt(teamId)) {
-        teamScore = game.scores?.home?.total || 0;
-        oppScore = game.scores?.away?.total || 0;
+        // Team is home
         isHome = true;
-      } else if (game.teams?.away?.id === parseInt(teamId)) {
-        teamScore = game.scores?.away?.total || 0;
-        oppScore = game.scores?.home?.total || 0;
+        // NFL/Soccer structure: scores.home.total / scores.away.total
+        if (game.scores?.home?.total !== undefined) {
+          teamScore = game.scores.home.total || 0;
+          oppScore = game.scores.away.total || 0;
+        }
+        // NBA structure: scores.home.points / scores.visitors.points
+        else if (game.scores?.home?.points !== undefined) {
+          teamScore = game.scores.home.points || 0;
+          oppScore = game.scores.visitors.points || 0;
+        }
+      } else if (game.teams?.away?.id === parseInt(teamId) || game.teams?.visitors?.id === parseInt(teamId)) {
+        // Team is away/visitor
         isHome = false;
+        // NFL/Soccer structure
+        if (game.scores?.away?.total !== undefined) {
+          teamScore = game.scores.away.total || 0;
+          oppScore = game.scores.home.total || 0;
+        }
+        // NBA structure
+        else if (game.scores?.visitors?.points !== undefined) {
+          teamScore = game.scores.visitors.points || 0;
+          oppScore = game.scores.home.points || 0;
+        }
       }
 
       totalPoints += teamScore;
@@ -5715,29 +5777,25 @@ async function getPlayerStatsForSport(sport, team1Id, team2Id) {
 
 async function getSingleTeamPlayerStats(sport, teamId) {
   try {
-    switch (sport.toLowerCase()) {
-      case 'nfl':
-      case 'ncaaf':
+    const sportLower = sport.toLowerCase();
+
+    // Handle sport detection with startsWith for variants (e.g., soccer_epl, soccer_uefa)
+    if (sportLower.includes('nfl') || sportLower === 'ncaaf') {
         // Use StatPal for NFL player stats
         return await getStatPalNFLPlayerStatsTest(teamId);
-
-      case 'mlb':
+    } else if (sportLower === 'mlb') {
         // Use StatPal for MLB player stats
         return await getStatPalMLBPlayerStatsTest(teamId);
-
-      case 'soccer':
+    } else if (sportLower.startsWith('soccer') || sportLower.includes('football')) {
         // Use API-Sports for soccer player stats
         return await getAPISoccerPlayerStats(teamId);
-
-      case 'nba':
+    } else if (sportLower === 'nba') {
         // Use API-Sports for NBA player stats (when season available)
         return await getAPINBAPlayerStats(teamId);
-
-      case 'tennis':
+    } else if (sportLower === 'tennis') {
         // Tennis doesn't have traditional team player stats
         return { players: [], error: null };
-
-      default:
+    } else {
         return { players: [], error: `Player stats not supported for ${sport}` };
     }
   } catch (error) {
@@ -5749,12 +5807,13 @@ async function getSingleTeamPlayerStats(sport, teamId) {
 // API-Sports Soccer Player Stats Function
 async function getAPISoccerPlayerStats(teamId) {
   try {
-    const currentSeason = 2025;
-    const apiUrl = `https://v3.football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+    // Try 2024 season first, fallback to 2023 if no data with stats
+    let currentSeason = 2024;
+    let apiUrl = `https://v3.football.api-sports.io/players?season=${currentSeason}&team=${teamId}`;
 
     console.log(`Fetching soccer player stats from: ${apiUrl}`);
 
-    const response = await axios.get(apiUrl, {
+    let response = await axios.get(apiUrl, {
       headers: {
         "x-apisports-key": API_SPORTS_KEY
       }
@@ -5765,20 +5824,118 @@ async function getAPISoccerPlayerStats(teamId) {
       return { players: [], error: JSON.stringify(response.data.errors) };
     }
 
-    if (!response.data.response || response.data.response.length === 0) {
+    let players = response.data.response || [];
+
+    // Check if 2024 has actual stats (not just squad list with nulls)
+    const hasStatsIn2024 = players.some(p =>
+      p.statistics && p.statistics[0] &&
+      (p.statistics[0].games?.appearences || 0) > 0
+    );
+
+    // If 2024 has no stats, try 2023
+    if (!hasStatsIn2024) {
+      console.log(`2024 season has no stats yet, trying 2023...`);
+      currentSeason = 2023;
+      apiUrl = `https://v3.football.api-sports.io/players?season=${currentSeason}&team=${teamId}`;
+
+      response = await axios.get(apiUrl, {
+        headers: {
+          "x-apisports-key": API_SPORTS_KEY
+        }
+      });
+
+      players = response.data.response || [];
+    }
+
+    if (players.length === 0) {
       console.log(`No soccer player stats found for team ${teamId}`);
       return { players: [], error: null };
     }
 
-    const players = response.data.response;
-    console.log(`Found ${players.length} soccer players for team ${teamId}`);
+    console.log(`Found ${players.length} soccer players for team ${teamId} (Season ${currentSeason})`);
 
-    return { players, error: null };
+    // Transform to structured format matching NFL
+    const transformedPlayers = transformSoccerPlayerData(players);
+
+    return { players: transformedPlayers, error: null };
 
   } catch (error) {
     console.error(`Error fetching soccer player stats for team ${teamId}:`, error);
     return { players: [], error: error.message };
   }
+}
+
+// Transform Soccer Player Data to structured format (like NFL)
+function transformSoccerPlayerData(playersData) {
+  // Filter players with actual game time and stats
+  const playersWithStats = playersData.filter(p => {
+    if (!p.statistics || p.statistics.length === 0) return false;
+
+    // Find the stat entry with most appearances (could have multiple leagues)
+    const bestStat = p.statistics.reduce((best, current) => {
+      const currentApps = current.games?.appearences || 0;
+      const bestApps = best?.games?.appearences || 0;
+      return currentApps > bestApps ? current : best;
+    }, p.statistics[0]);
+
+    // Must have at least 1 appearance OR goals/assists
+    const hasAppearances = (bestStat.games?.appearences || 0) > 0;
+    const hasContributions = (bestStat.goals?.total || 0) > 0 || (bestStat.goals?.assists || 0) > 0;
+
+    return hasAppearances || hasContributions;
+  });
+
+  const topPlayers = playersWithStats
+    .map(player => {
+      // Get the stat entry with most appearances
+      const stats = player.statistics.reduce((best, current) => {
+        const currentApps = current.games?.appearences || 0;
+        const bestApps = best?.games?.appearences || 0;
+        return currentApps > bestApps ? current : best;
+      }, player.statistics[0]);
+
+      const goals = stats.goals?.total || 0;
+      const assists = stats.goals?.assists || 0;
+      const contribution = goals + assists;
+
+      return { player, stats, contribution };
+    })
+    .sort((a, b) => b.contribution - a.contribution)
+    .slice(0, 3)
+    .map(({ player, stats }) => {
+      const goals = stats.goals?.total || 0;
+      const assists = stats.goals?.assists || 0;
+      const appearances = stats.games?.appearences || 1;
+      const minutes = stats.games?.minutes || 0;
+
+      return {
+        id: player.player.id,
+        name: player.player.name,
+        position: stats.games?.position || "Forward",
+        category: "Attacking",
+        stats: {
+          goals: goals,
+          assists: assists,
+          goalsPerGame: parseFloat((goals / appearances).toFixed(1)),
+          minutesPerGoal: goals > 0 ? Math.round(minutes / goals) : 0,
+          keyPasses: stats.passes?.key || 0,
+          yellowCards: stats.cards?.yellow || 0,
+          redCards: stats.cards?.red || 0,
+          shotAccuracy: stats.shots?.total > 0 ?
+            Math.round((stats.shots?.on || 0) / stats.shots?.total * 100) : 0,
+          passAccuracy: stats.passes?.accuracy || 0,
+          appearances: appearances,
+          minutes: minutes,
+          shotsTotal: stats.shots?.total || 0,
+          shotsOnTarget: stats.shots?.on || 0
+        }
+      };
+    });
+
+  return {
+    topPlayers,
+    allPlayers: playersData
+  };
 }
 
 // API-Sports NBA Player Stats Function
@@ -5809,12 +5966,106 @@ async function getAPINBAPlayerStats(teamId) {
     const players = response.data.response;
     console.log(`Found ${players.length} NBA players for team ${teamId}`);
 
-    return { players, error: null };
+    // Transform NBA players to structured format
+    const transformedPlayers = transformNBAPlayerData(players);
+
+    console.log(`NBA Transform Results - Top Players: ${transformedPlayers.topPlayers.length}`);
+    console.log(`First top player:`, JSON.stringify(transformedPlayers.topPlayers[0], null, 2));
+    console.log(`Unique player IDs:`, [...new Set(transformedPlayers.topPlayers.map(p => p.id))]);
+
+    return { players: transformedPlayers, error: null };
 
   } catch (error) {
     console.error(`Error fetching NBA player stats for team ${teamId}:`, error);
     return { players: [], error: error.message };
   }
+}
+
+// Transform NBA Player Data to structured format (like NFL/Soccer)
+function transformNBAPlayerData(playersData) {
+  // Group by player ID and aggregate stats
+  const playerMap = new Map();
+
+  playersData.forEach(gameData => {
+    if (!gameData.player) return;
+
+    const playerId = gameData.player.id;
+
+    if (!playerMap.has(playerId)) {
+      playerMap.set(playerId, {
+        player: gameData.player,
+        position: gameData.pos,
+        games: [],
+        totalPoints: 0,
+        totalReb: 0,
+        totalAst: 0,
+        totalStl: 0,
+        totalBlk: 0,
+        totalTo: 0,
+        totalFgm: 0,
+        totalFga: 0,
+        totalTpm: 0,
+        totalTpa: 0,
+        totalFtm: 0,
+        totalFta: 0,
+        totalMin: 0
+      });
+    }
+
+    const playerStats = playerMap.get(playerId);
+    playerStats.games.push(gameData);
+    playerStats.totalPoints += gameData.points || 0;
+    playerStats.totalReb += gameData.totReb || 0;
+    playerStats.totalAst += gameData.assists || 0;
+    playerStats.totalStl += gameData.steals || 0;
+    playerStats.totalBlk += gameData.blocks || 0;
+    playerStats.totalTo += gameData.turnovers || 0;
+    playerStats.totalFgm += gameData.fgm || 0;
+    playerStats.totalFga += gameData.fga || 0;
+    playerStats.totalTpm += gameData.tpm || 0;
+    playerStats.totalTpa += gameData.tpa || 0;
+    playerStats.totalFtm += gameData.ftm || 0;
+    playerStats.totalFta += gameData.fta || 0;
+    playerStats.totalMin += parseInt(gameData.min) || 0;
+  });
+
+  // Convert to array and calculate averages
+  const aggregatedPlayers = Array.from(playerMap.values()).map(p => {
+    const gamesPlayed = p.games.length;
+
+    return {
+      id: p.player.id,
+      name: p.player.firstname + " " + p.player.lastname,
+      position: p.position || "Guard",
+      gamesPlayed,
+      avgPoints: gamesPlayed > 0 ? p.totalPoints / gamesPlayed : 0,
+      stats: {
+        pointsAverage: gamesPlayed > 0 ? parseFloat((p.totalPoints / gamesPlayed).toFixed(1)) : 0,
+        reboundsAverage: gamesPlayed > 0 ? parseFloat((p.totalReb / gamesPlayed).toFixed(1)) : 0,
+        assistsAverage: gamesPlayed > 0 ? parseFloat((p.totalAst / gamesPlayed).toFixed(1)) : 0,
+        stealsAverage: gamesPlayed > 0 ? parseFloat((p.totalStl / gamesPlayed).toFixed(1)) : 0,
+        blocksAverage: gamesPlayed > 0 ? parseFloat((p.totalBlk / gamesPlayed).toFixed(1)) : 0,
+        turnoversAverage: gamesPlayed > 0 ? parseFloat((p.totalTo / gamesPlayed).toFixed(1)) : 0,
+        fgPercentage: p.totalFga > 0 ? parseFloat(((p.totalFgm / p.totalFga) * 100).toFixed(1)) : 0,
+        threePtPercentage: p.totalTpa > 0 ? parseFloat(((p.totalTpm / p.totalTpa) * 100).toFixed(1)) : 0,
+        ftPercentage: p.totalFta > 0 ? parseFloat(((p.totalFtm / p.totalFta) * 100).toFixed(1)) : 0,
+        usagePercentage: 0,
+        gamesPlayed: gamesPlayed,
+        minutes: gamesPlayed > 0 ? Math.round(p.totalMin / gamesPlayed) : 0
+      }
+    };
+  });
+
+  // Sort by average points and get top 3
+  const topPlayers = aggregatedPlayers
+    .filter(p => p.avgPoints > 5)
+    .sort((a, b) => b.avgPoints - a.avgPoints)
+    .slice(0, 3);
+
+  return {
+    topPlayers,
+    allPlayers: playersData
+  };
 }
 
 // StatPal MLB Player Stats Function (reuse existing)
@@ -5937,17 +6188,22 @@ function transformStatPalMLBPlayerData(statpalStats) {
 function getTopPlayersForSport(players, sport) {
   if (!players || players.length === 0) return [];
 
-  switch (sport.toLowerCase()) {
-    case 'nfl':
-    case 'ncaaf':
+  const sportLower = sport.toLowerCase();
+
+  // Handle NFL/NCAAF
+  if (sportLower.includes('nfl') || sportLower === 'ncaaf') {
       // StatPal data already has topPlayers from transform function
       return players.topPlayers || [];
+  }
 
-    case 'mlb':
+  // Handle MLB
+  if (sportLower === 'mlb') {
       // StatPal data already has topPlayers from transform function
       return players.topPlayers || [];
+  }
 
-    case 'soccer':
+  // Handle Soccer (all variants: soccer, soccer_epl, soccer_uefa, etc.)
+  if (sportLower.startsWith('soccer') || sportLower.includes('football')) {
       // API-Sports data - sort by goals + assists
       return players
         .filter(p => p.statistics && p.statistics[0] && (p.statistics[0].games?.appearences || 0) > 5)
@@ -5957,15 +6213,17 @@ function getTopPlayersForSport(players, sport) {
           return bContrib - aContrib;
         })
         .slice(0, 3);
+  }
 
-    case 'nba':
+  // Handle NBA
+  if (sportLower === 'nba') {
       // API-Sports data - sort by points per game
       return players
         .filter(p => p.statistics && p.statistics.points && p.statistics.points.average > 5)
         .sort((a, b) => (b.statistics.points.average || 0) - (a.statistics.points.average || 0))
         .slice(0, 3);
-
-    default:
-      return players.slice(0, 3);
   }
+
+  // Default fallback
+      return players.slice(0, 3);
 }

@@ -220,15 +220,15 @@ export default function SoccerPlayerStatsScreen() {
   const renderSoccerPlayerCard = (player: any, teamName: string) => {
     if (!player) return null;
 
-    // Get soccer player stats - different structure than NFL
-    const stats = player.statistics?.[0] || {};
+    // Get soccer player stats from transformed backend structure
+    const stats = player.stats || {};
 
     return (
       <View style={styles.playerSection}>
         {/* Player Header Card - SAME AS NFL */}
         <View style={[styles.card, styles.headerCard]}>
           <View style={styles.headerContent}>
-            <Text style={styles.playerName}>{player.player?.name || "Erling Haaland"}</Text>
+            <Text style={styles.playerName}>{player.name || "Player"}</Text>
             <Image
               source={{ uri: `../assets/images/${teamName?.replace(/\s+/g, '_')}.svg` }}
               style={styles.teamLogo}
@@ -243,10 +243,10 @@ export default function SoccerPlayerStatsScreen() {
             <Text style={styles.sectionLabel}>GOALS</Text>
             <View style={styles.statContent}>
               <Text style={styles.statValue}>
-                {stats.goals?.total || "12"}
+                {stats.goals || 0}
               </Text>
               <Text style={styles.statDescription}>
-                This season in {stats.games?.appearences || "15"} games
+                {stats.goalsPerGame || "0.0"}/game in {stats.appearances || 0} apps
               </Text>
               {/* Progress Bar */}
               <View style={styles.progressBarContainer}>
@@ -258,7 +258,7 @@ export default function SoccerPlayerStatsScreen() {
                 />
                 <View style={[
                   styles.progressIndicator,
-                  { left: `${Math.min((stats.goals?.total || 12) / 20 * 100, 100)}%` }
+                  { left: `${Math.min((stats.goals || 0) / 20 * 100, 100)}%` }
                 ]} />
               </View>
             </View>
@@ -269,10 +269,10 @@ export default function SoccerPlayerStatsScreen() {
             <Text style={styles.sectionLabel}>ASSISTS</Text>
             <View style={styles.statContent}>
               <Text style={styles.statValue}>
-                {stats.goals?.assists || "5"}
+                {stats.assists || 0}
               </Text>
               <Text style={styles.statDescription}>
-                {((stats.goals?.assists || 5) / (stats.games?.appearences || 15) * 100).toFixed(1)}% assist rate
+                {stats.minutesPerGoal || 0} mins/goal
               </Text>
               {/* Progress Bar */}
               <View style={styles.progressBarContainer}>
@@ -284,7 +284,7 @@ export default function SoccerPlayerStatsScreen() {
                 />
                 <View style={[
                   styles.progressIndicator,
-                  { left: "33%" }
+                  { left: `${Math.min((stats.assists || 0) / 15 * 100, 100)}%` }
                 ]} />
               </View>
             </View>
@@ -304,40 +304,40 @@ export default function SoccerPlayerStatsScreen() {
               <View style={styles.kpiIcon} />
               <View style={styles.kpiContent}>
                 <Text style={styles.kpiValue}>
-                  {stats.goals?.total || "12"}
+                  {stats.goals || 0}
                 </Text>
-                <Text style={styles.kpiLabel}>Goals Scored</Text>
+                <Text style={styles.kpiLabel}>Goals</Text>
               </View>
             </View>
             <View style={styles.kpiItem}>
               <View style={styles.kpiIcon} />
               <View style={styles.kpiContent}>
                 <Text style={styles.kpiValue}>
-                  {stats.goals?.assists || "5"}
+                  {stats.assists || 0}
                 </Text>
                 <Text style={styles.kpiLabel}>Assists</Text>
               </View>
             </View>
           </View>
 
-          {/* Second Row - Appearances, Minutes */}
+          {/* Second Row - Key Passes, Cards */}
           <View style={styles.kpiRow}>
             <View style={styles.kpiItem}>
               <View style={styles.kpiIcon} />
               <View style={styles.kpiContent}>
                 <Text style={styles.kpiValue}>
-                  {stats.games?.appearences || "15"}
+                  {stats.keyPasses || 0}
                 </Text>
-                <Text style={styles.kpiLabel}>Appearances</Text>
+                <Text style={styles.kpiLabel}>Key Passes</Text>
               </View>
             </View>
             <View style={styles.kpiItem}>
               <View style={styles.kpiIcon} />
               <View style={styles.kpiContent}>
                 <Text style={styles.kpiValue}>
-                  {Math.round((stats.games?.minutes || 1200) / (stats.games?.appearences || 15)) || "80"}
+                  {stats.yellowCards || 0} ⚠️ {stats.redCards || 0} 🟥
                 </Text>
-                <Text style={styles.kpiLabel}>Minutes per Game</Text>
+                <Text style={styles.kpiLabel}>Cards</Text>
               </View>
             </View>
           </View>
@@ -345,14 +345,14 @@ export default function SoccerPlayerStatsScreen() {
 
         {/* Advanced Metrics Row - SAME STRUCTURE AS NFL */}
         <View style={styles.advancedRow}>
-          {/* Shots Card */}
+          {/* Shot Accuracy Card */}
           <View style={[styles.card, styles.advancedCard]}>
-            <Text style={styles.sectionLabel}>SHOTS</Text>
+            <Text style={styles.sectionLabel}>SHOT ACCURACY</Text>
             <View style={styles.advancedContent}>
               <Text style={styles.advancedValue}>
-                {stats.shots?.total || "45"}
+                {stats.shotAccuracy || 0}%
               </Text>
-              <Text style={styles.advancedLabel}>Total Shots</Text>
+              <Text style={styles.advancedLabel}>{stats.shotsOnTarget || 0}/{stats.shotsTotal || 0} on target</Text>
             </View>
           </View>
 
@@ -361,7 +361,7 @@ export default function SoccerPlayerStatsScreen() {
             <Text style={styles.sectionLabel}>PASS ACCURACY</Text>
             <View style={styles.advancedContent}>
               <Text style={styles.advancedValue}>
-                {stats.passes?.accuracy || "85"}%
+                {stats.passAccuracy || 0}%
               </Text>
               <Text style={styles.advancedLabel}>Pass Success Rate</Text>
             </View>
@@ -759,5 +759,32 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
     padding: 10,
+  },
+
+  // Coming Soon Styles
+  comingSoonContainer: {
+    backgroundColor: "rgba(18, 18, 18, 0.95)",
+    borderRadius: 40,
+    padding: 40,
+    alignItems: "center",
+    marginTop: 40,
+  },
+  comingSoonEmoji: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
+  comingSoonTitle: {
+    fontSize: 24,
+    fontFamily: "Aeonik-Bold",
+    color: "#ffffff",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  comingSoonDescription: {
+    fontSize: 16,
+    fontFamily: "Aeonik-Regular",
+    color: "#888888",
+    textAlign: "center",
+    lineHeight: 24,
   },
 });
