@@ -34,7 +34,8 @@ export default function RootLayout() {
   // Initialize i18n with the device locale
   useEffect(() => {
     // Set the locale from the device
-    i18n.locale = Localization.locale;
+    const deviceLocale = Localization.getLocales()[0]?.languageTag || 'en';
+    i18n.locale = deviceLocale;
     console.log("Device locale set to:", i18n.locale);
   }, []);
 
