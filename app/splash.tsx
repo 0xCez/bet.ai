@@ -43,7 +43,7 @@ export default function SplashPage() {
           deviceType: Device.deviceType,
           osName: Device.osName,
           osVersion: Device.osVersion,
-          locale: Localization.locale,
+          locale: Localization.getLocales()[0]?.languageCode || 'en',
         });
 
         // Load app state
