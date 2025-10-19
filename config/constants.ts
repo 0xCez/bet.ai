@@ -5,4 +5,4 @@ export const CLOUD_FUNCTIONS_BASE_URL = "https://us-central1-betai-dev-16.cloudf
 
 // Add other API-related constants here as needed
 export const API_TIMEOUT = 30000; // 30 seconds
-export const MAX_RETRIES = 3; 
+export const MAX_RETRIES = 3;

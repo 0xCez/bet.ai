@@ -4,13 +4,19 @@ Welcome to Bet.AI! This branch (`dev-onboarding`) is your safe development envir
 
 ## ✅ Quick Start
 
-### 1. Install Dependencies
+### 1. Setup Firebase Config
+```bash
+# Copy the example Firebase config
+cp firebaseConfig.example.js firebaseConfig.js
+```
+
+### 2. Install Dependencies
 ```bash
 npm install
 cd ios && pod install && cd ..
 ```
 
-### 2. Run the App
+### 3. Run the App
 ```bash
 npm start
 # Then press 'i' for iOS or 'a' for Android
