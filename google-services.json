@@ -1,145 +1,37 @@
 {
   "project_info": {
-    "project_number": "133991312998",
-    "project_id": "betai-f9176",
-    "storage_bucket": "betai-f9176.firebasestorage.app"
+    "project_number": "878948709969",
+    "project_id": "betai-dev-16",
+    "storage_bucket": "betai-dev-16.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:133991312998:android:ae3682dcda5dd85dafc7a7",
-        "android_client_info": {
-          "package_name": "com.awesome.betai"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "133991312998-qvscd2g4ikhqnbmlde5n6u883e9oco84.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.awesome.betai",
-            "certificate_hash": "7c875fe865f4ad6a9977b4e2168a1eac30cbf5c4"
-          }
-        },
-        {
-          "client_id": "133991312998-rudsn4dcokq49k412rurgsncaq8mbcuj.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.awesome.betai",
-            "certificate_hash": "48d9c8be22c965ef9f7d04079b2321b3833017c0"
-          }
-        },
-        {
-          "client_id": "133991312998-sq6ssmnog617gua3vc1p5mies55s4eve.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.awesome.betai",
-            "certificate_hash": "3d3999cad7f6fbda73f19d09e8f90959d5985ea3"
-          }
-        },
-        {
-          "client_id": "133991312998-vfp9ef62t4s3u3khmnnsqadl132i79gh.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.awesome.betai",
-            "certificate_hash": "c12e7cc03577e1bc81a9538200dd8e02f8024fb2"
-          }
-        },
-        {
-          "client_id": "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDykDqZ9fSdUudmgciYxEuIPuG52VL37xE"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "133991312998-nsjaob5e5do67f55pd1pf3at8t1en12b.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.betai.app"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:133991312998:android:88e01ebc74fc860bafc7a7",
+        "mobilesdk_app_id": "1:878948709969:android:5a635a5891fe16f2ec2a70",
         "android_client_info": {
           "package_name": "com.betai.android"
         }
       },
       "oauth_client": [
         {
-          "client_id": "133991312998-2dbr6ltp3ti5lcp7dgvf1iv8a83mfriq.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.betai.android",
-            "certificate_hash": "52746e713536a3a61cf6ab3ba584937168e8a3fe"
-          }
-        },
-        {
-          "client_id": "133991312998-7ha5g8jdfvm4cgcvabhhhmiqhd5t98i5.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.betai.android",
-            "certificate_hash": "48d9c8be22c965ef9f7d04079b2321b3833017c0"
-          }
-        },
-        {
-          "client_id": "133991312998-bcngp1c67seuh8nkrr219qbshu2tuh5e.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.betai.android",
-            "certificate_hash": "7c875fe865f4ad6a9977b4e2168a1eac30cbf5c4"
-          }
-        },
-        {
-          "client_id": "133991312998-g5lh25ea6515scfdlt0o8l9i47aj9510.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.betai.android",
-            "certificate_hash": "b6b1410de39e58edfd135c5ca8dd164e2e5bf6d5"
-          }
-        },
-        {
-          "client_id": "133991312998-qeusullp88no21g2189pp73k1vrmskhg.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.betai.android",
-            "certificate_hash": "95901c3979422a3538a63ea30c0080d3937aa04c"
-          }
-        },
-        {
-          "client_id": "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
+          "client_id": "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDykDqZ9fSdUudmgciYxEuIPuG52VL37xE"
+          "current_key": "AIzaSyA9EfOhsph0kPC1zaTcb1DA4NLt4GuY1Yg"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
+              "client_id": "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
               "client_type": 3
             },
             {
-              "client_id": "133991312998-nsjaob5e5do67f55pd1pf3at8t1en12b.apps.googleusercontent.com",
+              "client_id": "878948709969-3bk4r38njtiosh4gi22imdmbhn6km3p1.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
                 "bundle_id": "com.betai.app"
