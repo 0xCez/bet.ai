@@ -5,6 +5,7 @@ import Purchases, {
   LogInResult,
 } from "react-native-purchases";
 import { Platform } from "react-native";
+import { getFirebaseInfo } from "../../firebaseConfig";
 
 // Replace these with your actual RevenueCat API keys
 const REVENUE_CAT_API_KEY_IOS = "appl_QNGGsxInDnggPuoPDvMxaguetdy";
@@ -127,8 +128,19 @@ export function RevenueCatProvider({
     }
   }
 
-  const isSubscribed =
-    customerInfo?.entitlements.active["Premium"] !== undefined;
+  // 🔧 DEV BYPASS: Always grant subscription in development environment
+  // TODO: REMOVE THIS BEFORE PRODUCTION DEPLOYMENT
+  const firebaseInfo = getFirebaseInfo();
+  const isDevEnvironment = firebaseInfo.projectId === 'betai-dev-16';
+
+  const isSubscribed = isDevEnvironment
+    ? true // Always subscribed in dev
+    : customerInfo?.entitlements.active["Premium"] !== undefined;
+
+  // Log subscription status for debugging
+  if (isDevEnvironment) {
+    console.log("🔧 [DEV BYPASS] Subscription check bypassed - always granted in dev environment");
+  }
 
   const value = {
     customerInfo,
