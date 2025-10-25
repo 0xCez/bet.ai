@@ -85,9 +85,9 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         case "teams":
           // Route to sport-specific team stats page
           const isNBA = sportLower === "nba";
-          const teamStatsPath = isSoccer ? "/team-stats-soccer" :
-                               isNBA ? "/team-stats-nba" :
-                               "/team-stats-nfl"; // Default to NFL
+          const teamStatsPath = isSoccer ? "/team-stats-soccer-new" :
+                               isNBA ? "/team-stats-nba-new" :
+                               "/team-stats-nfl-new"; // Default to NFL
           router.push({
             pathname: teamStatsPath,
             params: baseParams,
@@ -96,9 +96,9 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         case "players":
           // Route to sport-specific player stats page
           const isNBAPlayers = sportLower === "nba";
-          const playerStatsPath = isSoccer ? "/player-stats-soccer" :
-                                 isNBAPlayers ? "/player-stats-nba" :
-                                 "/player-stats-nfl"; // Default to NFL
+          const playerStatsPath = isSoccer ? "/player-stats-soccer-new" :
+                                 isNBAPlayers ? "/player-stats-nba-new" :
+                                 "/player-stats-nfl-new"; // Default to NFL
           router.push({
             pathname: playerStatsPath,
             params: baseParams,
