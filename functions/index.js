@@ -3340,28 +3340,21 @@ function calculateBestLinesTest(bookmakers, event) {
     .filter(m => !m.isHome)
     .sort((a, b) => a.price < 0 ? b.price - a.price : a.price - b.price)[0];
 
+  // FORMULA 5: Find best totals (Over/Under with best odds)
+  const bestOver = totals
+    .filter(t => t.type === "Over")
+    .sort((a, b) => b.price - a.price)[0]; // Higher odds = better
+
+  const bestUnder = totals
+    .filter(t => t.type === "Under")
+    .sort((a, b) => b.price - a.price)[0]; // Higher odds = better
+
   return {
     consensusSpreadPoint,
     consensusTotal,
     consensusHomeML,
     consensusAwayML,
     bestLines: [
-      favoriteSpread && {
-        type: "spread",
-        label: "Best Favorite",
-        line: favoriteSpread.point,
-        odds: favoriteSpread.price,
-        bookmaker: favoriteSpread.bookmaker,
-        team: favoriteSpread.team
-      },
-      underdogSpread && {
-        type: "spread",
-        label: "Best Underdog",
-        line: underdogSpread.point,
-        odds: underdogSpread.price,
-        bookmaker: underdogSpread.bookmaker,
-        team: underdogSpread.team
-      },
       bestHomeMl && {
         type: "moneyline",
         label: "Best Home ML",
@@ -3375,6 +3368,38 @@ function calculateBestLinesTest(bookmakers, event) {
         odds: bestAwayMl.price,
         bookmaker: bestAwayMl.bookmaker,
         team: bestAwayMl.team
+      },
+      favoriteSpread && {
+        type: "spread",
+        label: "Best Favorite Spread",
+        line: favoriteSpread.point,
+        odds: favoriteSpread.price,
+        bookmaker: favoriteSpread.bookmaker,
+        team: favoriteSpread.team
+      },
+      underdogSpread && {
+        type: "spread",
+        label: "Best Underdog Spread",
+        line: underdogSpread.point,
+        odds: underdogSpread.price,
+        bookmaker: underdogSpread.bookmaker,
+        team: underdogSpread.team
+      },
+      bestOver && {
+        type: "total",
+        label: "Best Over",
+        line: bestOver.point,
+        odds: bestOver.price,
+        bookmaker: bestOver.bookmaker,
+        team: `Over ${bestOver.point}`
+      },
+      bestUnder && {
+        type: "total",
+        label: "Best Under",
+        line: bestUnder.point,
+        odds: bestUnder.price,
+        bookmaker: bestUnder.bookmaker,
+        team: `Under ${bestUnder.point}`
       }
     ].filter(Boolean),
     rawData: {
