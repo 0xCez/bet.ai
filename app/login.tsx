@@ -86,7 +86,6 @@ export default function LoginScreen() {
 
   // Use Expo Google auth for iOS only
   const [request, response, promptAsync] = Google.useAuthRequest({
-    // androidClientId: "133991312998-7ha5g8jdfvm4cgcvabhhhmiqhd5t98i5.apps.googleusercontent.com",
     androidClientId:
       "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
     iosClientId:
