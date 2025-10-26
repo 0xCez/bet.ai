@@ -138,6 +138,10 @@ interface AnalysisResult {
     bettingSignal: string;
     breakdown: string;
   };
+  // NEW: Add full data access for chatbot
+  marketIntelligence?: any;
+  teamStats?: any;
+  playerStats?: any;
 }
 
 // Type for the data passed from history screen (matches Firestore doc structure)
@@ -486,6 +490,10 @@ export default function AnalysisScreen() {
           bettingSignal: parsedResponse?.aiAnalysis?.bettingSignal || "",
           breakdown: parsedResponse?.aiAnalysis?.breakdown || "",
         },
+        // NEW: Pass full data to chatbot
+        marketIntelligence: parsedResponse?.marketIntelligence,
+        teamStats: parsedResponse?.teamStats,
+        playerStats: parsedResponse?.playerStats,
       };
 
       setAnalysisResult(analysisData);
