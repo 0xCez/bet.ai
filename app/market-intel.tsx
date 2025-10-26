@@ -8,7 +8,7 @@ import {
   Animated,
 } from "react-native";
 import { Image } from "expo-image";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
 import { ScreenBackground } from "@/components/ui/ScreenBackground";
@@ -185,6 +185,7 @@ const getTeamLogo = (teamName: string, sport?: string) => {
 
 export default function MarketIntelNew() {
   const params = useLocalSearchParams<MarketIntelParams>();
+  const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
 
   // Check if we're navigating with the same params
@@ -269,6 +270,23 @@ export default function MarketIntelNew() {
     }
   };
 
+  // Navigate to info page
+  const navigateToInfo = (section: string) => {
+    router.push({
+      pathname: "/info",
+      params: {
+        section,
+        from: "market-intel",
+        team1: params.team1,
+        team2: params.team2,
+        sport: params.sport,
+        team1Logo: params.team1Logo,
+        team2Logo: params.team2Logo,
+        analysisId: params.analysisId,
+      },
+    });
+  };
+
   // Shimmer rendering
   const renderShimmer = () => (
     <View style={styles.shimmerContainer}>
@@ -319,7 +337,9 @@ export default function MarketIntelNew() {
             {/* Header */}
             <View style={styles.bestLinesHeader}>
               <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelBestLines")}</Text>
-              <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              <Pressable onPress={() => navigateToInfo("bestLines")}>
+                <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
             {/* Dynamic Line Items */}
@@ -355,7 +375,9 @@ export default function MarketIntelNew() {
             {/* Header */}
             <View style={styles.consensusLinesHeader}>
               <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelConsensusLines")}</Text>
-              <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              <Pressable onPress={() => navigateToInfo("consensusLines")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
             {marketResult?.marketIntelligence?.bestLines ? (
@@ -445,7 +467,9 @@ export default function MarketIntelNew() {
           {/* Header */}
           <View style={styles.publicSharpHeader}>
             <Text style={styles.publicSharpTitle}>{i18n.t("marketIntelPublicVsSharp")}</Text>
-            <Text style={styles.publicSharpInfo}>ⓘ</Text>
+            <Pressable onPress={() => navigateToInfo("publicVsSharp")}>
+              <Text style={styles.publicSharpInfo}>ⓘ</Text>
+            </Pressable>
           </View>
 
           {marketResult?.marketIntelligence?.sharpMeter ? (
@@ -496,7 +520,9 @@ export default function MarketIntelNew() {
           {/* Header */}
           <View style={styles.marketEfficiencyHeader}>
             <Text style={styles.marketEfficiencyTitle}>{i18n.t("marketIntelEfficiency")}</Text>
-            <Text style={styles.marketEfficiencyInfo}>ⓘ</Text>
+            <Pressable onPress={() => navigateToInfo("marketEfficiency")}>
+              <Text style={styles.marketEfficiencyInfo}>ⓘ</Text>
+            </Pressable>
           </View>
 
           {marketResult?.marketIntelligence?.marketTightness ? (
@@ -531,7 +557,9 @@ export default function MarketIntelNew() {
           {/* Header */}
           <View style={styles.oddsTableHeader}>
             <Text style={styles.oddsTableTitle}>{i18n.t("marketIntelOddsTable")}</Text>
-            <Text style={styles.oddsTableInfo}>ⓘ</Text>
+            <Pressable onPress={() => navigateToInfo("oddsTable")}>
+              <Text style={styles.oddsTableInfo}>ⓘ</Text>
+            </Pressable>
           </View>
 
           {marketResult?.marketIntelligence?.oddsTable && marketResult.marketIntelligence.oddsTable.length > 0 ? (
@@ -662,7 +690,9 @@ export default function MarketIntelNew() {
             {/* Header */}
             <View style={styles.consensusLinesHeader}>
               <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelVigAnalysis")}</Text>
-              <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              <Pressable onPress={() => navigateToInfo("vigAnalysis")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
             {marketResult?.marketIntelligence?.vigAnalysis ? (
@@ -763,7 +793,9 @@ export default function MarketIntelNew() {
             {/* Header */}
             <View style={styles.consensusLinesHeader}>
               <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelFairValue")}</Text>
-              <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              <Pressable onPress={() => navigateToInfo("fairValue")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
             {marketResult?.marketIntelligence?.fairValue ? (
@@ -862,7 +894,9 @@ export default function MarketIntelNew() {
             {/* Header */}
             <View style={styles.bestLinesHeader}>
               <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelEVOpportunities")}</Text>
-              <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              <Pressable onPress={() => navigateToInfo("evOpportunities")}>
+                <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
             {/* Dynamic Line Items */}

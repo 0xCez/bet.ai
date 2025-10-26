@@ -86,22 +86,17 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           }
           break;
         case "market":
-          // Route to sport-specific market intel page
-          console.log("FloatingBottomNav Market - Sport:", analysisData?.sport);
-          const marketIntelPath = isSoccer ? "/market-intel-soccer" :
-                                 "/market-intel"; // NFL, NBA, MLB use main page
-          console.log("FloatingBottomNav Market - Path:", marketIntelPath);
           router.push({
-            pathname: marketIntelPath,
+            pathname: "/market-intel",
             params: baseParams,
           });
           break;
         case "teams":
           // Route to sport-specific team stats page
           const isNBA = sportLower === "nba";
-          const teamStatsPath = isSoccer ? "/team-stats-soccer-new" :
-                               isNBA ? "/team-stats-nba-new" :
-                               "/team-stats-nfl-new"; // Default to NFL
+          const teamStatsPath = isSoccer ? "/team-stats-soccer" :
+                               isNBA ? "/team-stats-nba" :
+                               "/team-stats-nfl"; // Default to NFL
           router.push({
             pathname: teamStatsPath,
             params: baseParams,
@@ -110,9 +105,9 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         case "players":
           // Route to sport-specific player stats page
           const isNBAPlayers = sportLower === "nba";
-          const playerStatsPath = isSoccer ? "/player-stats-soccer-new" :
-                                 isNBAPlayers ? "/player-stats-nba-new" :
-                                 "/player-stats-nfl-new"; // Default to NFL
+          const playerStatsPath = isSoccer ? "/player-stats-soccer" :
+                                 isNBAPlayers ? "/player-stats-nba" :
+                                 "/player-stats-nfl"; // Default to NFL
           router.push({
             pathname: playerStatsPath,
             params: baseParams,
@@ -201,7 +196,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(12, 12, 12, 0.98)",
     borderRadius: 100,
     padding: 12, // Reduced padding for more compact design
-    justifyContent: "space-around",
+    justifyContent: "space-evenly",
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: {
@@ -215,8 +210,8 @@ const styles = StyleSheet.create({
   tabItem: {
     alignItems: "center",
     paddingVertical: 6, // Reduced padding for more compact design
-    paddingHorizontal: 12,
-    minWidth: 65,
+    paddingHorizontal: 8,
+    flex: 1,
   },
   tabItemDisabled: {
     opacity: 0.6,

@@ -350,6 +350,283 @@ export default {
   marketIntelNoOpportunitiesDesc: "No +EV or Arb opportunities found",
   marketIntelLowestVig: "Lowest Vig at",
   marketIntelLowestVigSpread: "Lowest Vig Spread at",
+  marketIntelInfoTitle: "Market Intelligence Guide 📊",
+
+  // Market Intelligence Info Content
+  marketIntelInfoBestLinesTitle: "Best Lines 💰",
+  marketIntelInfoBestLinesContent: "This shows you the absolute best odds available across all sportsbooks for this game. We scan dozens of bookmakers to find the highest payouts. For spreads and totals, we show the consensus number with the lowest vig (bookmaker fee). Using the best lines can save you hundreds over time.",
+
+  marketIntelInfoConsensusLinesTitle: "Consensus Lines 📊",
+  marketIntelInfoConsensusLinesContent: "The most common or average line across the entire betting market. This is what the \"market\" thinks is the fair line. If one book is way off consensus, it might signal value or a trap. Consensus is where most of the money is being offered.",
+
+  marketIntelInfoPublicVsSharpTitle: "Public vs Sharp Meter 🌡️",
+  marketIntelInfoPublicVsSharpContent: "Shows where professional bettors (sharps) are betting compared to casual bettors (public). Sharp money comes from professional bettors with proven track records. Sharps often bet against public favorites. The meter shows if there's a significant lean toward one side. A high score means sharps strongly favor one side.",
+
+  marketIntelInfoMarketEfficiencyTitle: "Market Efficiency 🦾",
+  marketIntelInfoMarketEfficiencyContent: "Measures how tight or loose the betting market is for this game. Tight market means all books agree - harder to find value. Loose market means books disagree - potentially more opportunities. We measure spread range (how much points vary) and price range (how much odds vary).",
+
+  marketIntelInfoOddsTableTitle: "Odds Table 🔎",
+  marketIntelInfoOddsTableContent: "A complete breakdown of every bookmaker's odds side-by-side. Compare all sportsbooks in one place, see which books are offering the best value, and spot outliers that might indicate value or errors.",
+
+  marketIntelInfoVigAnalysisTitle: "Vig Analysis 🧃",
+  marketIntelInfoVigAnalysisContent: "Shows the bookmaker's fee (also called juice or vig) on each bet type. Vig is the bookmaker's profit margin built into the odds. Lower vig means better value for you. Sharp books typically have 2-3% vig, while public books can have 4-5% or more.",
+
+  marketIntelInfoFairValueTitle: "Fair Value ⚖️",
+  marketIntelInfoFairValueContent: "What the \"true\" odds should be without any bookmaker margin. We remove the vig to calculate fair odds. This shows what you should actually be getting. If a book offers better than fair value, that's positive expected value (+EV).",
+
+  marketIntelInfoEVOpportunitiesTitle: "EV+ & Arb Opportunities 💸",
+  marketIntelInfoEVOpportunitiesContent: "Bets with positive expected value or guaranteed profit. +EV means positive expected value - over time, these bets make money. Arbitrage means betting both sides at different books for guaranteed profit. If none exist, we show the lowest vig options instead.",
+
+  teamStatsSoccerInfoTitle: "Team Stats Soccer Guide 📊",
+
+  // Team Stats Soccer Info Content
+
+  teamStatsSoccerInfoRecentFormTitle: "Recent Form",
+  teamStatsSoccerInfoRecentFormContent: "Win-draw-loss record from recent games with win percentage.",
+
+  teamStatsSoccerInfoMomentumTitle: "Momentum",
+  teamStatsSoccerInfoMomentumContent: "Recent form pattern (W=Win, L=Loss, D=Draw).",
+
+  teamStatsSoccerInfoGoalsForTitle: "Goals For",
+  teamStatsSoccerInfoGoalsForContent: "Average goals scored per game.",
+
+  teamStatsSoccerInfoGoalsAgainstTitle: "Goals Against",
+  teamStatsSoccerInfoGoalsAgainstContent: "Average goals conceded per game.",
+
+  teamStatsSoccerInfoGoalDifferenceTitle: "Goal Difference",
+  teamStatsSoccerInfoGoalDifferenceContent: "Net goals per game (scored minus conceded).",
+
+  teamStatsSoccerInfoCleanSheetsTitle: "Clean Sheets",
+  teamStatsSoccerInfoCleanSheetsContent: "Games where team didn't concede any goals.",
+
+  teamStatsSoccerInfoFailedToScoreTitle: "Failed to Score",
+  teamStatsSoccerInfoFailedToScoreContent: "Games where team didn't score any goals.",
+
+  teamStatsSoccerInfoHomeAwayRecordTitle: "Home/Away Record",
+  teamStatsSoccerInfoHomeAwayRecordContent: "Performance comparison between home and away games.",
+
+  teamStatsSoccerInfoFormationTitle: "Formation",
+  teamStatsSoccerInfoFormationContent: "Most frequently used tactical formation and usage percentage.",
+
+  teamStatsSoccerInfoPeakScoringTitle: "Peak Scoring",
+  teamStatsSoccerInfoPeakScoringContent: "Time period when team scores most goals (15-minute intervals).",
+
+  teamStatsSoccerInfoBestWorstResultsTitle: "Best/Worst Results",
+  teamStatsSoccerInfoBestWorstResultsContent: "Biggest winning and losing margins this season.",
+
+  teamStatsSoccerInfoCardsTitle: "Cards",
+  teamStatsSoccerInfoCardsContent: "Disciplinary record (yellow and red cards received).",
+
+  teamStatsSoccerInfoTrendGraphTitle: "Trend Graph",
+  teamStatsSoccerInfoTrendGraphContent: "Visual showing team's scoring and defensive performance over recent games.",
+
+  playerStatsSoccerInfoTitle: "Player Stats Soccer Guide 📊",
+
+  // Player Stats Soccer Info Content
+
+  playerStatsSoccerInfoGoalsTitle: "Goals",
+  playerStatsSoccerInfoGoalsContent: "Total goals scored this season.",
+
+  playerStatsSoccerInfoAssistsTitle: "Assists",
+  playerStatsSoccerInfoAssistsContent: "Total assists (passes leading to goals) this season.",
+
+  playerStatsSoccerInfoGoalsPerGameTitle: "Goals/Game",
+  playerStatsSoccerInfoGoalsPerGameContent: "Average goals scored per game appearance.",
+
+  playerStatsSoccerInfoShotAccuracyTitle: "Shot Accuracy",
+  playerStatsSoccerInfoShotAccuracyContent: "Percentage of shots that hit the target.",
+
+  playerStatsSoccerInfoPassAccuracyTitle: "Pass Accuracy",
+  playerStatsSoccerInfoPassAccuracyContent: "Percentage of passes completed successfully.",
+
+  playerStatsSoccerInfoMinutesPerGoalTitle: "Minutes/Goal",
+  playerStatsSoccerInfoMinutesPerGoalContent: "Average minutes played per goal scored (lower = more clinical).",
+
+  playerStatsSoccerInfoShotsOnTargetTitle: "Shots on Target",
+  playerStatsSoccerInfoShotsOnTargetContent: "Total shots aimed at the goal.",
+
+  playerStatsSoccerInfoKeyPassesTitle: "Key Passes",
+  playerStatsSoccerInfoKeyPassesContent: "Passes that directly lead to shot attempts.",
+
+  playerStatsSoccerInfoDribblesSuccessTitle: "Dribbles Success",
+  playerStatsSoccerInfoDribblesSuccessContent: "Percentage of successful dribble attempts past opponents.",
+
+  playerStatsSoccerInfoCardsTitle: "Cards",
+  playerStatsSoccerInfoCardsContent: "Disciplinary record (yellow and red cards received).",
+
+  teamStatsNFLInfoTitle: "Team Stats NFL Guide 📊",
+
+  // Team Stats NFL Info Content
+  teamStatsNFLInfoRecentFormTitle: "Recent Form",
+  teamStatsNFLInfoRecentFormContent: "Win-loss record from last 5 games with win percentage.",
+
+  teamStatsNFLInfoMomentumTitle: "Momentum",
+  teamStatsNFLInfoMomentumContent: "Current winning or losing streak (2W = 2-game win streak).",
+
+  teamStatsNFLInfoPPGTitle: "PPG",
+  teamStatsNFLInfoPPGContent: "Average points scored per game.",
+
+  teamStatsNFLInfoOpponentPPGTitle: "Opponent PPG",
+  teamStatsNFLInfoOpponentPPGContent: "Average points allowed to opponents per game.",
+
+  teamStatsNFLInfoTotalYardsPerGameTitle: "Total Yards/Game",
+  teamStatsNFLInfoTotalYardsPerGameContent: "Combined passing and rushing yards gained per game.",
+
+  teamStatsNFLInfoPassingYardsPerGameTitle: "Passing Yards/Game",
+  teamStatsNFLInfoPassingYardsPerGameContent: "Average passing yards gained per game.",
+
+  teamStatsNFLInfoRushingYardsPerGameTitle: "Rushing Yards/Game",
+  teamStatsNFLInfoRushingYardsPerGameContent: "Average rushing yards gained per game.",
+
+  teamStatsNFLInfoTurnoverDifferentialTitle: "Turnover Differential",
+  teamStatsNFLInfoTurnoverDifferentialContent: "Net turnovers per game (takeaways minus giveaways).",
+
+  teamStatsNFLInfoHomeAwayAVGTitle: "Home/Away AVG",
+  teamStatsNFLInfoHomeAwayAVGContent: "Average points scored in home games vs away games.",
+
+  teamStatsNFLInfo3rdDownTitle: "3rd Down %",
+  teamStatsNFLInfo3rdDownContent: "Percentage of third down attempts successfully converted.",
+
+  teamStatsNFLInfoRedZoneTitle: "Red Zone %",
+  teamStatsNFLInfoRedZoneContent: "Percentage of red zone trips that result in touchdowns.",
+
+  teamStatsNFLInfoSacksTitle: "Sacks",
+  teamStatsNFLInfoSacksContent: "Average quarterback sacks recorded per game.",
+
+  teamStatsNFLInfoInterceptionsTitle: "Interceptions",
+  teamStatsNFLInfoInterceptionsContent: "Average interceptions caught per game.",
+
+  teamStatsNFLInfoPenaltyYardsPerGameTitle: "Penalty Yards/Game",
+  teamStatsNFLInfoPenaltyYardsPerGameContent: "Average penalty yards committed per game.",
+
+  teamStatsNFLInfoFieldGoalTitle: "Field Goal %",
+  teamStatsNFLInfoFieldGoalContent: "Percentage of successful field goal attempts.",
+
+  teamStatsNFLInfo4thDownTitle: "4th Down %",
+  teamStatsNFLInfo4thDownContent: "Percentage of fourth down attempts successfully converted.",
+
+  teamStatsNFLInfoTrendGraphTitle: "Trend Graph",
+  teamStatsNFLInfoTrendGraphContent: "Visual showing team's scoring and defensive performance over last 10 games.",
+
+  playerStatsNFLInfoTitle: "Player Stats NFL Guide 📊",
+
+  // Player Stats NFL Info Content
+  playerStatsNFLInfoPassYardsPerGameTitle: "Pass Yards/Game",
+  playerStatsNFLInfoPassYardsPerGameContent: "Average passing yards per game.",
+
+  playerStatsNFLInfoPassTDsTitle: "Pass TDs",
+  playerStatsNFLInfoPassTDsContent: "Total passing touchdowns thrown.",
+
+  playerStatsNFLInfoCompletionTitle: "Completion %",
+  playerStatsNFLInfoCompletionContent: "Percentage of pass attempts completed successfully.",
+
+  playerStatsNFLInfoQBRatingTitle: "QB Rating",
+  playerStatsNFLInfoQBRatingContent: "Overall quarterback efficiency rating (0-158.3 scale).",
+
+  playerStatsNFLInfoRushYardsPerGameTitle: "Rush Yards/Game",
+  playerStatsNFLInfoRushYardsPerGameContent: "Average rushing yards per game.",
+
+  playerStatsNFLInfoRushTDsTitle: "Rush TDs",
+  playerStatsNFLInfoRushTDsContent: "Total rushing touchdowns scored.",
+
+  playerStatsNFLInfoInterceptionsTitle: "Interceptions",
+  playerStatsNFLInfoInterceptionsContent: "Total interceptions thrown (turnovers).",
+
+  playerStatsNFLInfoSacksTakenTitle: "Sacks Taken",
+  playerStatsNFLInfoSacksTakenContent: "Times quarterback was tackled behind line of scrimmage.",
+
+  playerStatsNFLInfoLongestPassRushTitle: "Longest Pass/Rush",
+  playerStatsNFLInfoLongestPassRushContent: "Longest single play of the season.",
+
+  playerStatsNFLInfoTotalTouchdownsTitle: "Total Touchdowns",
+  playerStatsNFLInfoTotalTouchdownsContent: "Combined passing and rushing touchdowns.",
+
+  teamStatsNBAInfoTitle: "Team Stats NBA Guide 📊",
+
+  // Team Stats NBA Info Content
+  teamStatsNBAInfoRecentFormTitle: "Recent Form",
+  teamStatsNBAInfoRecentFormContent: "Win-loss record from last 5 games with win percentage.",
+
+  teamStatsNBAInfoMomentumTitle: "Momentum",
+  teamStatsNBAInfoMomentumContent: "Current winning or losing streak (3W = 3-game win streak).",
+
+  teamStatsNBAInfoPPGTitle: "PPG",
+  teamStatsNBAInfoPPGContent: "Points scored per game this season.",
+
+  teamStatsNBAInfoOpponentPPGTitle: "Opponent PPG",
+  teamStatsNBAInfoOpponentPPGContent: "Average points allowed to opponents per game.",
+
+  teamStatsNBAInfoFieldGoalTitle: "Field Goal %",
+  teamStatsNBAInfoFieldGoalContent: "Percentage of successful shots from the field.",
+
+  teamStatsNBAInfo3PointsTitle: "3-Points %",
+  teamStatsNBAInfo3PointsContent: "Percentage of successful three-point shots.",
+
+  teamStatsNBAInfoReboundsTitle: "Rebounds",
+  teamStatsNBAInfoReboundsContent: "Average total rebounds (offensive + defensive) per game.",
+
+  teamStatsNBAInfoAssistsTitle: "Assists",
+  teamStatsNBAInfoAssistsContent: "Average assists (passes leading to scores) per game.",
+
+  teamStatsNBAInfoHomeAwayAVGTitle: "Home/Away AVG",
+  teamStatsNBAInfoHomeAwayAVGContent: "Average points scored in home games vs away games.",
+
+  teamStatsNBAInfoStealsTitle: "Steals",
+  teamStatsNBAInfoStealsContent: "Average steals (taking ball from opponent) per game.",
+
+  teamStatsNBAInfoBlocksTitle: "Blocks",
+  teamStatsNBAInfoBlocksContent: "Average blocked shots per game.",
+
+  teamStatsNBAInfoTurnoverDifferentialTitle: "Turnover Differential",
+  teamStatsNBAInfoTurnoverDifferentialContent: "Difference between steals gained and turnovers lost per game. Positive = good ball security.",
+
+  teamStatsNBAInfoPlusMinusTitle: "Plus/Minus",
+  teamStatsNBAInfoPlusMinusContent: "Total point differential vs opponents this season. Positive = outscoring opponents overall.",
+
+  teamStatsNBAInfoOffDefReboundsTitle: "Off/Def Rebounds",
+  teamStatsNBAInfoOffDefReboundsContent: "Offensive rebounds (second-chance opportunities) vs defensive rebounds (stopping opponent second chances).",
+
+  teamStatsNBAInfoFreeThrowTitle: "Free Throw %",
+  teamStatsNBAInfoFreeThrowContent: "Percentage of successful free throws.",
+
+  teamStatsNBAInfoPersonalFoulsTitle: "Personal Fouls",
+  teamStatsNBAInfoPersonalFoulsContent: "Average fouls committed per game.",
+
+  teamStatsNBAInfoTrendGraphTitle: "Trend Graph",
+  teamStatsNBAInfoTrendGraphContent: "Visual showing team's scoring pattern and defensive performance over last 10 games.",
+
+  playerStatsNBAInfoTitle: "Player Stats NBA Guide 📊",
+
+  // Player Stats NBA Info Content
+  playerStatsNBAInfoPointsTitle: "Points",
+  playerStatsNBAInfoPointsContent: "Average points scored per game.",
+
+  playerStatsNBAInfoReboundsTitle: "Rebounds",
+  playerStatsNBAInfoReboundsContent: "Average rebounds (offensive + defensive) per game.",
+
+  playerStatsNBAInfoAssistsTitle: "Assists",
+  playerStatsNBAInfoAssistsContent: "Average assists (passes leading to scores) per game.",
+
+  playerStatsNBAInfoFGTitle: "FG %",
+  playerStatsNBAInfoFGContent: "Field goal percentage (successful shots from the field).",
+
+  playerStatsNBAInfo3PTTitle: "3PT %",
+  playerStatsNBAInfo3PTContent: "Three-point shooting percentage.",
+
+  playerStatsNBAInfoMinutesTitle: "Minutes",
+  playerStatsNBAInfoMinutesContent: "Average minutes played per game.",
+
+  playerStatsNBAInfoStealsTitle: "Steals",
+  playerStatsNBAInfoStealsContent: "Average steals (taking ball from opponent) per game.",
+
+  playerStatsNBAInfoBlocksTitle: "Blocks",
+  playerStatsNBAInfoBlocksContent: "Average blocked shots per game.",
+
+  playerStatsNBAInfoTurnoversTitle: "Turnovers",
+  playerStatsNBAInfoTurnoversContent: "Average turnovers (lost possessions) per game.",
+
+  playerStatsNBAInfoFTTitle: "FT %",
+  playerStatsNBAInfoFTContent: "Free throw shooting percentage.",
 
   // Common
   common: {

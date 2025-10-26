@@ -111,13 +111,22 @@ interface AnalysisResult {
     };
   };
   keyInsights: {
-    confidence: string;
-    marketActivity: string;
-    lineShift: string;
-    publicVsSharps: {
-      public: number;
-      sharps: number;
-    };
+    marketConsensus: {
+      display: string;
+      label: string;
+    } | null;
+    bestValue: {
+      display: string;
+      label: string;
+    } | null;
+    offensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
+    defensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
   };
   matchSnapshot: {
     recentPerformance: {
@@ -472,6 +481,15 @@ export default function AnalysisScreen() {
       console.log("Parsed Response:", parsedResponse);
 
       // Now use the parsed response
+      console.log("=== KEY INSIGHTS DEBUG ===");
+      console.log("Full parsedResponse:", JSON.stringify(parsedResponse, null, 2));
+      console.log("keyInsightsNew:", parsedResponse?.keyInsightsNew);
+      console.log("marketConsensus:", parsedResponse?.keyInsightsNew?.marketConsensus);
+      console.log("bestValue:", parsedResponse?.keyInsightsNew?.bestValue);
+      console.log("offensiveEdge:", parsedResponse?.keyInsightsNew?.offensiveEdge);
+      console.log("defensiveEdge:", parsedResponse?.keyInsightsNew?.defensiveEdge);
+      console.log("========================");
+
       const analysisData: AnalysisResult = {
         sport: parsedResponse?.sport || "", // ✅ CRITICAL FIX: Extract sport from API response
         teams: {
@@ -483,13 +501,10 @@ export default function AnalysisScreen() {
           },
         },
         keyInsights: {
-          confidence: parsedResponse?.keyInsights?.confidence || "",
-          marketActivity: parsedResponse?.keyInsights?.marketActivity || "",
-          lineShift: parsedResponse?.keyInsights?.lineShift || "",
-          publicVsSharps: {
-            public: parsedResponse?.keyInsights?.publicVsSharps?.public || 50,
-            sharps: parsedResponse?.keyInsights?.publicVsSharps?.sharps || 50,
-          },
+          marketConsensus: parsedResponse?.keyInsightsNew?.marketConsensus || null,
+          bestValue: parsedResponse?.keyInsightsNew?.bestValue || null,
+          offensiveEdge: parsedResponse?.keyInsightsNew?.offensiveEdge || null,
+          defensiveEdge: parsedResponse?.keyInsightsNew?.defensiveEdge || null,
         },
         matchSnapshot: {
           recentPerformance: {
@@ -509,6 +524,10 @@ export default function AnalysisScreen() {
           breakdown: parsedResponse?.aiAnalysis?.breakdown || "",
         },
       };
+
+      console.log("=== ANALYSIS DATA CREATED ===");
+      console.log("analysisData.keyInsights:", JSON.stringify(analysisData.keyInsights, null, 2));
+      console.log("============================");
 
       setAnalysisResult(analysisData);
       cachedAnalysisResult = analysisData; // Cache the analysis data
@@ -737,121 +756,81 @@ export default function AnalysisScreen() {
 
         {/* Key Insights Card */}
         <Card style={styles.keyInsightsCard}>
-          <Text style={styles.keyInsightsTitle}>
-            {i18n.t("analysisKeyInsights")}
-          </Text>
+          <Text style={styles.keyInsightsTitle}>Key Insights 💸</Text>
+
           <View style={styles.gridContainer}>
-            {/* Confidence Box */}
+            {/* Market Consensus */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
-                  <Image
-                    source={require("../assets/images/ki1.png")}
-                    style={[styles.kIcon, { width: 32, height: 32 }]}
-                    resizeMode="contain"
-                  />
-                </View>
+                <Image
+                  source={require("../assets/images/Fanduel.png")}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisConfidence")}
-                  </Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.confidence}
+                    {analysisResult?.keyInsights?.marketConsensus?.display || "No consensus"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.marketConsensus?.label || "Market Consensus"}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Market Activity Box */}
+            {/* Best Value */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
-                  <Image
-                    source={require("../assets/images/ki2.png")}
-                    style={styles.kIcon}
-                    resizeMode="contain"
-                  />
-                </View>
+                <Image
+                  source={require("../assets/images/Draftkings.png")}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisMarketActivity")}
-                  </Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.marketActivity}
+                    {analysisResult?.keyInsights?.bestValue?.display || "N/A"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.bestValue?.label || "Best Value"}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Line Shift Progress */}
+            {/* Offensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisLineShift")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <Text style={styles.progressValue}>
-                    {analysisResult?.keyInsights.lineShift}
+              <View style={styles.metricContent}>
+                <Image
+                  source={getTeamLogo(analysisResult.teams.home, analysisResult?.sport)}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
                   </Text>
-                  <View style={styles.progressBarContainer}>
-                    <Progress.Bar
-                      progress={
-                        analysisResult?.keyInsights.marketActivity === "High"
-                          ? 0.9
-                          : analysisResult?.keyInsights.marketActivity ===
-                            "Moderate"
-                          ? 0.66
-                          : 0.33
-                      }
-                      color="#FF55D4"
-                      unfilledColor="#FF55D440"
-                      borderWidth={0}
-                      style={[styles.progressBar, styles.lineShiftBar]}
-                    />
-                  </View>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.offensiveEdge?.label || "Offensive Edge"}
+                  </Text>
                 </View>
               </View>
             </View>
 
-            {/* Public vs Sharps Progress */}
+            {/* Defensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisPublicVsSharps")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <View style={styles.percentageContainer}>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.public}%
-                    </Text>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.sharps}%
-                    </Text>
-                  </View>
-                  <View style={styles.progressBarContainer}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.publicBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.public ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.sharpsBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.sharps ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                  </View>
+              <View style={styles.metricContent}>
+                <Image
+                  source={getTeamLogo(analysisResult.teams.away, analysisResult?.sport)}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.defensiveEdge?.label || "Defensive Edge"}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -1568,8 +1547,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   teamLogo: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
   },
   teamName: {
     flex: 1,
@@ -1740,8 +1719,8 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   kIcon: {
-    width: 26,
-    height: 26,
+    width: 36,
+    height: 36,
     resizeMode: "contain",
   },
   unlockText: {

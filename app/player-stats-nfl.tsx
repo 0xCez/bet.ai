@@ -1,37 +1,33 @@
 import React, { useState, useEffect } from "react";
 import {
   View,
-  Image,
+  Text,
   StyleSheet,
   ScrollView,
-  Text,
-  ViewStyle,
+  Pressable,
   Animated,
 } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
 import { LinearGradient } from "expo-linear-gradient";
-import APIService from "../services/api";
-import { GradientButton } from "../components/ui/GradientButton";
-import { BorderButton } from "../components/ui/BorderButton";
-import { TopBar } from "../components/ui/TopBar";
-import { db, auth } from "../firebaseConfig";
-import { BlurText } from "../components/ui/BlurText";
-import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
-import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
-import { usePostHog } from "posthog-react-native";
-import { usePageTransition } from "../hooks/usePageTransition";
-import i18n from "../i18n";
+import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { ScreenBackground } from "@/components/ui/ScreenBackground";
+import { Card } from "@/components/ui/Card";
+import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
+import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
+import { TopBar } from "@/components/ui/TopBar";
+import APIService from "@/services/api";
+import { usePageTransition } from "@/hooks/usePageTransition";
+import i18n from "@/i18n";
+import { auth } from "@/firebaseConfig";
+import { getNFLTeamLogo } from "@/utils/teamLogos";
+import { useRouter } from "expo-router";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 // Static variables to persist player data between screen navigation
 let cachedPlayerResult: PlayerStatsResult | null = null;
 let cachedParams: any = null;
-
-// Track page view time
-let pageEntryTime: number | null = null;
 
 // Interface matching the backend player stats structure
 interface PlayerStatsResult {
@@ -47,7 +43,7 @@ interface PlayerStatsResult {
   playerStats: {
     team1: {
       teamId: number;
-      allPlayers: any; // This is actually an object with team/season/topPlayers/allCategories
+      allPlayers: Array<any>;
       topPlayers: Array<{
         id: string;
         name: string;
@@ -60,7 +56,7 @@ interface PlayerStatsResult {
     };
     team2: {
       teamId: number;
-      allPlayers: any; // This is actually an object with team/season/topPlayers/allCategories
+      allPlayers: Array<any>;
       topPlayers: Array<{
         id: string;
         name: string;
@@ -85,42 +81,34 @@ type PlayerStatsParams = {
   team1Logo?: string;
   team2Logo?: string;
   analysisId?: string;
+  selectedTeam?: string;
+  selectedPlayer?: string;
 };
 
-export default function PlayerStatsScreen() {
+
+// Map position codes to full names
+const getPositionFullName = (position: string) => {
+  const positionMap: { [key: string]: string } = {
+    "QB": "Quarterback",
+    "RB": "Running Back",
+    "WR": "Wide Receiver",
+    "TE": "Tight End",
+    "OL": "Offensive Lineman",
+    "DL": "Defensive Lineman",
+    "LB": "Linebacker",
+    "CB": "Cornerback",
+    "S": "Safety",
+    "K": "Kicker",
+    "P": "Punter",
+  };
+
+  return positionMap[position] || position;
+};
+
+export default function PlayerStatsNBANew() {
   const params = useLocalSearchParams<PlayerStatsParams>();
-  const { isSubscribed } = useRevenueCatPurchases();
-  const posthog = usePostHog();
+  const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
-
-  // Track page view time
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    pageEntryTime = Date.now();
-
-    posthog?.capture("player_stats_page_viewed", {
-      userId: (auth.currentUser as any)?.uid,
-      sport: params.sport,
-      teams: `${params.team1} vs ${params.team2}`,
-    });
-
-    return () => {
-      if (pageEntryTime && auth.currentUser) {
-        const timeSpentMs = Date.now() - pageEntryTime;
-        const timeSpentSeconds = Math.round(timeSpentMs / 1000);
-
-        posthog?.capture("player_stats_page_exit", {
-          userId: (auth.currentUser as any)?.uid,
-          sport: params.sport,
-          teams: `${params.team1} vs ${params.team2}`,
-          timeSpentSeconds: timeSpentSeconds,
-        });
-
-        pageEntryTime = null;
-      }
-    };
-  }, [params.team1, params.team2, params.sport]);
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -135,7 +123,7 @@ export default function PlayerStatsScreen() {
 
   const hasInitializedRef = React.useRef(false);
 
-  // Initialize state, potentially from cache
+  // Initialize state
   const [isLoading, setIsLoading] = useState(
     !isSameAnalysis || !cachedPlayerResult
   );
@@ -143,6 +131,10 @@ export default function PlayerStatsScreen() {
     isSameAnalysis && cachedPlayerResult ? cachedPlayerResult : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(params.selectedTeam || null);
+  const [selectedPlayer, setSelectedPlayer] = useState<any | null>(
+    params.selectedPlayer ? JSON.parse(params.selectedPlayer) : null
+  );
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -160,12 +152,8 @@ export default function PlayerStatsScreen() {
     }
 
     if (params.team1 && params.team2 && params.sport) {
-      console.log(
-        `Player Stats Flow: Starting analysis for ${params.sport}: ${params.team1} vs ${params.team2}`
-      );
       getPlayerStats();
     } else {
-      console.error("Error: Missing required parameters (team1, team2, sport).");
       setError("Missing team data. Please go back and try again.");
       setIsLoading(false);
     }
@@ -178,8 +166,6 @@ export default function PlayerStatsScreen() {
     setError(null);
 
     try {
-      console.log("Fetching player stats data...");
-
       if (!params.sport) {
         throw new Error("Sport parameter is required but missing");
       }
@@ -191,8 +177,6 @@ export default function PlayerStatsScreen() {
         params.team1_code,
         params.team2_code
       );
-
-      console.log("Player Stats Response:", response);
 
       if (response.error) {
         throw new Error(response.error);
@@ -217,159 +201,307 @@ export default function PlayerStatsScreen() {
     }
   };
 
-  // Helper function to render individual player card
-  const renderPlayerCard = (player: any, teamName: string) => {
-    if (!player) return null;
+  // Helper function to calculate total TDs
+  const calculateTotalTDs = (stats: any) => {
+    const passingTDs = stats.passingTouchdowns || 0;
+    const rushingTDs = stats.rushingTouchdowns || 0;
+    return passingTDs + rushingTDs;
+  };
 
-    // Get player stats based on position
-    const stats = player.stats || {};
+  // Helper function to calculate TD percentage
+  const calculateTDPercentage = (stats: any) => {
+    const totalTDs = calculateTotalTDs(stats);
+    const attempts = (stats.attempts || 0) + (stats.rushingAttempts || 0);
+    if (attempts === 0) return "0";
+    return ((totalTDs / attempts) * 100).toFixed(1);
+  };
+
+  // Navigate to info page
+  const navigateToInfo = (section: string) => {
+    router.push({
+      pathname: "/info",
+      params: {
+        section,
+        from: "player-stats-nfl",
+        team1: params.team1,
+        team2: params.team2,
+        sport: params.sport,
+        team1Logo: params.team1Logo,
+        team2Logo: params.team2Logo,
+        analysisId: params.analysisId,
+        selectedTeam: selectedTeam || undefined,
+        selectedPlayer: selectedPlayer ? JSON.stringify(selectedPlayer) : undefined,
+      },
+    });
+  };
+
+  // Render team selection screen
+  const renderTeamSelection = () => {
+    const teams = [
+      { name: params.team1 || "", key: "team1" },
+      { name: params.team2 || "", key: "team2" },
+    ];
 
     return (
-      <View style={styles.playerSection}>
-        {/* Player Header Card */}
-        <View style={[styles.card, styles.headerCard]}>
-          <View style={styles.headerContent}>
-            <Text style={styles.playerName}>{player.name || "Jalen Hurts"}</Text>
-            <Image
-              source={{ uri: `../assets/images/${teamName?.replace(/\s+/g, '_')}.svg` }}
-              style={styles.teamLogo}
-            />
-          </View>
-        </View>
+      <View style={styles.container}>
+        <TopBar showBack={false} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {teams.map((team) => (
+          <Pressable
+            key={team.key}
+            onPress={() => setSelectedTeam(team.key)}
+            style={styles.selectionItem}
+          >
+            <LinearGradient
+              colors={["#0D0D0D", "#161616"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.selectionGradient}
+            >
+              <Image
+                source={getNFLTeamLogo(String(team.name))}
+                style={styles.selectionLogo}
+                contentFit="contain"
+              />
+              <Text style={styles.selectionName}>{team.name}</Text>
+              <Image
+                source={require("../assets/images/icons/chevron.svg")}
+                style={styles.chevronIcon}
+                contentFit="contain"
+              />
+            </LinearGradient>
+          </Pressable>
+        ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
-        {/* QB Rating & Total TDs Row */}
-        <View style={styles.topStatsRow}>
-          {/* QB Rating Card */}
-          <View style={[styles.card, styles.statCard]}>
-            <Text style={styles.sectionLabel}>QB RATING</Text>
-            <View style={styles.statContent}>
-              <Text style={styles.statValue}>
-                {stats.qbRating?.toFixed(1) || "103.7"}
-              </Text>
-              <Text style={styles.statDescription}>
-                Ranked on {stats.passingYards || "158.3"} points
-              </Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: `${Math.min((stats.qbRating || 103.7) / 158.3 * 100, 100)}%` }
-                ]} />
-              </View>
+  // Render player selection screen
+  const renderPlayerSelection = () => {
+    if (!playerResult || !selectedTeam) return null;
+
+    const teamData = selectedTeam === "team1" ? playerResult.playerStats.team1 : playerResult.playerStats.team2;
+    const teamName = selectedTeam === "team1" ? params.team1 : params.team2;
+    const topPlayers = teamData.topPlayers || [];
+
+    return (
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {topPlayers.map((player: any) => (
+          <Pressable
+            key={player.id}
+            onPress={() => setSelectedPlayer({ ...player, teamName })}
+            style={styles.selectionItem}
+          >
+            <LinearGradient
+              colors={["#0D0D0D", "#161616"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.selectionGradient}
+            >
+              <Image
+                source={getNFLTeamLogo(String(teamName || ""))}
+                style={styles.selectionLogo}
+                contentFit="contain"
+              />
+              <Text style={styles.selectionName}>{player.name}</Text>
+              <Image
+                source={require("../assets/images/icons/chevron.svg")}
+                style={styles.chevronIcon}
+                contentFit="contain"
+              />
+            </LinearGradient>
+          </Pressable>
+        ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // Render player stats
+  const renderPlayerStats = () => {
+    if (!selectedPlayer) return null;
+
+    const player = selectedPlayer;
+    const stats = player.stats || {};
+    const qbRating = stats.qbRating || 0;
+    const maxQBRating = 158.3;
+    const totalTDs = calculateTotalTDs(stats);
+    const tdPercentage = parseFloat(calculateTDPercentage(stats));
+    const passYardsPerGame = stats.passingYardsPerGame || 0;
+    const passTDs = stats.passingTouchdowns || 0;
+    const rushYardsPerGame = stats.rushingYardsPerGame || 0;
+    const rushTDs = stats.rushingTouchdowns || 0;
+    const longestPass = stats.longestPass || 0;
+    const sacks = stats.sacks || 0;
+
+    return (
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedPlayer(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+
+        {/* Top Card - Player Header */}
+        <Card style={styles.topCard}>
+          <View style={styles.playerHeader}>
+            <View style={styles.nameLogoRow}>
+              <Text style={styles.playerName}>{player.name}</Text>
+              <Image
+                source={getNFLTeamLogo(String(player.teamName || ""))}
+                style={styles.teamLogo}
+                contentFit="contain"
+              />
             </View>
           </View>
+        </Card>
+
+        {/* Stats Row - QB Rating and Total TDs */}
+        <View style={styles.statsRow}>
+          {/* QB Rating Card */}
+          <Card style={styles.statCard}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("playerStatsQBRating")}</Text>
+              <Text style={styles.statValue}>{qbRating.toFixed(1)}</Text>
+              <Text style={styles.statDescription}>
+                {i18n.t("playerStatsRankedOn")} {maxQBRating} {i18n.t("playerStatsPoints")}
+              </Text>
+              <GradientProgressBar value={qbRating} maxValue={maxQBRating} />
+            </View>
+          </Card>
 
           {/* Total TDs Card */}
-          <View style={[styles.card, styles.statCard]}>
-            <Text style={styles.sectionLabel}>TOTAL TD's</Text>
+          <Card style={styles.statCard}>
             <View style={styles.statContent}>
-              <Text style={styles.statValue}>
-                {(stats.passingTouchdowns || 18) + (stats.rushingTouchdowns || 14)}
-              </Text>
+              <Text style={styles.statLabel}>{i18n.t("playerStatsTotalTDs")}</Text>
+              <Text style={styles.statValue}>{totalTDs}</Text>
               <Text style={styles.statDescription}>
-                {((stats.passingTouchdowns || 18) / ((stats.passingTouchdowns || 18) + (stats.rushingTouchdowns || 14)) * 100).toFixed(1)}% across all attempts
+                {tdPercentage}% {i18n.t("playerStatsAcrossAllAttempts")}
               </Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: "68%" }
-                ]} />
-              </View>
+              <GradientProgressBar value={tdPercentage} maxValue={100} />
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Core KPIs Card */}
-        <View style={[styles.card, styles.coreKpisCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Core KPIs 🦾</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+        <Card style={styles.coreKPIsCard}>
+          <View style={styles.coreKPIsContent}>
+            {/* Header */}
+            <View style={styles.coreKPIsHeader}>
+              <Text style={styles.coreKPIsTitle}>{i18n.t("playerStatsCoreKPIs")}</Text>
+              <Pressable onPress={() => navigateToInfo("coreKPIs")}>
+                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
-          {/* First Row - Pass Yards, Pass TDs */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats.passingYardsPerGame?.toFixed(1) || "193.5"}
-                </Text>
-                <Text style={styles.kpiLabel}>Pass Yards per game</Text>
+            {/* First Row of KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/meter.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{passYardsPerGame.toFixed(1)}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsPassYardsPerGame")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/target.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{passTDs}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsPassTDs")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats.passingTouchdowns || "18"}
-                </Text>
-                <Text style={styles.kpiLabel}>Pass TDs</Text>
+
+            {/* Second Row of KPIs */}
+            <View style={[styles.kpiRow, styles.kpiRowLast]}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/bolt.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{rushYardsPerGame.toFixed(1)}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsRushYardsPerGame")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/steps.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{rushTDs}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsRushTDs")}</Text>
+                </View>
               </View>
             </View>
           </View>
+        </Card>
 
-          {/* Second Row - Rush Yards, Rush TDs */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats.rushingYardsPerGame?.toFixed(1) || "42.0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Rush Yards per game</Text>
-              </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats.rushingTouchdowns || "14"}
-                </Text>
-                <Text style={styles.kpiLabel}>Rush TDs</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Advanced Metrics Row */}
-        <View style={styles.advancedRow}>
+        {/* Stats Row - Longest Pass and Sacks Taken */}
+        <View style={styles.statsRow}>
           {/* Longest Pass Card */}
-          <View style={[styles.card, styles.advancedCard]}>
-            <Text style={styles.sectionLabel}>LONGEST PASS</Text>
-            <View style={styles.advancedContent}>
-              <Text style={styles.advancedValue}>
-                {stats.longestPass || "67"}
-              </Text>
-              <Text style={styles.advancedLabel}>Yards</Text>
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("playerStatsLongestPass")}</Text>
+              <Text style={styles.statValue}>{longestPass}</Text>
+              <Text style={styles.statDescription}>{i18n.t("playerStatsYards")}</Text>
             </View>
-          </View>
+          </Card>
 
           {/* Sacks Taken Card */}
-          <View style={[styles.card, styles.advancedCard]}>
-            <Text style={styles.sectionLabel}>SACKS TAKEN</Text>
-            <View style={styles.advancedContent}>
-              <Text style={styles.advancedValue}>
-                {stats.sacks || "38"}
-              </Text>
-              <Text style={styles.advancedLabel}>On all season</Text>
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("playerStatsSacksTaken")}</Text>
+              <Text style={styles.statValue}>{sacks}</Text>
+              <Text style={styles.statDescription}>{i18n.t("playerStatsOnAllSeason")}</Text>
             </View>
-          </View>
+          </Card>
         </View>
+        </ScrollView>
       </View>
     );
+  };
+
+  // Main render logic
+  const renderContent = () => {
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      );
+    }
+
+    if (selectedPlayer) {
+      return renderPlayerStats();
+    }
+
+    if (selectedTeam) {
+      return renderPlayerSelection();
+    }
+
+    return renderTeamSelection();
   };
 
   // Shimmer rendering
@@ -413,118 +545,47 @@ export default function PlayerStatsScreen() {
     </View>
   );
 
-  // Main content rendering
-  const renderPlayerContent = () => {
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      );
-    }
-
-    // Get top players from both teams - use the correct data path
-    const team1TopPlayers = playerResult?.playerStats?.team1?.topPlayers || [];
-    const team2TopPlayers = playerResult?.playerStats?.team2?.topPlayers || [];
-
-    return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.analysisContent}
-      >
-        {/* Team 1 Players */}
-        {team1TopPlayers.map((player, index) => (
-          <View key={`team1-${index}`}>
-            {renderPlayerCard(player, params.team1 || "")}
-          </View>
-        ))}
-
-        {/* Team 2 Players */}
-        {team2TopPlayers.map((player, index) => (
-          <View key={`team2-${index}`}>
-            {renderPlayerCard(player, params.team2 || "")}
-          </View>
-        ))}
-
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          <BorderButton
-            onPress={() => {
-              router.back();
-            }}
-            containerStyle={styles.floatingButton}
-            borderColor="#00C2E0"
-            backgroundColor="#00C2E020"
-            opacity={1}
-            borderWidth={1}
-          >
-            <Text style={styles.buttonText}>Back to Analysis</Text>
-          </BorderButton>
-
-          <GradientButton
-            onPress={getPlayerStats}
-            style={{ marginTop: 16 }}
-          >
-            <Text style={styles.buttonText}>Refresh Stats 👤</Text>
-          </GradientButton>
-        </View>
-      </ScrollView>
-    );
-  };
-
-  // Main render
   return (
-    <ScreenBackground hideBg>
-      <TopBar />
+    <ScreenBackground>
+      <Animated.View style={[styles.mainContainer, animatedStyle]}>
+        {isLoading ? renderShimmer() : renderContent()}
+      </Animated.View>
 
-      <View style={styles.container}>
-        <Animated.ScrollView
-          showsVerticalScrollIndicator={false}
-          style={[styles.scrollView, animatedStyle]}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.analysisContainer}>
-            {isLoading ? renderShimmer() : renderPlayerContent()}
-          </View>
-        </Animated.ScrollView>
-
-        {/* Floating Bottom Navigation */}
-        <FloatingBottomNav
-          activeTab="players"
-          analysisData={{
-            team1: params.team1,
-            team2: params.team2,
-            sport: params.sport,
-            team1Logo: params.team1Logo,
-            team2Logo: params.team2Logo,
-            analysisId: params.analysisId, // Pass analysisId if available
-          }}
-        />
-      </View>
+      {/* Floating Bottom Nav */}
+      <FloatingBottomNav
+        activeTab="players"
+        analysisData={{
+          team1: params.team1,
+          team2: params.team2,
+          sport: params.sport,
+          team1Logo: params.team1Logo,
+          team2Logo: params.team2Logo,
+          analysisId: params.analysisId,
+        }}
+      />
     </ScreenBackground>
   );
 }
 
-// Styles - EXACTLY matching Figma dimensions
 const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    paddingBottom: 0,
   },
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  scrollContent: {
-    paddingBottom: 120, // Extra padding for floating nav
-  },
-  analysisContainer: {
+  contentContainer: {
+    paddingHorizontal: 16,
     paddingTop: 20,
-    flex: 1,
+    paddingBottom: 120,
   },
   shimmerContainer: {
     width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   shimmerGroup: {
     width: "100%",
@@ -546,221 +607,191 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     width: "100%",
   },
-  analysisContent: {
-    flex: 1,
-    paddingBottom: 40,
-  },
   errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   errorText: {
-    color: "#424242",
+    color: "#FF5252",
     fontSize: 16,
     textAlign: "center",
     fontFamily: "Aeonik-Regular",
   },
-
-  // Player Section Styles
-  playerSection: {
-    marginBottom: 30,
-  },
-
-  // Universal Card Styles
-  card: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40,
-    borderWidth: 1,
-    borderColor: "#212121",
-    padding: 20,
-    marginBottom: 15,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "500",
+  selectionTitle: {
     fontFamily: "Aeonik-Medium",
+    fontSize: 28,
+    color: "#FFFFFF",
+    marginBottom: 24,
   },
-  infoIcon: {
-    fontSize: 18,
-    color: "#ffffff",
+  selectionItem: {
+    height: 85.87,
+    borderRadius: 14,
+    marginBottom: 16,
+    overflow: "hidden",
   },
-
-  // Header Card Styles - Match Figma exactly
-  headerCard: {
-    backgroundColor: "#0c0c0c",
-    height: 80,
-    justifyContent: "center",
-    borderRadius: 40,
-  },
-  headerContent: {
+  selectionGradient: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 30,
+    paddingHorizontal: 22,
+    gap: 12,
+  },
+  selectionLogo: {
+    width: 58.11,
+    height: 38.28,
+  },
+  selectionName: {
+    flex: 1,
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20,
+    color: "#FFFFFF",
+  },
+  chevronIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#FFFFFF",
+  },
+  backButton: {
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16,
+    color: "#00C2E0",
+  },
+  topCard: {
+    height: 85.87,
+  },
+  playerHeader: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13.44,
+    paddingHorizontal: 22,
+    gap: 4,
+  },
+  nameLogoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   playerName: {
-    color: "#ffffff",
-    fontSize: 18,
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    flex: 1,
-    textAlign: "left",
+    fontSize: 20,
+    color: "#FFFFFF",
   },
   teamLogo: {
-    width: 45,
-    height: 45,
-    borderRadius: 22,
+    width: 58.11,
+    height: 38.28,
   },
-
-  // Top Stats Row (QB Rating & Total TDs)
-  topStatsRow: {
+  position: {
+    fontFamily: "Aeonik-Light",
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.8,
+  },
+  statsRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 15,
+    gap: 16,
+    marginTop: 16,
   },
   statCard: {
     flex: 1,
-    height: 160,
-    padding: 15,
+    height: 132.55,
   },
-  sectionLabel: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    opacity: 0.6,
-    marginBottom: 15,
+  statCardSmall: {
+    flex: 1,
+    height: 117.1,
   },
   statContent: {
     flex: 1,
-    justifyContent: "space-between",
+    paddingVertical: 20.15,
+    paddingHorizontal: 21.83,
+    gap: 8,
+  },
+  statLabel: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.6,
   },
   statValue: {
-    color: "#ffffff",
-    fontSize: 24,
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
+    fontSize: 26.87,
+    color: "#FFFFFF",
   },
   statDescription: {
-    color: "#ffffff",
-    fontSize: 12,
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    marginBottom: 8,
+    fontSize: 11.42,
+    color: "#FFFFFF",
+    marginBottom: 4,
   },
-  progressBarContainer: {
-    height: 12,
-    borderRadius: 100,
-    position: "relative",
-    overflow: "hidden",
-    backgroundColor: "#333333",
+  coreKPIsCard: {
+    marginTop: 16,
   },
-  progressBar: {
-    flex: 1,
-    height: "100%",
+  coreKPIsContent: {
+    paddingVertical: 22,
+    paddingHorizontal: 0,
   },
-  progressIndicator: {
-    position: "absolute",
-    top: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+  coreKPIsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
   },
-
-  // Core KPIs Card Styles - Match Figma exactly
-  coreKpisCard: {
-    minHeight: 200,
-    padding: 15,
+  coreKPIsTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  coreKPIsInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
   },
   kpiRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
+    paddingHorizontal: 20.15,
+    gap: 20,
+    marginBottom: 16,
+  },
+  kpiRowLast: {
+    marginBottom: 0,
   },
   kpiItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 60,
+    gap: 12,
+  },
+  kpiTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  iconContainer: {
+    width: 45.11,
+    height: 44.17,
+    borderRadius: 12.62,
+    backgroundColor: "#161616",
+    justifyContent: "center",
+    alignItems: "center",
   },
   kpiIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
-    backgroundColor: "#161616",
-    marginRight: 10,
-  },
-  kpiContent: {
-    flex: 1,
+    width: 24,
+    height: 24,
   },
   kpiValue: {
-    color: "#ffffff",
-    fontSize: 16,
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 2,
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
   kpiLabel: {
-    color: "#ffffff",
-    fontSize: 10,
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    opacity: 0.8,
-  },
-
-  // Advanced Metrics Row
-  advancedRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 15,
-  },
-  advancedCard: {
-    flex: 1,
-    height: 140,
-    padding: 15,
-  },
-  advancedContent: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  advancedValue: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  advancedLabel: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-  },
-
-
-  // Action Buttons
-  actionContainer: {
-    marginBottom: 40,
-  },
-  buttonText: {
-    fontSize: 18,
+    fontSize: 11.42,
     color: "#FFFFFF",
-    fontFamily: "Aeonik-Medium",
-  },
-  floatingButton: {
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    padding: 10,
   },
 });
