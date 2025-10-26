@@ -229,6 +229,9 @@ export default function AnalysisScreen() {
     isSameAnalysis && cachedDisplayImageUrl ? cachedDisplayImageUrl : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(
+    analysisId || null
+  );
   const [expandedCards, setExpandedCards] = useState(
     isSameAnalysis
       ? cachedExpandedCards
@@ -383,6 +386,7 @@ export default function AnalysisScreen() {
 
           setAnalysisResult(analysisData);
           cachedAnalysisResult = analysisData; // Cache the result
+          setCurrentAnalysisId(docId); // Set the current analysis ID
           console.log("Set analysis result from history:", analysisData);
           console.log("SPORT FROM HISTORY:", analysisData.sport);
           // Set the display image URL from the fetched data
@@ -514,6 +518,7 @@ export default function AnalysisScreen() {
 
           await setDoc(newAnalysisRef, analysisDataToSave);
           hasAnalysisSaved.current = true; // Mark as saved
+          setCurrentAnalysisId(newAnalysisRef.id); // Save the analysis ID to state
           console.log(
             "Analysis saved successfully to Firestore with ID:",
             newAnalysisRef.id
@@ -1289,6 +1294,7 @@ export default function AnalysisScreen() {
               sport: analysisResult?.sport,
               team1Logo: analysisResult?.teams?.logos?.home,
               team2Logo: analysisResult?.teams?.logos?.away,
+              analysisId: currentAnalysisId || undefined,
             }}
           />
         )}

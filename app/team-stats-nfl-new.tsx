@@ -695,6 +695,9 @@ export default function TeamStatsNFLNew() {
           team1: params.team1,
           team2: params.team2,
           sport: params.sport,
+          team1Logo: params.team1Logo,
+          team2Logo: params.team2Logo,
+          analysisId: params.analysisId,
         }}
       />
     </ScreenBackground>
