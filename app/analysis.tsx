@@ -138,10 +138,9 @@ interface AnalysisResult {
     bettingSignal: string;
     breakdown: string;
   };
-  // NEW: Add full data access for chatbot
-  marketIntelligence?: any;
-  teamStats?: any;
-  playerStats?: any;
+  // Lightweight data for chatbot context (~4k total)
+  marketIntelligence?: any;  // Small or null
+  teamStats?: any;  // ~2k chars - reasonable for chatbot
 }
 
 // Type for the data passed from history screen (matches Firestore doc structure)
@@ -490,10 +489,9 @@ export default function AnalysisScreen() {
           bettingSignal: parsedResponse?.aiAnalysis?.bettingSignal || "",
           breakdown: parsedResponse?.aiAnalysis?.breakdown || "",
         },
-        // NEW: Pass full data to chatbot
+        // Lightweight data for chatbot context (~4k chars total, not 80k)
         marketIntelligence: parsedResponse?.marketIntelligence,
         teamStats: parsedResponse?.teamStats,
-        playerStats: parsedResponse?.playerStats,
       };
 
       setAnalysisResult(analysisData);

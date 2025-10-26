@@ -442,13 +442,21 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             jsonResponse.image_url = imageUrl;
             jsonResponse.sport = sport;
 
-            // NEW: Add Market Intelligence, Team Stats, and Player Stats to response
-            jsonResponse.marketIntelligence = marketIntelligence;
-            jsonResponse.teamStats = teamStats;
-            jsonResponse.playerStats = playerStats;
+            // Add lightweight data for chatbot context (~4k chars total)
+            jsonResponse.marketIntelligence = marketIntelligence;  // ~2 chars (null) or small
+            jsonResponse.teamStats = teamStats;  // ~2k chars - reasonable
 
-            // NEW: Calculate Key Insights V2 from existing data
-            jsonResponse.keyInsightsNew = calculateKeyInsightsNew(marketIntelligence, teamStats);
+            // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
+            jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
+              marketIntelligence,
+              teamStats,
+              jsonResponse.teams?.home || team1,
+              jsonResponse.teams?.away || team2
+            );
+
+            // NOTE: We do NOT include playerStats here because it's massive (55k+ chars).
+            // PlayerStats contains game-by-game data for 20+ players and bloats the response to 80k lines.
+            // The specific Player Stats page fetches this data separately when needed.
 
             // Return the JSON object immediately without waiting for cache save
             res.status(200).json(jsonResponse);
@@ -3028,8 +3036,12 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 
     console.log(`Product Update Test - Processing ${sport}: ${team1} vs ${team2}`);
 
-    // Get team IDs (reuse existing function)
-    const { team1Id, team2Id, sport_type_odds } = await findTeamIds(sport, team1, team1_code, team2, team2_code);
+    // Normalize sport name for internal functions (they expect 'nfl' not 'americanfootball_nfl')
+    const normalizedSport = sport.replace('americanfootball_', '').replace('basketball_', '').replace('baseball_', '');
+    console.log(`SPORT NORMALIZATION: '${sport}' → '${normalizedSport}'`);
+
+    // Get team IDs (reuse existing function) - use normalized sport
+    const { team1Id, team2Id, team1StatpalCode, team2StatpalCode, sport_type_odds } = await findTeamIds(normalizedSport, team1, team1_code, team2, team2_code);
 
     if (!team1Id || !team2Id) {
       return res.status(400).json({
@@ -3040,9 +3052,9 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
     // Test Market Intelligence, Team Stats, Player Stats, and Game Data
     const [marketIntelligence, teamStats, playerStats, gameData] = await Promise.all([
       getMarketIntelligenceDataTest(sport_type_odds, team1, team2),
-      getTeamStatsDataTest(sport, team1Id, team2Id),
-      getPlayerStatsForSport(sport, team1Id, team2Id),
-      getGameData(sport, team1Id, team2Id, team1_code, team2_code, null, null) // Add game data for PPG, home/away, etc.
+      getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
+      getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
+      getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode) // Use normalized sport name
     ]);
 
     // CRITICAL: Match analyzeImage structure EXACTLY
@@ -3074,6 +3086,16 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
       playerStats,
       // Game Data (last10Games for PPG, home/away, recent form)
       gameData,
+      // NEW: Key Insights V2
+      keyInsightsNew: calculateKeyInsightsNew(
+        {
+          bestLines: marketIntelligence.bestLines,
+          evOpportunities: marketIntelligence.evOpportunities || marketIntelligence.evAnalysis?.uiOpportunities,
+        },
+        enhanceTeamStatsWithGameData(teamStats, gameData),
+        team1,
+        team2
+      ),
       // Metadata (same as analyzeImage)
       timestamp: new Date().toISOString(),
       teamIds: { team1Id, team2Id }
@@ -5659,7 +5681,8 @@ function formatSoccerOddsTable(bookmakers, event) {
 // ====================================================================
 
 // Calculate Market Consensus - Convert consensus ML to win probability
-function calculateMarketConsensus(marketIntelligence) {
+// Output format: "65% 76ers" for UI display
+function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
   try {
     const consensusHomeML = marketIntelligence?.bestLines?.consensusHomeML;
     const consensusAwayML = marketIntelligence?.bestLines?.consensusAwayML;
@@ -5677,13 +5700,13 @@ function calculateMarketConsensus(marketIntelligence) {
       const drawPercent = Math.round((impliedDraw / total) * 100);
       const awayPercent = Math.round((impliedAway / total) * 100);
 
+      const favorite = homePercent > awayPercent ? "home" : "away";
+      const favoritePercent = Math.max(homePercent, awayPercent);
+      const favoriteTeam = favorite === "home" ? homeTeam : awayTeam;
+
       return {
-        type: "3-way",
-        homePercent,
-        drawPercent,
-        awayPercent,
-        favorite: homePercent > awayPercent ? "home" : "away",
-        favoritePercent: Math.max(homePercent, awayPercent)
+        display: `${favoritePercent}% ${favoriteTeam}`,
+        label: "Market Fav"
       };
     }
 
@@ -5697,12 +5720,13 @@ function calculateMarketConsensus(marketIntelligence) {
       const homePercent = Math.round((impliedHome / total) * 100);
       const awayPercent = Math.round((impliedAway / total) * 100);
 
+      const favorite = homePercent > 50 ? "home" : "away";
+      const favoritePercent = Math.max(homePercent, awayPercent);
+      const favoriteTeam = favorite === "home" ? homeTeam : awayTeam;
+
       return {
-        type: "2-way",
-        homePercent,
-        awayPercent,
-        favorite: homePercent > 50 ? "home" : "away",
-        favoritePercent: Math.max(homePercent, awayPercent)
+        display: `${favoritePercent}% ${favoriteTeam}`,
+        label: "Market Fav"
       };
     }
 
@@ -5714,7 +5738,8 @@ function calculateMarketConsensus(marketIntelligence) {
 }
 
 // Find Best Value - Highest +EV opportunity OR lowest vig on favorite
-function findBestValue(marketIntelligence) {
+// Output format: "Home ML at DK" for UI display
+function findBestValue(marketIntelligence, homeTeam, awayTeam) {
   try {
     const opportunities = marketIntelligence?.evOpportunities?.opportunities || [];
 
@@ -5725,14 +5750,17 @@ function findBestValue(marketIntelligence) {
       // Sort by EV and get the best one
       const bestEV = evBets.sort((a, b) => (b.ev || 0) - (a.ev || 0))[0];
 
+      // Determine if it's home or away team
+      const isHome = bestEV.team === homeTeam;
+      const teamLabel = isHome ? "Home" : "Away";
+      const marketType = bestEV.market === "Moneyline" ? "ML" : bestEV.market;
+
+      // Get bookmaker short name (DK, FD, MGM, etc.)
+      const bookmakerShort = getBookmakerShortName(bestEV.bookmaker);
+
       return {
-        hasValue: true,
-        isEV: true,
-        type: bestEV.market || "Moneyline",
-        team: bestEV.team,
-        ev: bestEV.ev,
-        bookmaker: bestEV.bookmaker,
-        odds: bestEV.odds || bestEV.bookOdds
+        display: `${teamLabel} ${marketType} at ${bookmakerShort}`,
+        label: "Best Value"
       };
     }
 
@@ -5746,43 +5774,63 @@ function findBestValue(marketIntelligence) {
         .sort((a, b) => (a.vig || 999) - (b.vig || 999))[0];
 
       if (lowestVigML) {
+        const bookmakerShort = getBookmakerShortName(lowestVigML.bookmaker);
         return {
-          hasValue: true,
-          isEV: false,
-          type: "Moneyline (Lowest Vig)",
-          vig: lowestVigML.vig,
-          bookmaker: lowestVigML.bookmaker,
-          message: `Best price on favorite: ${lowestVigML.vig}% vig`
+          display: `Home ML at ${bookmakerShort}`,
+          label: "Best Value"
         };
       }
     }
 
     // STEP 3: Fallback - truly efficient market
     return {
-      hasValue: false,
-      message: "Efficient market"
+      display: "Efficient market",
+      label: "Best Value"
     };
   } catch (error) {
     console.error('Error finding best value:', error);
-    return { hasValue: false, message: "Unable to calculate" };
+    return { display: "Unable to calculate", label: "Best Value" };
   }
 }
 
+// Helper function to get short bookmaker names
+function getBookmakerShortName(bookmaker) {
+  const shortNames = {
+    'DraftKings': 'DK',
+    'FanDuel': 'FD',
+    'BetMGM': 'MGM',
+    'Caesars': 'CZR',
+    'BetRivers': 'Rivers',
+    'Pinnacle': 'Pinnacle',
+    'LowVig': 'LowVig',
+    'BetOnline.ag': 'BOL',
+    'Bovada': 'Bovada',
+    'BetUS': 'BetUS',
+    'MyBookie.ag': 'MyBookie',
+    'Fanatics': 'Fanatics',
+    'Hard Rock Bet': 'HardRock',
+    'ESPN BET': 'ESPN'
+  };
+
+  return shortNames[bookmaker] || bookmaker;
+}
+
 // Calculate Offensive Edge - Scoring power differential
-function calculateOffensiveEdge(teamStats) {
+// Output format: "+7.2 PPG" for UI display (positive = team1 advantage)
+function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
   try {
     const team1PPG = teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
     const team2PPG = teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
 
     const differential = team1PPG - team2PPG;
-    const absDiff = Math.abs(differential);
+    const roundedDiff = Math.round(differential * 10) / 10;
+
+    // Format with + or - sign
+    const sign = roundedDiff > 0 ? "+" : "";
 
     return {
-      team1PPG: Math.round(team1PPG * 10) / 10,
-      team2PPG: Math.round(team2PPG * 10) / 10,
-      differential: Math.round(differential * 10) / 10,
-      leader: differential > 0 ? "team1" : "team2",
-      advantage: Math.round(absDiff * 10) / 10
+      display: `${sign}${roundedDiff} PPG`,
+      label: "Offensive Edge"
     };
   } catch (error) {
     console.error('Error calculating offensive edge:', error);
@@ -5791,21 +5839,23 @@ function calculateOffensiveEdge(teamStats) {
 }
 
 // Calculate Defensive Edge - Points allowed differential
-function calculateDefensiveEdge(teamStats) {
+// Output format: "-3.7 PPG" for UI display (negative = team1 has better defense)
+function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
   try {
     const team1OppPPG = teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
     const team2OppPPG = teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
 
     // Lower is better for defense, so reverse the logic
-    const differential = team2OppPPG - team1OppPPG; // Positive = team1 has better defense
-    const absDiff = Math.abs(differential);
+    // Positive differential = team1 has better defense (allows fewer points)
+    const differential = team2OppPPG - team1OppPPG;
+    const roundedDiff = Math.round(differential * 10) / 10;
+
+    // Format with + or - sign
+    const sign = roundedDiff > 0 ? "+" : "";
 
     return {
-      team1OppPPG: Math.round(team1OppPPG * 10) / 10,
-      team2OppPPG: Math.round(team2OppPPG * 10) / 10,
-      differential: Math.round(differential * 10) / 10,
-      leader: differential > 0 ? "team1" : "team2", // Team with LOWER opp PPG
-      advantage: Math.round(absDiff * 10) / 10
+      display: `${sign}${roundedDiff} PPG`,
+      label: "Defensive Edge"
     };
   } catch (error) {
     console.error('Error calculating defensive edge:', error);
@@ -5814,12 +5864,12 @@ function calculateDefensiveEdge(teamStats) {
 }
 
 // Master function to calculate all new Key Insights
-function calculateKeyInsightsNew(marketIntelligence, teamStats) {
+function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam) {
   return {
-    marketConsensus: calculateMarketConsensus(marketIntelligence),
-    bestValue: findBestValue(marketIntelligence),
-    offensiveEdge: calculateOffensiveEdge(teamStats),
-    defensiveEdge: calculateDefensiveEdge(teamStats)
+    marketConsensus: calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam),
+    bestValue: findBestValue(marketIntelligence, homeTeam, awayTeam),
+    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam),
+    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam)
   };
 }
 
