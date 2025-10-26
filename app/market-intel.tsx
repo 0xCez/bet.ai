@@ -16,10 +16,12 @@ import { Card } from "@/components/ui/Card";
 import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
 import { GaugeProgressBar } from "@/components/ui/GaugeProgressBar";
 import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
+import { TopBar } from "@/components/ui/TopBar";
 import APIService from "@/services/api";
 import { usePageTransition } from "@/hooks/usePageTransition";
 import i18n from "@/i18n";
 import { auth } from "@/firebaseConfig";
+import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -158,14 +160,27 @@ const formatOdds = (decimalOdds?: number): string => {
 
 // Helper function to get team display name
 const getTeamDisplayName = (teamName?: string): string => {
-  if (!teamName) return "Team";
+  if (!teamName) return "TEAM";
 
-  // Special cases
-  if (teamName.includes('Washington')) return 'WAS Wizards';
-  if (teamName.includes('Philadelphia') && teamName.includes('76')) return '76ers';
+  // Default: return last word (team nickname), capitalized
+  return (teamName.split(' ').pop() || teamName).toUpperCase();
+};
 
-  // Default: return last word (team nickname)
-  return teamName.split(' ').pop() || teamName;
+// Helper function to get team logo based on sport
+const getTeamLogo = (teamName: string, sport?: string) => {
+  if (!sport || !teamName) return require("../assets/images/logo.png");
+
+  switch (sport.toLowerCase()) {
+    case 'nba':
+      return getNBATeamLogo(teamName);
+    case 'nfl':
+      return getNFLTeamLogo(teamName);
+    case 'soccer':
+    case 'football':
+      return getSoccerTeamLogo(teamName);
+    default:
+      return require("../assets/images/logo.png");
+  }
 };
 
 export default function MarketIntelNew() {
@@ -363,7 +378,7 @@ export default function MarketIntelNew() {
                 <View style={styles.tableRow}>
                   <View style={styles.teamColumn}>
                     <Image
-                      source={require("../assets/images/logo.png")}
+                      source={getTeamLogo(params.team1 || "", params.sport)}
                       style={styles.teamLogo}
                       contentFit="contain"
                     />
@@ -392,7 +407,7 @@ export default function MarketIntelNew() {
                 <View style={styles.tableRow}>
                   <View style={styles.teamColumn}>
                     <Image
-                      source={require("../assets/images/logo.png")}
+                      source={getTeamLogo(params.team2 || "", params.sport)}
                       style={styles.teamLogo}
                       contentFit="contain"
                     />
@@ -771,7 +786,7 @@ export default function MarketIntelNew() {
                 <View style={styles.tableRow}>
                   <View style={styles.teamColumn}>
                     <Image
-                      source={require("../assets/images/logo.png")}
+                      source={getTeamLogo(params.team1 || "", params.sport)}
                       style={styles.teamLogo}
                       contentFit="contain"
                     />
@@ -804,7 +819,7 @@ export default function MarketIntelNew() {
                 <View style={styles.tableRow}>
                   <View style={styles.teamColumn}>
                     <Image
-                      source={require("../assets/images/logo.png")}
+                      source={getTeamLogo(params.team2 || "", params.sport)}
                       style={styles.teamLogo}
                       contentFit="contain"
                     />
@@ -851,7 +866,7 @@ export default function MarketIntelNew() {
             </View>
 
             {/* Dynamic Line Items */}
-            {marketResult?.marketIntelligence?.evOpportunities?.opportunities && 
+            {marketResult?.marketIntelligence?.evOpportunities?.opportunities &&
              marketResult.marketIntelligence.evOpportunities.opportunities.length > 0 ? (
               <View style={styles.linesList}>
                 {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
@@ -869,8 +884,18 @@ export default function MarketIntelNew() {
                 ))}
               </View>
             ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No EV+ or arbitrage opportunities available</Text>
+              <View style={styles.linesList}>
+                <View style={styles.lineItem}>
+                  <Image
+                    source={require("../assets/images/noevopps.png")}
+                    style={styles.bookmakerLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.lineTextContainer}>
+                    <Text style={styles.opportunityBigText}>No EV+ Opportunities</Text>
+                    <Text style={styles.lineSmallText}>No EV+ or arbitrage opportunities available</Text>
+                  </View>
+                </View>
               </View>
             )}
           </View>
@@ -889,6 +914,7 @@ export default function MarketIntelNew() {
   // Main render
   return (
     <ScreenBackground>
+      <TopBar showBack={false} />
       <Animated.View style={[styles.mainContainer, animatedStyle]}>
         {isLoading ? renderShimmer() : renderMarketContent()}
       </Animated.View>
@@ -1018,9 +1044,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   bookmakerLogo: {
-    width: 40.31,
-    height: 40.31,
-    borderRadius: 20.155,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   lineTextContainer: {
     flex: 1,
@@ -1028,12 +1054,12 @@ const styles = StyleSheet.create({
   },
   lineBigText: {
     fontFamily: "Aeonik-Medium",
-    fontSize: 15,
+    fontSize: 16.5,
     color: "#FFFFFF",
   },
   lineSmallText: {
     fontFamily: "Aeonik-Light",
-    fontSize: 13,
+    fontSize: 14,
     color: "#FFFFFF",
     opacity: 0.7,
   },
@@ -1081,13 +1107,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dataColumn: {
-    flex: 1,
+    flex: 0.85,
     alignItems: "center",
   },
   dataCell: {
-    width: 44.34,
-    height: 44.34,
-    borderRadius: 12.65,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     backgroundColor: "#161616",
     borderWidth: 1,
     borderColor: "#212121",
@@ -1111,12 +1137,12 @@ const styles = StyleSheet.create({
   },
   dataValue: {
     fontFamily: "Aeonik-Medium",
-    fontSize: 10,
+    fontSize: 12,
     color: "#FFFFFF",
   },
   dataSecondary: {
     fontFamily: "Aeonik-Medium",
-    fontSize: 10,
+    fontSize: 12,
     color: "#FFFFFF",
     opacity: 0.5,
   },
@@ -1154,6 +1180,8 @@ const styles = StyleSheet.create({
   },
   publicSharpRight: {
     marginLeft: 20,
+    marginTop: -30,
+    marginRight: -10,
   },
   publicSharpRow: {
     flexDirection: "row",
@@ -1316,12 +1344,12 @@ const styles = StyleSheet.create({
   },
   opportunityBigText: {
     fontFamily: "Aeonik-Medium",
-    fontSize: 14,
+    fontSize: 15,
     color: "#0BFF13",
   },
   opportunitySmallText: {
     fontFamily: "Aeonik-Regular",
-    fontSize: 12.5,
+    fontSize: 14,
     color: "#FFFFFF",
   },
   buttonContainer: {

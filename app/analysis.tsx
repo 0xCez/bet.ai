@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import {
   View,
-  Image,
   StyleSheet,
   ScrollView,
   Text,
   Pressable,
   ViewStyle,
 } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
 import type { ParamListBase } from "@react-navigation/native";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -24,6 +24,8 @@ import {
 import { GradientButton } from "../components/ui/GradientButton";
 import { BorderButton } from "@/components/ui/BorderButton";
 import { TopBar } from "../components/ui/TopBar";
+import { Card } from "@/components/ui/Card";
+import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import {
   doc,
   setDoc,
@@ -254,6 +256,22 @@ export default function AnalysisScreen() {
       cachedExpandedCards = newExpandedCards; // Update cached state
     } catch (error) {
       console.error(`Error toggling card ${cardName}:`, error);
+    }
+  };
+
+  const getTeamLogo = (teamName: string, sport?: string) => {
+    if (!sport) return require("../assets/images/logo.png");
+
+    switch (sport.toLowerCase()) {
+      case "nba":
+        return getNBATeamLogo(teamName);
+      case "nfl":
+        return getNFLTeamLogo(teamName);
+      case "soccer":
+      case "soccer_epl":
+        return getSoccerTeamLogo(teamName);
+      default:
+        return require("../assets/images/logo.png");
     }
   };
 
@@ -718,7 +736,7 @@ export default function AnalysisScreen() {
         </Text> */}
 
         {/* Key Insights Card */}
-        <View style={[styles.card, styles.keyInsightsCard]}>
+        <Card style={styles.keyInsightsCard}>
           <Text style={styles.keyInsightsTitle}>
             {i18n.t("analysisKeyInsights")}
           </Text>
@@ -838,179 +856,130 @@ export default function AnalysisScreen() {
               </View>
             </View>
           </View>
-        </View>
+        </Card>
 
-        {/* Match Snapshot Card */}
-        <View style={[styles.card, styles.snapshotCard]}>
-          <Pressable
-            onPress={() => toggleCard("snapshot")}
-            style={[
-              styles.snapshotHeader,
-              !expandedCards.snapshot && styles.collapsedHeader,
-            ]}
-          >
-            <Text style={styles.snapshotTitle}>
-              {i18n.t("analysisMatchSnapshot")}
-            </Text>
-            <Feather
-              name={expandedCards.snapshot ? "chevron-up" : "chevron-down"}
-              size={30}
-              color="#FFFFFF"
-            />
-          </Pressable>
-          {expandedCards.snapshot && (
-            <View style={styles.snapshotContent}>
-              {/* Recent Performances */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
+        {/* Match Snapshot Section */}
+        <View style={styles.matchSnapshotRow}>
+          {/* Home Team Card */}
+          <Card style={styles.teamSnapshotCard}>
+            <View style={styles.teamHeader}>
                   <Image
-                    source={require("../assets/images/ms1.png")}
-                    style={styles.snapshotIcon}
+                    source={getTeamLogo(analysisResult?.teams.home || "", analysisResult?.sport)}
+                    style={styles.teamLogo}
+                    contentFit="contain"
                   />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisRecentPerformances")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-1" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.recentPerformance.home}
-                    </BlurText>
-
-                    <BlurText
-                      card="ms-2"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.recentPerformance.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
-
-              {/* Head-to-Head Record */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms2.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisHeadToHead")}
-                  </Text>
-                  <BlurText card="ms-2" blur={!auth.currentUser}>
-                    {analysisResult?.matchSnapshot.headToHead}
-                  </BlurText>
-                </View>
-              </View>
-
-              {/* Momentum Indicator */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms3.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisMomentumIndicator")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-3" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.momentum.home}
-                    </BlurText>
-                    <BlurText
-                      card="ms-3"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.momentum.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
+              <Text style={styles.teamName}>{analysisResult?.teams.home}</Text>
             </View>
-          )}
+            <View style={styles.teamContent}>
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisRecentPerformances")}
+              </Text>
+              <BlurText card="ms-1" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.recentPerformance.home}
+              </BlurText>
+
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisMomentumIndicator")}
+              </Text>
+              <BlurText card="ms-3" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.momentum.home}
+              </BlurText>
+            </View>
+          </Card>
+
+          {/* Away Team Card */}
+          <Card style={styles.teamSnapshotCard}>
+            <View style={styles.teamHeader}>
+                  <Image
+                    source={getTeamLogo(analysisResult?.teams.away || "", analysisResult?.sport)}
+                    style={styles.teamLogo}
+                    contentFit="contain"
+                  />
+              <Text style={styles.teamName}>{analysisResult?.teams.away}</Text>
+            </View>
+            <View style={styles.teamContent}>
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisRecentPerformances")}
+              </Text>
+              <BlurText card="ms-2" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.recentPerformance.away}
+              </BlurText>
+
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisMomentumIndicator")}
+              </Text>
+              <BlurText card="ms-3" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.momentum.away}
+              </BlurText>
+            </View>
+          </Card>
         </View>
 
         {/* X-Factors Card */}
-        <View style={[styles.card, styles.xFactorsCard]}>
-          <Pressable
-            onPress={() => toggleCard("xFactors")}
-            style={[
-              styles.xFactorsHeader,
-              !expandedCards.xFactors && styles.collapsedHeader,
-            ]}
-          >
-            <Text style={styles.xFactorsTitle}>
-              {i18n.t("analysisXFactors")}
-            </Text>
-            <Feather
-              name={expandedCards.xFactors ? "chevron-up" : "chevron-down"}
-              size={30}
-              color="#FFFFFF"
-            />
-          </Pressable>
-          {expandedCards.xFactors && (
-            <View style={styles.xFactorsContent}>
-              {analysisResult?.xFactors.map((xFactor, index) => (
-                <View key={index} style={styles.xFactorRow}>
-                  <View style={styles.xFactorIconBox}>
-                    <Image
-                      source={
-                        xFactor.type === 1
-                          ? require("../assets/images/xf1.png") // Health & Availability
-                          : xFactor.type === 2
-                          ? require("../assets/images/xf2.png") // Location & Weather
-                          : xFactor.type === 3
-                          ? require("../assets/images/xf3.png") // Officiating & Rules
-                          : xFactor.type === 4
-                          ? require("../assets/images/xf4.png") // Travel & Fatigue
-                          : require("../assets/images/xf4.png") // Default
-                      }
-                      style={styles.snapshotIcon}
-                    />
-                  </View>
-                  <View style={styles.xFactorTextContainer}>
-                    <Text style={styles.xFactorLabel}>
-                      {xFactor.type === 1
-                        ? i18n.t("analysisHealthAvailability")
-                        : xFactor.type === 2
-                        ? i18n.t("analysisLocationWeather")
-                        : xFactor.type === 3
-                        ? i18n.t("analysisOfficiatingRules")
-                        : xFactor.type === 4
-                        ? i18n.t("analysisTravelFatigue")
-                        : xFactor.title}
-                    </Text>
-                    <BlurText
-                      card={
-                        xFactor.type === 1
-                          ? "xf-1"
-                          : xFactor.type === 2
-                          ? "xf-2"
-                          : xFactor.type === 3
-                          ? "xf-3"
-                          : xFactor.type === 4
-                          ? "xf-4"
-                          : "xf-1"
-                      }
-                      blur={!auth.currentUser}
-                    >
-                      {xFactor.detail}
-                    </BlurText>
-                  </View>
-                </View>
-              ))}
+        <Card style={styles.xFactorsCard}>
+          <View style={styles.xFactorsContent}>
+            {/* Header */}
+            <View style={styles.xFactorsHeader}>
+              <Text style={styles.xFactorsTitle}>{i18n.t("analysisXFactors")}</Text>
+              <Text style={styles.xFactorsInfo}>ⓘ</Text>
             </View>
-          )}
-        </View>
+
+            {/* X-Factors List */}
+            {analysisResult?.xFactors.map((xFactor, index) => (
+              <View key={index} style={[styles.xFactorItem, index === (analysisResult.xFactors.length - 1) && styles.xFactorItemLast]}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={
+                      xFactor.type === 1
+                        ? require("../assets/images/icons/shield.svg") // Health & Availability
+                        : xFactor.type === 2
+                        ? require("../assets/images/icons/geo-tag.svg") // Location & Weather
+                        : xFactor.type === 3
+                        ? require("../assets/images/icons/whistle.svg") // Officiating & Rules
+                        : xFactor.type === 4
+                        ? require("../assets/images/icons/plane.svg") // Travel & Fatigue
+                        : require("../assets/images/icons/shield.svg") // Default
+                    }
+                    style={styles.xFactorIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.xFactorTextContainer}>
+                  <Text style={styles.xFactorLabel}>
+                    {xFactor.type === 1
+                      ? "Health & Availability"
+                      : xFactor.type === 2
+                      ? "Location & Weather"
+                      : xFactor.type === 3
+                      ? "Officiating & Rules"
+                      : xFactor.type === 4
+                      ? "Travel & Fatigue"
+                      : xFactor.title}
+                  </Text>
+                  <BlurText
+                    card={
+                      xFactor.type === 1
+                        ? "xf-1"
+                        : xFactor.type === 2
+                        ? "xf-2"
+                        : xFactor.type === 3
+                        ? "xf-3"
+                        : xFactor.type === 4
+                        ? "xf-4"
+                        : "xf-1"
+                    }
+                    blur={!auth.currentUser}
+                  >
+                    {xFactor.detail}
+                  </BlurText>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Card>
 
         {/* AI Analysis Card */}
-        <View style={[styles.card, styles.aiAnalysisCard]}>
+        <Card style={styles.aiAnalysisCard}>
           <Pressable
             onPress={() => toggleCard("aiAnalysis")}
             style={[
@@ -1036,6 +1005,7 @@ export default function AnalysisScreen() {
                     <Image
                       source={require("../assets/images/aa1.png")}
                       style={styles.snapshotIcon}
+                      contentFit="contain"
                     />
                   </View>
                   <View>
@@ -1071,7 +1041,8 @@ export default function AnalysisScreen() {
                     <Image
                       source={require("../assets/images/aa2.png")}
                       style={styles.snapshotIcon}
-                    />{" "}
+                      contentFit="contain"
+                    />
                   </View>
                   <View>
                     <Text style={styles.aiMetricLabel}>
@@ -1126,123 +1097,9 @@ export default function AnalysisScreen() {
               </View>
             </View>
           )}
-        </View>
+        </Card>
 
 
-        <View style={styles.debateContainer}>
-          {!isDemo && (
-            <>
-              <BorderButton
-                onPress={() => {
-                  // Pass full analysis data to chat screen
-                  router.push({
-                    pathname: "/chat",
-                    params: { analysisData: JSON.stringify(analysisResult) },
-                  });
-                }}
-                containerStyle={styles.floatingButton}
-                borderColor="#00C2E0"
-                backgroundColor="#00C2E020"
-                opacity={1}
-                borderWidth={1}
-              >
-                <Text style={styles.buttonText}>
-                  {i18n.t("analysisDebateWithAI")}
-                </Text>
-              </BorderButton>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to market intel with game data
-                    router.push({
-                      pathname: "/market-intel",
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nba", // Use actual sport from analysis
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || ""
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#FFD700"
-                  backgroundColor="#FFD70020"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Market Intelligence 📊
-                  </Text>
-                </BorderButton>
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to sport-specific team stats page
-                    const sportLower = (analysisResult?.sport || "").toLowerCase();
-                    const isSoccer = sportLower.startsWith("soccer");
-                    const teamStatsPath = isSoccer ? "/team-stats-soccer" : "/team-stats-nfl";
-
-                    router.push({
-                      pathname: teamStatsPath as any,
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nfl",
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || "",
-                        selectedTeam: "team1"
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#00FF41"
-                  backgroundColor="#00FF4120"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Team Stats 🏈
-                  </Text>
-                </BorderButton>
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to sport-specific player stats page
-                    const sportLower = (analysisResult?.sport || "").toLowerCase();
-                    const isSoccer = sportLower.startsWith("soccer");
-                    const playerStatsPath = isSoccer ? "/player-stats-soccer" : "/player-stats-nfl";
-
-                    router.push({
-                      pathname: playerStatsPath as any,
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nfl",
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || ""
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#00D4FF"
-                  backgroundColor="#00D4FF20"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Player Stats 👤
-                  </Text>
-                </BorderButton>
-              </View>
-            </>
-          )}
-        </View>
         {isDemo && (
           <View style={styles.demoDebateContainer}>
             <BorderButton
@@ -1270,7 +1127,7 @@ export default function AnalysisScreen() {
 
   return (
     <ScreenBackground hideBg>
-      <TopBar />
+      <TopBar onBackPress={() => router.replace("/")} />
 
       <View style={styles.container}>
         <ScrollView
@@ -1361,7 +1218,7 @@ const styles = StyleSheet.create({
     height: 300,
     aspectRatio: 1,
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: 0,
     borderRadius: 35,
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -1551,57 +1408,62 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Regular",
   },
   xFactorsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    marginTop: 16,
+  },
+  xFactorsContent: {
+    paddingVertical: 22,
+    paddingHorizontal: 0,
   },
   xFactorsHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
   },
   xFactorsTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
     fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
-  xFactorsContent: {
-    gap: 20,
-    marginTop: 20,
+  xFactorsInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
   },
-  xFactorRow: {
+  xFactorItem: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20.15,
+    marginBottom: 16,
   },
-  xFactorIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 12,
+  xFactorItemLast: {
+    marginBottom: 0,
+  },
+  iconContainer: {
+    width: 45.11,
+    height: 44.17,
+    borderRadius: 12.62,
+    backgroundColor: "#161616",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+  },
+  xFactorIcon: {
+    width: 24,
+    height: 24,
   },
   xFactorTextContainer: {
     flex: 1,
+    gap: 4,
   },
   xFactorLabel: {
-    color: "rgba(255, 255, 255, 0.8)",
-
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 8,
-  },
-  xFactorValue: {
+    fontFamily: "Aeonik-Light",
+    fontSize: 11.42,
     color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    lineHeight: 22,
   },
   aiAnalysisCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
+    marginTop: 16,
     padding: 20,
   },
   aiAnalysisHeader: {
@@ -1676,11 +1538,9 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   keyInsightsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
     padding: 20,
     paddingVertical: 25,
-    marginTop: 20,
+    marginTop: 16,
   },
   keyInsightsTitle: {
     color: "#FFFFFF",
@@ -1689,6 +1549,42 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 14,
     fontFamily: "Aeonik-Medium",
+  },
+  matchSnapshotRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 16,
+    marginBottom: 0,
+  },
+  teamSnapshotCard: {
+    flex: 1,
+    minHeight: 180,
+    padding: 16,
+  },
+  teamHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  teamLogo: {
+    width: 32,
+    height: 32,
+  },
+  teamName: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Aeonik-Medium",
+  },
+  teamContent: {
+    gap: 8,
+  },
+  teamSectionLabel: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 12,
+    fontFamily: "Aeonik-Regular",
+    marginBottom: 2,
   },
 
   metricBox: {

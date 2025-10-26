@@ -166,7 +166,7 @@ export default {
   analysisLocationWeather: "Location & Weather",
   analysisOfficiatingRules: "Officiating & Rules",
   analysisTravelFatigue: "Travel & Fatigue",
-  analysisAIAnalysis: "AI Analysis 📈",
+  analysisAIAnalysis: "AI Analysis 🤖",
   analysisConfidenceScore: "Confidence Score",
   analysisBettingSignal: "Betting Signal",
   analysisBreakdown: "Breakdown",

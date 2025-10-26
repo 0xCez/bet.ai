@@ -7,16 +7,19 @@ import { Image } from "expo-image";
 interface TopBarProps {
   showBack?: boolean;
   title?: string;
+  onBackPress?: () => void;
 }
 
-export function TopBar({ showBack = true, title }: TopBarProps) {
+export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
   const router = useRouter();
+
+  const handleBackPress = onBackPress || (() => router.back());
 
   return (
     <View style={styles.container}>
       {showBack ? (
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBackPress}
           style={styles.backButton}
         >
           <Image

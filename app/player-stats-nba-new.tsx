@@ -15,6 +15,7 @@ import { ScreenBackground } from "@/components/ui/ScreenBackground";
 import { Card } from "@/components/ui/Card";
 import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
 import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
+import { TopBar } from "@/components/ui/TopBar";
 import APIService from "@/services/api";
 import { usePageTransition } from "@/hooks/usePageTransition";
 import i18n from "@/i18n";
@@ -180,8 +181,9 @@ export default function PlayerStatsNBANew() {
     ];
 
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.selectionTitle}>{i18n.t("playerStatsSelectTeam")}</Text>
+      <View style={styles.container}>
+        <TopBar showBack={false} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {teams.map((team) => (
           <Pressable
             key={team.key}
@@ -208,7 +210,8 @@ export default function PlayerStatsNBANew() {
             </LinearGradient>
           </Pressable>
         ))}
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   };
 
@@ -221,11 +224,9 @@ export default function PlayerStatsNBANew() {
     const topPlayers = teamData.topPlayers || [];
 
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <Pressable onPress={() => setSelectedTeam(null)} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← {i18n.t("playerStatsSelectTeam")}</Text>
-        </Pressable>
-        <Text style={styles.selectionTitle}>{i18n.t("playerStatsSelectPlayer")}</Text>
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {topPlayers.map((player: any) => (
           <Pressable
             key={player.id}
@@ -252,7 +253,8 @@ export default function PlayerStatsNBANew() {
             </LinearGradient>
           </Pressable>
         ))}
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   };
 
@@ -264,10 +266,9 @@ export default function PlayerStatsNBANew() {
     const stats = player.stats || {};
 
   return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <Pressable onPress={() => setSelectedPlayer(null)} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← {i18n.t("playerStatsSelectPlayer")}</Text>
-        </Pressable>
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedPlayer(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
         {/* Top Card - Player Header */}
         <Card style={styles.topCard}>
@@ -280,7 +281,6 @@ export default function PlayerStatsNBANew() {
                 contentFit="contain"
               />
             </View>
-            <Text style={styles.position}>{player.position}</Text>
           </View>
         </Card>
 
@@ -433,7 +433,8 @@ export default function PlayerStatsNBANew() {
             </View>
           </Card>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   };
 
@@ -526,6 +527,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   container: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   contentContainer: {
