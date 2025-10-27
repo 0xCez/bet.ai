@@ -611,7 +611,7 @@ export default function AnalysisScreen() {
       </View>
 
       {/* Content Shimmer Groups */}
-      <View style={styles.shimmerGroup}>
+      <View style={[styles.shimmerGroup, styles.firstShimmerGroup]}>
         <LinearGradient
           colors={["#1A1A1A", "#363636"]}
           start={{ x: 0, y: 0 }}
@@ -1235,6 +1235,9 @@ const styles = StyleSheet.create({
     borderWidth: 0.3,
     borderColor: "#888888",
     overflow: "hidden",
+  },
+  firstShimmerGroup: {
+    marginTop: 18,
   },
   gradientContainer: {
     width: "100%",

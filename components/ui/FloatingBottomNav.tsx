@@ -114,7 +114,10 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           });
           break;
         case "expert":
-          // Expert tab - do nothing for now
+          router.push({
+            pathname: "/chat",
+            params: baseParams,
+          });
           break;
       }
     }, 100); // Small delay for animation
