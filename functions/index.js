@@ -211,9 +211,9 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
           Task Overview:
           You are an expert sports betting analyst.
           Your job is to generate a final AI Betting Insight for a specific sports event, using structured data collected from multiple sources.
-          Like odds data, key insights, match data, last 10 matches, h2h games, injuries, upcoming game, weather forecast.
+          Like market intelligence (best lines, EV opportunities, sharp vs public money), team statistics (PPG, shooting %, rebounds), player statistics (top 10 players with all key metrics), odds data, key insights, match data, last 10 matches, h2h games, injuries, upcoming game, weather forecast. Use ALL available data to provide the most comprehensive analysis.
 
-          Your tone should be sharp, real, and slightly degenerate — like a bettor who's been in the trenches. Avoid corporate or generic phrasing. Speak like someone explaining edge to a fellow bettor over Discord or in a sharp betting groupchat. Inject urgency when there's mispricing, and confidence when everything lines up. If the public is lost, say it. If the sharps are sniping, flag it. If it's a trap, expose it.
+          Your tone should be sharp, real, and degen — like a bettor who's been in the trenches. Avoid corporate or generic phrasing. Speak like someone explaining edge to a fellow bettor over Discord or in a sharp betting groupchat. Inject urgency when there's mispricing, and confidence when everything lines up. If the public is lost, say it. If the sharps are sniping, flag it. If it's a trap, expose it.
 
           IMPORTANT: Please provide your entire analysis in ${locale} language. Maintain the exact JSON structure, but translate all text content.
           LANGUAGE INSTRUCTION: YOU MUST RESPOND IN ${locale.toUpperCase()} LANGUAGE ONLY. This is critical.
@@ -256,7 +256,16 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
           ${JSON.stringify(teamStats)}
 
           ## Player Statistics
-          ${JSON.stringify(playerStats)}
+          ${JSON.stringify({
+            team1: {
+              teamId: playerStats?.team1?.teamId,
+              topPlayers: playerStats?.team1?.topPlayers
+            },
+            team2: {
+              teamId: playerStats?.team2?.teamId,
+              topPlayers: playerStats?.team2?.topPlayers
+            }
+          })}
           ###
 
           Rules:
@@ -433,10 +442,21 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             jsonResponse.image_url = imageUrl;
             jsonResponse.sport = sport;
 
-            // NEW: Add Market Intelligence, Team Stats, and Player Stats to response
-            jsonResponse.marketIntelligence = marketIntelligence;
-            jsonResponse.teamStats = teamStats;
-            jsonResponse.playerStats = playerStats;
+            // Add lightweight data for chatbot context (~4k chars total)
+            jsonResponse.marketIntelligence = marketIntelligence;  // ~2 chars (null) or small
+            jsonResponse.teamStats = teamStats;  // ~2k chars - reasonable
+
+            // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
+            jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
+              marketIntelligence,
+              teamStats,
+              jsonResponse.teams?.home || team1,
+              jsonResponse.teams?.away || team2
+            );
+
+            // NOTE: We do NOT include playerStats here because it's massive (55k+ chars).
+            // PlayerStats contains game-by-game data for 20+ players and bloats the response to 80k lines.
+            // The specific Player Stats page fetches this data separately when needed.
 
             // Return the JSON object immediately without waiting for cache save
             res.status(200).json(jsonResponse);
@@ -3016,8 +3036,12 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 
     console.log(`Product Update Test - Processing ${sport}: ${team1} vs ${team2}`);
 
-    // Get team IDs (reuse existing function)
-    const { team1Id, team2Id, sport_type_odds } = await findTeamIds(sport, team1, team1_code, team2, team2_code);
+    // Normalize sport name for internal functions (they expect 'nfl' not 'americanfootball_nfl')
+    const normalizedSport = sport.replace('americanfootball_', '').replace('basketball_', '').replace('baseball_', '');
+    console.log(`SPORT NORMALIZATION: '${sport}' → '${normalizedSport}'`);
+
+    // Get team IDs (reuse existing function) - use normalized sport
+    const { team1Id, team2Id, team1StatpalCode, team2StatpalCode, sport_type_odds } = await findTeamIds(normalizedSport, team1, team1_code, team2, team2_code);
 
     if (!team1Id || !team2Id) {
       return res.status(400).json({
@@ -3028,9 +3052,9 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
     // Test Market Intelligence, Team Stats, Player Stats, and Game Data
     const [marketIntelligence, teamStats, playerStats, gameData] = await Promise.all([
       getMarketIntelligenceDataTest(sport_type_odds, team1, team2),
-      getTeamStatsDataTest(sport, team1Id, team2Id),
-      getPlayerStatsForSport(sport, team1Id, team2Id),
-      getGameData(sport, team1Id, team2Id, team1_code, team2_code, null, null) // Add game data for PPG, home/away, etc.
+      getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
+      getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
+      getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode) // Use normalized sport name
     ]);
 
     // CRITICAL: Match analyzeImage structure EXACTLY
@@ -3062,6 +3086,16 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
       playerStats,
       // Game Data (last10Games for PPG, home/away, recent form)
       gameData,
+      // NEW: Key Insights V2
+      keyInsightsNew: calculateKeyInsightsNew(
+        {
+          bestLines: marketIntelligence.bestLines,
+          evOpportunities: marketIntelligence.evOpportunities || marketIntelligence.evAnalysis?.uiOpportunities,
+        },
+        enhanceTeamStatsWithGameData(teamStats, gameData),
+        team1,
+        team2
+      ),
       // Metadata (same as analyzeImage)
       timestamp: new Date().toISOString(),
       teamIds: { team1Id, team2Id }
@@ -3921,7 +3955,7 @@ function getTop3PlayersTest(players, sport) {
       return players
         .filter(p => p.statistics && p.statistics.points && p.statistics.points.average > 5) // Minimum threshold
         .sort((a, b) => (b.statistics.points.average || 0) - (a.statistics.points.average || 0))
-        .slice(0, 3);
+        .slice(0, 10);
 
     case 'nfl':
     case 'ncaaf':
@@ -3948,7 +3982,7 @@ function getTop3PlayersTest(players, sport) {
           const bOPS = (b.statistics.batting.on_base_percentage || 0) + (b.statistics.batting.slugging_percentage || 0);
           return bOPS - aOPS;
         })
-        .slice(0, 3);
+        .slice(0, 10);
 
     case 'soccer':
       return players
@@ -3958,10 +3992,10 @@ function getTop3PlayersTest(players, sport) {
           const bContrib = (b.statistics[0].goals?.total || 0) + (b.statistics[0].goals?.assists || 0);
           return bContrib - aContrib;
         })
-        .slice(0, 3);
+        .slice(0, 10);
 
     default:
-      return players.slice(0, 3);
+      return players.slice(0, 10);
   }
 }
 
@@ -5643,6 +5677,203 @@ function formatSoccerOddsTable(bookmakers, event) {
 }
 
 // ====================================================================
+// NEW KEY INSIGHTS CALCULATION (V2)
+// ====================================================================
+
+// Calculate Market Consensus - Convert consensus ML to win probability
+// Output format: "65% 76ers" for UI display
+function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
+  try {
+    const consensusHomeML = marketIntelligence?.bestLines?.consensusHomeML;
+    const consensusAwayML = marketIntelligence?.bestLines?.consensusAwayML;
+    const consensusDrawML = marketIntelligence?.bestLines?.consensusDrawML;
+
+    // Handle 3-way betting (Soccer)
+    if (consensusDrawML && consensusHomeML && consensusAwayML) {
+      const impliedHome = 1 / consensusHomeML;
+      const impliedDraw = 1 / consensusDrawML;
+      const impliedAway = 1 / consensusAwayML;
+      const total = impliedHome + impliedDraw + impliedAway;
+
+      // Normalize to 100%
+      const homePercent = Math.round((impliedHome / total) * 100);
+      const drawPercent = Math.round((impliedDraw / total) * 100);
+      const awayPercent = Math.round((impliedAway / total) * 100);
+
+      const favorite = homePercent > awayPercent ? "home" : "away";
+      const favoritePercent = Math.max(homePercent, awayPercent);
+      const favoriteTeam = favorite === "home" ? homeTeam : awayTeam;
+
+      return {
+        display: `${favoritePercent}% ${favoriteTeam}`,
+        label: "Market Fav"
+      };
+    }
+
+    // Handle 2-way betting (NFL, NBA, MLB)
+    if (consensusHomeML && consensusAwayML) {
+      const impliedHome = 1 / consensusHomeML;
+      const impliedAway = 1 / consensusAwayML;
+      const total = impliedHome + impliedAway;
+
+      // Normalize to 100%
+      const homePercent = Math.round((impliedHome / total) * 100);
+      const awayPercent = Math.round((impliedAway / total) * 100);
+
+      const favorite = homePercent > 50 ? "home" : "away";
+      const favoritePercent = Math.max(homePercent, awayPercent);
+      const favoriteTeam = favorite === "home" ? homeTeam : awayTeam;
+
+      return {
+        display: `${favoritePercent}% ${favoriteTeam}`,
+        label: "Market Fav"
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error calculating market consensus:', error);
+    return null;
+  }
+}
+
+// Find Best Value - Highest +EV opportunity OR lowest vig on favorite
+// Output format: "Home ML at DK" for UI display
+function findBestValue(marketIntelligence, homeTeam, awayTeam) {
+  try {
+    const opportunities = marketIntelligence?.evOpportunities?.opportunities || [];
+
+    // STEP 1: Check for +EV bets first (type === "ev")
+    const evBets = opportunities.filter(opp => opp.type === "ev" && opp.ev);
+
+    if (evBets.length > 0) {
+      // Sort by EV and get the best one
+      const bestEV = evBets.sort((a, b) => (b.ev || 0) - (a.ev || 0))[0];
+
+      // Determine if it's home or away team
+      const isHome = bestEV.team === homeTeam;
+      const teamLabel = isHome ? "Home" : "Away";
+      const marketType = bestEV.market === "Moneyline" ? "ML" : bestEV.market;
+
+      // Get bookmaker short name (DK, FD, MGM, etc.)
+      const bookmakerShort = getBookmakerShortName(bestEV.bookmaker);
+
+      return {
+        display: `${teamLabel} ${marketType} at ${bookmakerShort}`,
+        label: "Best Value"
+      };
+    }
+
+    // STEP 2: No +EV found - find lowest vig on market favorite
+    const lowVigBets = opportunities.filter(opp => opp.type === "lowvig");
+
+    if (lowVigBets.length > 0) {
+      // Get the lowest vig ML bet (market favorite)
+      const lowestVigML = lowVigBets
+        .filter(opp => opp.title && opp.title.includes("Lowest Vig at") && !opp.title.includes("Spread"))
+        .sort((a, b) => (a.vig || 999) - (b.vig || 999))[0];
+
+      if (lowestVigML) {
+        const bookmakerShort = getBookmakerShortName(lowestVigML.bookmaker);
+        return {
+          display: `Home ML at ${bookmakerShort}`,
+          label: "Best Value"
+        };
+      }
+    }
+
+    // STEP 3: Fallback - truly efficient market
+    return {
+      display: "Efficient market",
+      label: "Best Value"
+    };
+  } catch (error) {
+    console.error('Error finding best value:', error);
+    return { display: "Unable to calculate", label: "Best Value" };
+  }
+}
+
+// Helper function to get short bookmaker names
+function getBookmakerShortName(bookmaker) {
+  const shortNames = {
+    'DraftKings': 'DK',
+    'FanDuel': 'FD',
+    'BetMGM': 'MGM',
+    'Caesars': 'CZR',
+    'BetRivers': 'Rivers',
+    'Pinnacle': 'Pinnacle',
+    'LowVig': 'LowVig',
+    'BetOnline.ag': 'BOL',
+    'Bovada': 'Bovada',
+    'BetUS': 'BetUS',
+    'MyBookie.ag': 'MyBookie',
+    'Fanatics': 'Fanatics',
+    'Hard Rock Bet': 'HardRock',
+    'ESPN BET': 'ESPN'
+  };
+
+  return shortNames[bookmaker] || bookmaker;
+}
+
+// Calculate Offensive Edge - Scoring power differential
+// Output format: "+7.2 PPG" for UI display (positive = team1 advantage)
+function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
+  try {
+    const team1PPG = teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
+    const team2PPG = teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
+
+    const differential = team1PPG - team2PPG;
+    const roundedDiff = Math.round(differential * 10) / 10;
+
+    // Format with + or - sign
+    const sign = roundedDiff > 0 ? "+" : "";
+
+    return {
+      display: `${sign}${roundedDiff} PPG`,
+      label: "Offensive Edge"
+    };
+  } catch (error) {
+    console.error('Error calculating offensive edge:', error);
+    return null;
+  }
+}
+
+// Calculate Defensive Edge - Points allowed differential
+// Output format: "-3.7 PPG" for UI display (negative = team1 has better defense)
+function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
+  try {
+    const team1OppPPG = teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
+    const team2OppPPG = teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
+
+    // Lower is better for defense, so reverse the logic
+    // Positive differential = team1 has better defense (allows fewer points)
+    const differential = team2OppPPG - team1OppPPG;
+    const roundedDiff = Math.round(differential * 10) / 10;
+
+    // Format with + or - sign
+    const sign = roundedDiff > 0 ? "+" : "";
+
+    return {
+      display: `${sign}${roundedDiff} PPG`,
+      label: "Defensive Edge"
+    };
+  } catch (error) {
+    console.error('Error calculating defensive edge:', error);
+    return null;
+  }
+}
+
+// Master function to calculate all new Key Insights
+function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam) {
+  return {
+    marketConsensus: calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam),
+    bestValue: findBestValue(marketIntelligence, homeTeam, awayTeam),
+    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam),
+    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam)
+  };
+}
+
+// ====================================================================
 // GAME DATA ENHANCEMENT FOR TEAM STATS
 // ====================================================================
 
@@ -5926,7 +6157,7 @@ function transformSoccerPlayerData(playersData) {
       return { player, stats, contribution };
     })
     .sort((a, b) => b.contribution - a.contribution)
-    .slice(0, 3)
+    .slice(0, 10)
     .map(({ player, stats }) => {
       const goals = stats.goals?.total || 0;
       const assists = stats.goals?.assists || 0;
@@ -6081,11 +6312,11 @@ function transformNBAPlayerData(playersData) {
     };
   });
 
-  // Sort by average points and get top 3
+  // Sort by average points and get top 10
   const topPlayers = aggregatedPlayers
     .filter(p => p.avgPoints > 5)
     .sort((a, b) => b.avgPoints - a.avgPoints)
-    .slice(0, 3);
+    .slice(0, 10);
 
   return {
     topPlayers,
@@ -6237,7 +6468,7 @@ function getTopPlayersForSport(players, sport) {
           const bContrib = (b.statistics[0].goals?.total || 0) + (b.statistics[0].goals?.assists || 0);
           return bContrib - aContrib;
         })
-        .slice(0, 3);
+        .slice(0, 10);
   }
 
   // Handle NBA
@@ -6246,9 +6477,9 @@ function getTopPlayersForSport(players, sport) {
       return players
         .filter(p => p.statistics && p.statistics.points && p.statistics.points.average > 5)
         .sort((a, b) => (b.statistics.points.average || 0) - (a.statistics.points.average || 0))
-        .slice(0, 3);
+        .slice(0, 10);
   }
 
   // Default fallback
-      return players.slice(0, 3);
+      return players.slice(0, 10);
 }
