@@ -29,6 +29,10 @@ const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 let cachedMarketResult: MarketIntelResult | null = null;
 let cachedParams: any = null;
 
+// Track last refresh time for rate limiting (10 minutes cooldown)
+let lastRefreshTime: number = 0;
+const REFRESH_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
+
 // Interface matching the backend market intelligence structure
 interface MarketIntelResult {
   sport: string;
@@ -207,6 +211,8 @@ export default function MarketIntelNew() {
     isSameAnalysis && cachedMarketResult ? cachedMarketResult : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -265,6 +271,80 @@ export default function MarketIntelNew() {
     } catch (err) {
       console.error("Error in getMarketIntelligence:", err);
       setError(err instanceof Error ? err.message : "Failed to get market intelligence");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Shake animation for button when in cooldown
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+    ]).start();
+  };
+
+  // Function to refresh market intelligence (clear cache and fetch fresh data)
+  const refreshMarketIntelligence = async () => {
+    // Check if enough time has passed since last refresh (10 minutes)
+    const now = Date.now();
+    const timeElapsed = now - lastRefreshTime;
+    const remainingTime = Math.ceil((REFRESH_COOLDOWN_MS - timeElapsed) / 1000 / 60); // Minutes remaining
+
+    if (lastRefreshTime > 0 && timeElapsed < REFRESH_COOLDOWN_MS) {
+      // Still in cooldown period - trigger shake and show message
+      triggerShake();
+      setCooldownMessage(`Try again in ${remainingTime} minute${remainingTime > 1 ? 's' : ''}`);
+      setTimeout(() => setCooldownMessage(null), 3000); // Clear message after 3 seconds
+      return;
+    }
+
+    // Clear cached data to force fresh fetch
+    setMarketResult(null);
+    cachedMarketResult = null;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (!params.sport) {
+        throw new Error("Sport parameter is required but missing");
+      }
+
+      console.log("Fetching FRESH market intelligence data...");
+
+      const response = await APIService.getMarketIntelligence(
+        params.sport,
+        params.team1 || "",
+        params.team2 || "",
+        params.team1_code,
+        params.team2_code
+      );
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      if (response.status === "error") {
+        throw new Error(response.message || "Failed to fetch market intelligence");
+      }
+
+      const marketData: MarketIntelResult = response;
+
+      setMarketResult(marketData);
+      cachedMarketResult = marketData;
+
+      // Update last refresh time
+      lastRefreshTime = Date.now();
+
+      console.log("Fresh market intelligence data loaded successfully!");
+
+    } catch (err) {
+      console.error("Error in refreshMarketIntelligence:", err);
+      setError(err instanceof Error ? err.message : "Failed to get fresh market intelligence");
     } finally {
       setIsLoading(false);
     }
@@ -1098,9 +1178,16 @@ export default function MarketIntelNew() {
 
         {/* Get Fresh Odds Button */}
         <View style={styles.buttonContainer}>
-          <Pressable style={styles.freshOddsButton} onPress={getMarketIntelligence}>
-            <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
-          </Pressable>
+          <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+            <Pressable style={styles.freshOddsButton} onPress={refreshMarketIntelligence}>
+              <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
+            </Pressable>
+          </Animated.View>
+          
+          {/* Cooldown Message */}
+          {cooldownMessage && (
+            <Text style={styles.cooldownMessage}>{cooldownMessage}</Text>
+          )}
         </View>
       </ScrollView>
     );
@@ -1564,5 +1651,12 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Medium",
     fontSize: 14,
     color: "#FFFFFF",
+  },
+  cooldownMessage: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 13,
+    color: "#888888",
+    marginTop: 8,
+    textAlign: "center",
   },
 });
