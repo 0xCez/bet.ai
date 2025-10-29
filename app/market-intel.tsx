@@ -387,79 +387,132 @@ export default function MarketIntelNew() {
             </View>
 
             {marketResult?.marketIntelligence?.bestLines ? (
-              <View style={styles.consensusTable}>
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                  <View style={styles.teamColumn} />
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+              params.sport?.includes('soccer') ? (
+                // SOCCER: 1 row with Home/Draw/Away
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
-                  </View>
-                </View>
 
-                {/* Team 1 Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Image
-                      source={getTeamLogo(params.team1 || "", params.sport)}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>{marketResult.marketIntelligence.bestLines.consensusSpreadPoint || "-2"}</Text>
-                      <Text style={styles.dataSecondary}>-105</Text>
+                  {/* Single Match Winner Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={require("../assets/images/logo.png")}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>Match Winner</Text>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusHomeML)}</Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusHomeMLFractional || "1/1"}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>O{marketResult.marketIntelligence.bestLines.consensusTotal || "42"}</Text>
-                      <Text style={styles.dataSecondary}>-105</Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusDrawMLFractional || "4/1"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusAwayMLFractional || "7/1"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
+              ) : (
+                // NFL/NBA: 2 rows with Spread/ML/Total
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
 
-                {/* Team 2 Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Image
-                      source={getTeamLogo(params.team2 || "", params.sport)}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>+{Math.abs(marketResult.marketIntelligence.bestLines.consensusSpreadPoint || -2)}</Text>
-                      <Text style={styles.dataSecondary}>-105</Text>
+                  {/* Team 1 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team1 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{marketResult.marketIntelligence.bestLines.consensusSpreadPoint || "-2"}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusHomeML)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>O{marketResult.marketIntelligence.bestLines.consensusTotal || "42"}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
                     </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusAwayML)}</Text>
+
+                  {/* Team 2 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team2 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>U{(marketResult.marketIntelligence.bestLines.consensusTotal || 42) + 0.5}</Text>
-                      <Text style={styles.dataSecondary}>-105</Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>+{Math.abs(marketResult.marketIntelligence.bestLines.consensusSpreadPoint || -2)}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusAwayML)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>U{(marketResult.marketIntelligence.bestLines.consensusTotal || 42) + 0.5}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
+              )
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>No consensus lines data available</Text>
@@ -805,87 +858,140 @@ export default function MarketIntelNew() {
             </View>
 
             {marketResult?.marketIntelligence?.fairValue ? (
-              <View style={styles.consensusTable}>
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                  <View style={styles.teamColumn} />
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+              params.sport?.includes('soccer') ? (
+                // SOCCER: 1 row with Home/Draw/Away fractional odds
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
-                  </View>
-                </View>
 
-                {/* Team 1 Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Image
-                      source={getTeamLogo(params.team1 || "", params.sport)}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair1)}
-                      </Text>
+                  {/* Single Fair Value Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={require("../assets/images/logo.png")}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>Fair Value</Text>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair1)}
-                      </Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairHomeFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairHome)}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair1)}
-                      </Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairDrawFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairDraw)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairAwayFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairAway)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
+              ) : (
+                // NFL/NBA: 2 rows with Spread/ML/Total
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
 
-                {/* Team 2 Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Image
-                      source={getTeamLogo(params.team2 || "", params.sport)}
-                      style={styles.teamLogo}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair2)}
-                      </Text>
+                  {/* Team 1 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team1 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair1)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair1)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair1)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair2)}
-                      </Text>
+
+                  {/* Team 2 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team2 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair2)}
-                      </Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair2)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
+              )
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>No fair value data available</Text>

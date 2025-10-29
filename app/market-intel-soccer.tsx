@@ -49,6 +49,9 @@ interface SoccerMarketIntelResult {
       consensusHomeML: number;
       consensusDrawML: number;
       consensusAwayML: number;
+      consensusHomeMLFractional?: string;
+      consensusDrawMLFractional?: string;
+      consensusAwayMLFractional?: string;
       bestLines: Array<{
         type: string;
         label: string;
@@ -439,17 +442,17 @@ export default function SoccerMarketIntelScreen() {
                <View style={styles.consensusOddsContainer}>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-home" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusHomeML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusHomeMLFractional || "1/1"}
                    </BlurText>
                  </View>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-draw" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusDrawML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusDrawMLFractional || "4/1"}
                    </BlurText>
                  </View>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-away" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusAwayML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusAwayMLFractional || "7/1"}
                    </BlurText>
                  </View>
                </View>

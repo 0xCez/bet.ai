@@ -5393,6 +5393,10 @@ function calculateSoccerBestLines(bookmakers, event) {
     consensusHomeML: consensusHome,
     consensusAwayML: consensusAway,
     consensusDrawML: consensusDraw,
+    // Add fractional odds for UI display
+    consensusHomeMLFractional: decimalToFractional(consensusHome),
+    consensusAwayMLFractional: decimalToFractional(consensusAway),
+    consensusDrawMLFractional: decimalToFractional(consensusDraw),
     bestLines: [
       bestHome && {
         type: "soccer_win",
@@ -5455,7 +5459,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       return {
         teams: `${event.home_team} vs ${event.away_team}`,
         sharpConsensus: { moneyline: { home: null, away: null, draw: null } },
-        fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+        fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
         vigAnalysis: {
           moneyline: { sharp: null, market: null },
           spread: { sharp: null, market: null },
@@ -5485,6 +5489,11 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
 
     // Calculate 3-way fair value (remove vig from sharp consensus)
     let fairHome = null, fairDraw = null, fairAway = null;
+    let fairHomeFractional = null, fairDrawFractional = null, fairAwayFractional = null;
+
+    console.log('=== FAIR VALUE CALCULATION DEBUG ===');
+    console.log('Sharp Consensus - Home:', sharpConsensusHome, 'Draw:', sharpConsensusDraw, 'Away:', sharpConsensusAway);
+    console.log('Sharp book count:', sharpHomeOdds.length);
 
     if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
       const impliedHome = 1 / sharpConsensusHome;
@@ -5500,7 +5509,18 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       fairHome = parseFloat((1 / trueImpliedHome).toFixed(2));
       fairDraw = parseFloat((1 / trueImpliedDraw).toFixed(2));
       fairAway = parseFloat((1 / trueImpliedAway).toFixed(2));
+      
+      // Convert to fractional odds
+      fairHomeFractional = decimalToFractional(fairHome);
+      fairDrawFractional = decimalToFractional(fairDraw);
+      fairAwayFractional = decimalToFractional(fairAway);
+      
+      console.log('Fair Value Calculated - Home:', fairHome, 'Draw:', fairDraw, 'Away:', fairAway);
+      console.log('Fair Value Fractional - Home:', fairHomeFractional, 'Draw:', fairDrawFractional, 'Away:', fairAwayFractional);
+    } else {
+      console.log('Cannot calculate fair value - missing sharp consensus data');
     }
+    console.log('====================================');
 
     // Calculate 3-way vig analysis
     const allHomeOdds = homeOdds.map(o => o.odds);
@@ -5642,7 +5662,10 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
         moneyline: {
           fairHome,
           fairDraw,
-          fairAway
+          fairAway,
+          fairHomeFractional,
+          fairDrawFractional,
+          fairAwayFractional
         }
       },
       vigAnalysis: {
@@ -5663,7 +5686,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
     return {
       teams: `${event.home_team} vs ${event.away_team}`,
       sharpConsensus: { moneyline: { home: null, draw: null, away: null } },
-      fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+      fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
       vigAnalysis: {
         moneyline: { sharp: null, market: null },
         spread: { sharp: null, market: null },
