@@ -354,7 +354,13 @@ export default function MarketIntelNew() {
                     />
                     <View style={styles.lineTextContainer}>
                       <Text style={styles.lineBigText}>
-                        {line.team?.split(' ').pop() || ""} {line.type === "moneyline" ? "ML" : line.type === "spread" ? (line.line || "") : `${line.type === "over" ? "Over" : "Under"} ${line.line || ""}`} {formatOdds(line.odds)}
+                        {line.team?.split(' ').pop() || ""} {
+                          line.type === "soccer_win" ? (line.fractionalOdds || formatOdds(line.odds)) + " to win" :
+                          line.type === "soccer_draw" ? (line.fractionalOdds || formatOdds(line.odds)) :
+                          line.type === "moneyline" ? "ML " + formatOdds(line.odds) :
+                          line.type === "spread" ? (line.line || "") + " " + formatOdds(line.odds) :
+                          `${line.type === "over" ? "Over" : "Under"} ${line.line || ""} ${formatOdds(line.odds)}`
+                        }
                       </Text>
                       <Text style={styles.lineSmallText}>{line.label}</Text>
                     </View>
@@ -529,10 +535,10 @@ export default function MarketIntelNew() {
             <View style={styles.marketEfficiencyContent}>
               {/* Progress Bar with Labels */}
               <View style={styles.progressBarContainer}>
-                <GradientProgressBar 
+                <GradientProgressBar
                   value={marketResult.marketIntelligence.marketTightness.tightness === "Tight" ? 80 :
-                         marketResult.marketIntelligence.marketTightness.tightness === "Normal" ? 50 : 20} 
-                  maxValue={100} 
+                         marketResult.marketIntelligence.marketTightness.tightness === "Normal" ? 50 : 20}
+                  maxValue={100}
                 />
                 <View style={styles.progressBarLabels}>
                   <Text style={styles.progressBarLabel}>{i18n.t("marketIntelLoose")}</Text>
@@ -573,7 +579,7 @@ export default function MarketIntelNew() {
 
               {/* Team 1 Section */}
               <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team1)}</Text>
-            
+
             {/* Dynamic Bookmaker Rows for Team 1 */}
             {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
               <View key={`team1-${index}`} style={styles.oddsTableRow}>
@@ -595,8 +601,8 @@ export default function MarketIntelNew() {
                   />
                   <View style={styles.oddsTableMultiValue}>
                     <Text style={styles.oddsTableValue}>
-                      {bookmaker.odds?.spread?.home?.point ? 
-                        `${bookmaker.odds.spread.home.point > 0 ? '+' : ''}${bookmaker.odds.spread.home.point}` : 
+                      {bookmaker.odds?.spread?.home?.point ?
+                        `${bookmaker.odds.spread.home.point > 0 ? '+' : ''}${bookmaker.odds.spread.home.point}` :
                         "+1.5"}
                     </Text>
                     <Text style={styles.oddsTableValue}>
@@ -612,8 +618,8 @@ export default function MarketIntelNew() {
                   />
                   <View style={styles.oddsTableMultiValue}>
                     <Text style={styles.oddsTableValue}>
-                      {bookmaker.odds?.total?.over ? 
-                        `O ${bookmaker.odds.total.over.point}` : 
+                      {bookmaker.odds?.total?.over ?
+                        `O ${bookmaker.odds.total.over.point}` :
                         "O 43"}
                     </Text>
                     <Text style={styles.oddsTableValue}>
@@ -626,7 +632,7 @@ export default function MarketIntelNew() {
 
             {/* Team 2 Section */}
             <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team2)}</Text>
-            
+
             {/* Dynamic Bookmaker Rows for Team 2 */}
             {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
               <View key={`team2-${index}`} style={styles.oddsTableRow}>
@@ -648,8 +654,8 @@ export default function MarketIntelNew() {
                   />
                   <View style={styles.oddsTableMultiValue}>
                     <Text style={styles.oddsTableValue}>
-                      {bookmaker.odds?.spread?.away?.point ? 
-                        `${bookmaker.odds.spread.away.point > 0 ? '+' : ''}${bookmaker.odds.spread.away.point}` : 
+                      {bookmaker.odds?.spread?.away?.point ?
+                        `${bookmaker.odds.spread.away.point > 0 ? '+' : ''}${bookmaker.odds.spread.away.point}` :
                         "-1.5"}
                     </Text>
                     <Text style={styles.oddsTableValue}>
@@ -665,8 +671,8 @@ export default function MarketIntelNew() {
                   />
                   <View style={styles.oddsTableMultiValue}>
                     <Text style={styles.oddsTableValue}>
-                      {bookmaker.odds?.total?.under ? 
-                        `U ${bookmaker.odds.total.under.point}` : 
+                      {bookmaker.odds?.total?.under ?
+                        `U ${bookmaker.odds.total.under.point}` :
                         "U 53.4"}
                     </Text>
                     <Text style={styles.oddsTableValue}>
@@ -719,8 +725,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.spread?.sharp ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.spread?.sharp ?
+                          `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` :
                           "3.1%"}
                       </Text>
                     </View>
@@ -728,8 +734,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharp ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharp ?
+                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` :
                           "3.1%"}
                       </Text>
                     </View>
@@ -737,8 +743,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.total?.sharp ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.total?.sharp ?
+                          `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` :
                           "3.7%"}
                       </Text>
                     </View>
@@ -753,8 +759,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.spread?.market ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.spread?.market ?
+                          `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` :
                           "4.5%"}
                       </Text>
                     </View>
@@ -762,8 +768,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.market ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.market ?
+                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` :
                           "4.1%"}
                       </Text>
                     </View>
@@ -771,8 +777,8 @@ export default function MarketIntelNew() {
                   <View style={styles.dataColumn}>
                     <View style={styles.dataCell}>
                       <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.total?.market ? 
-                          `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` : 
+                        {marketResult.marketIntelligence.vigAnalysis.total?.market ?
+                          `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` :
                           "4.6%"}
                       </Text>
                     </View>
@@ -1405,4 +1411,3 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
-

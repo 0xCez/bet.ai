@@ -447,9 +447,11 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             jsonResponse.teamStats = teamStats;  // ~2k chars - reasonable
 
             // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
+            // First enhance teamStats with game data to add pointsPerGame fields
+            const enhancedTeamStats = enhanceTeamStatsWithGameData(teamStats, gameData);
             jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
               marketIntelligence,
-              teamStats,
+              enhancedTeamStats,
               jsonResponse.teams?.home || team1,
               jsonResponse.teams?.away || team2
             );
@@ -5297,6 +5299,50 @@ function calculateSoccerSharpMeter(bookmakers, event) {
   };
 }
 
+// Helper function to convert decimal odds to fractional odds (for soccer)
+function decimalToFractional(decimal) {
+  if (!decimal || decimal === 1) return "1/1";
+
+  // Get the profit (decimal - 1)
+  const profit = decimal - 1;
+
+  // Convert to fraction
+  let numerator = profit;
+  let denominator = 1;
+
+  // Find common fraction by multiplying until we get close to integers
+  const precision = 1000; // For accuracy
+  numerator = Math.round(profit * precision);
+  denominator = precision;
+
+  // Simplify the fraction by finding GCD
+  const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+  const divisor = gcd(numerator, denominator);
+
+  numerator = numerator / divisor;
+  denominator = denominator / divisor;
+
+  // Common fractional odds simplifications
+  const commonFractions = {
+    '1/1': 1, '2/1': 2, '3/1': 3, '4/1': 4, '5/1': 5, '10/1': 10, '20/1': 20,
+    '1/2': 0.5, '1/3': 0.333, '2/5': 0.4, '4/5': 0.8, '5/6': 0.833,
+    '10/11': 0.909, '5/4': 1.25, '6/4': 1.5, '7/4': 1.75, '9/4': 2.25,
+    '11/4': 2.75, '13/4': 3.25, '15/4': 3.75, '8/5': 1.6, '11/5': 2.2,
+    '13/5': 2.6, '7/2': 3.5, '9/2': 4.5, '11/2': 5.5, '13/2': 6.5,
+    '15/2': 7.5, '17/2': 8.5, '19/2': 9.5
+  };
+
+  // Check if it matches a common fraction
+  for (const [frac, val] of Object.entries(commonFractions)) {
+    if (Math.abs(profit - val) < 0.05) {
+      return frac;
+    }
+  }
+
+  // Return simplified fraction
+  return `${numerator}/${denominator}`;
+}
+
 function calculateSoccerBestLines(bookmakers, event) {
   const moneylines = { home: [], draw: [], away: [] };
 
@@ -5349,23 +5395,26 @@ function calculateSoccerBestLines(bookmakers, event) {
     consensusDrawML: consensusDraw,
     bestLines: [
       bestHome && {
-        type: "moneyline",
-        label: "Best Home ML",
+        type: "soccer_win",
+        label: "Best Home to Win",
         odds: bestHome.odds,
+        fractionalOdds: decimalToFractional(bestHome.odds),
         bookmaker: bestHome.bookmaker,
         team: bestHome.team
       },
       bestDraw && {
-        type: "moneyline",
-        label: "Best Draw ML",
+        type: "soccer_draw",
+        label: "Best Draw",
         odds: bestDraw.odds,
+        fractionalOdds: decimalToFractional(bestDraw.odds),
         bookmaker: bestDraw.bookmaker,
         team: "Draw"
       },
       bestAway && {
-        type: "moneyline",
-        label: "Best Away ML",
+        type: "soccer_win",
+        label: "Best Away to Win",
         odds: bestAway.odds,
+        fractionalOdds: decimalToFractional(bestAway.odds),
         bookmaker: bestAway.bookmaker,
         team: bestAway.team
       }
@@ -5493,6 +5542,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairHome,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5510,6 +5560,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairDraw,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5527,6 +5578,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairAway,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5563,9 +5615,11 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       opportunities: hasOpportunities ? allOpportunities.slice(0, 3).map(opp => ({
         type: opp.type,
         title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
-        description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.odds}` : "3-way arbitrage opportunity",
+        description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.fractionalOdds || opp.odds}` : "3-way arbitrage opportunity",
         icon: opp.icon || "dollar-sign",
-        percentage: opp.type === "ev" ? opp.ev : opp.profit
+        percentage: opp.type === "ev" ? opp.ev : opp.profit,
+        odds: opp.odds,
+        fractionalOdds: opp.fractionalOdds
       })) : [{
         type: "efficient",
         title: "Market efficiently priced",
@@ -5775,14 +5829,70 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
       if (lowestVigML) {
         const bookmakerShort = getBookmakerShortName(lowestVigML.bookmaker);
+        const isHome = lowestVigML.team === homeTeam;
+        const teamLabel = isHome ? "Home" : "Away";
         return {
-          display: `Home ML at ${bookmakerShort}`,
+          display: `${teamLabel} ML at ${bookmakerShort}`,
           label: "Best Value"
         };
       }
     }
 
-    // STEP 3: Fallback - truly efficient market
+    // STEP 3: Fallback to bestLines - find best ML for market favorite
+    console.log('=== BEST VALUE FALLBACK DEBUG ===');
+    console.log('marketIntelligence structure:', JSON.stringify({
+      hasBestLines: !!marketIntelligence?.bestLines,
+      hasBestLinesArray: !!marketIntelligence?.bestLines?.bestLines,
+      bestLinesLength: marketIntelligence?.bestLines?.bestLines?.length
+    }));
+
+    const bestLinesArray = marketIntelligence?.bestLines?.bestLines || [];
+
+    // Get consensus to determine market favorite
+    const consensusHomeML = marketIntelligence?.bestLines?.consensusHomeML ||
+                           marketIntelligence?.consensusHomeML || 0;
+    const consensusAwayML = marketIntelligence?.bestLines?.consensusAwayML ||
+                           marketIntelligence?.consensusAwayML || 0;
+
+    console.log(`Consensus - Home ML: ${consensusHomeML}, Away ML: ${consensusAwayML}`);
+
+    // Determine favorite (lower odds = favorite)
+    const favoriteIsHome = consensusHomeML < consensusAwayML;
+    const favoriteTeam = favoriteIsHome ? homeTeam : awayTeam;
+
+    console.log(`Market Favorite: ${favoriteTeam} (${favoriteIsHome ? 'Home' : 'Away'})`);
+
+    // Find best ML line for the favorite
+    const mlLines = Array.isArray(bestLinesArray) ?
+      bestLinesArray.filter(line => line?.type === "moneyline") : [];
+
+    console.log(`Found ${mlLines.length} ML lines in bestLines`);
+    console.log('ML lines:', JSON.stringify(mlLines, null, 2));
+
+    if (mlLines.length > 0) {
+      // Find the line for the market favorite
+      const favoriteLine = mlLines.find(line =>
+        line.team === favoriteTeam ||
+        line.label?.includes(favoriteIsHome ? "Home" : "Away")
+      );
+
+      console.log('Favorite line found:', JSON.stringify(favoriteLine));
+
+      if (favoriteLine) {
+        const bookmakerShort = getBookmakerShortName(favoriteLine.bookmaker);
+        const teamLabel = favoriteIsHome ? "Home" : "Away";
+
+        return {
+          display: `${teamLabel} ML at ${bookmakerShort}`,
+          label: "Best Value"
+        };
+      }
+    }
+
+    console.log('No ML lines found, returning efficient market');
+    console.log('===================================');
+
+    // STEP 4: Final fallback - truly efficient market
     return {
       display: "Efficient market",
       label: "Best Value"
@@ -5819,8 +5929,24 @@ function getBookmakerShortName(bookmaker) {
 // Output format: "+7.2 PPG" for UI display (positive = team1 advantage)
 function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
   try {
+    console.log('=== OFFENSIVE EDGE DEBUG ===');
+    console.log('teamStats structure:', JSON.stringify({
+      team1: {
+        hasStats: !!teamStats?.team1?.stats,
+        hasCalculated: !!teamStats?.team1?.stats?.calculated,
+        ppg: teamStats?.team1?.stats?.calculated?.pointsPerGame
+      },
+      team2: {
+        hasStats: !!teamStats?.team2?.stats,
+        hasCalculated: !!teamStats?.team2?.stats?.calculated,
+        ppg: teamStats?.team2?.stats?.calculated?.pointsPerGame
+      }
+    }, null, 2));
+
     const team1PPG = teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
     const team2PPG = teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
+
+    console.log(`Team1 PPG: ${team1PPG}, Team2 PPG: ${team2PPG}`);
 
     const differential = team1PPG - team2PPG;
     const roundedDiff = Math.round(differential * 10) / 10;
@@ -5828,10 +5954,15 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
-    return {
+    const result = {
       display: `${sign}${roundedDiff} PPG`,
       label: "Offensive Edge"
     };
+
+    console.log('Offensive Edge Result:', result);
+    console.log('===========================');
+
+    return result;
   } catch (error) {
     console.error('Error calculating offensive edge:', error);
     return null;
@@ -5842,8 +5973,11 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
 // Output format: "-3.7 PPG" for UI display (negative = team1 has better defense)
 function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
   try {
+    console.log('=== DEFENSIVE EDGE DEBUG ===');
     const team1OppPPG = teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
     const team2OppPPG = teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
+
+    console.log(`Team1 Opp PPG: ${team1OppPPG}, Team2 Opp PPG: ${team2OppPPG}`);
 
     // Lower is better for defense, so reverse the logic
     // Positive differential = team1 has better defense (allows fewer points)
@@ -5853,10 +5987,15 @@ function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
-    return {
+    const result = {
       display: `${sign}${roundedDiff} PPG`,
       label: "Defensive Edge"
     };
+
+    console.log('Defensive Edge Result:', result);
+    console.log('============================');
+
+    return result;
   } catch (error) {
     console.error('Error calculating defensive edge:', error);
     return null;
@@ -5865,12 +6004,23 @@ function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
 
 // Master function to calculate all new Key Insights
 function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam) {
-  return {
+  console.log('=== CALCULATE KEY INSIGHTS NEW ===');
+  console.log('Home Team:', homeTeam);
+  console.log('Away Team:', awayTeam);
+  console.log('Has teamStats:', !!teamStats);
+  console.log('Has marketIntelligence:', !!marketIntelligence);
+
+  const result = {
     marketConsensus: calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam),
     bestValue: findBestValue(marketIntelligence, homeTeam, awayTeam),
     offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam),
     defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam)
   };
+
+  console.log('Final Key Insights Result:', JSON.stringify(result, null, 2));
+  console.log('===================================');
+
+  return result;
 }
 
 // ====================================================================
