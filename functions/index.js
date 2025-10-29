@@ -5431,6 +5431,34 @@ function calculateSoccerBestLines(bookmakers, event) {
   };
 }
 
+// Helper function to find lowest vig (best odds) for a single outcome in 3-way betting
+function findLowestVigForOutcome(outcomeOdds, fairValue) {
+  if (!outcomeOdds || outcomeOdds.length === 0) return null;
+
+  // Find the bookmaker with the best (highest) odds for this outcome
+  // Higher odds = better value = lower implied vig
+  const bestBook = outcomeOdds.sort((a, b) => b.odds - a.odds)[0];
+
+  if (!bestBook) return null;
+
+  // Calculate vig if we have fair value
+  let vig = null;
+  if (fairValue && bestBook.odds) {
+    // Vig = difference between implied probability at book odds vs fair value
+    const impliedProb = 1 / bestBook.odds;
+    const fairProb = 1 / fairValue;
+    vig = ((impliedProb - fairProb) / fairProb * 100);
+    vig = Math.max(0, parseFloat(vig.toFixed(1))); // Ensure non-negative
+  }
+
+  return {
+    bookmaker: bestBook.bookmaker,
+    odds: bestBook.odds,
+    fractionalOdds: decimalToFractional(bestBook.odds),
+    vig: vig || 0
+  };
+}
+
 function calculateSoccerEVOpportunities(bookmakers, event) {
   try {
     // Extract 3-way moneyline odds (Home/Draw/Away)
@@ -5509,12 +5537,12 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       fairHome = parseFloat((1 / trueImpliedHome).toFixed(2));
       fairDraw = parseFloat((1 / trueImpliedDraw).toFixed(2));
       fairAway = parseFloat((1 / trueImpliedAway).toFixed(2));
-      
+
       // Convert to fractional odds
       fairHomeFractional = decimalToFractional(fairHome);
       fairDrawFractional = decimalToFractional(fairDraw);
       fairAwayFractional = decimalToFractional(fairAway);
-      
+
       console.log('Fair Value Calculated - Home:', fairHome, 'Draw:', fairDraw, 'Away:', fairAway);
       console.log('Fair Value Fractional - Home:', fairHomeFractional, 'Draw:', fairDrawFractional, 'Away:', fairAwayFractional);
     } else {
@@ -5626,27 +5654,87 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       }
     }
 
+    // Calculate lowest vig for each outcome (use fair value if available, otherwise sharp consensus)
+    const lowestVigHome = findLowestVigForOutcome(homeOdds, fairHome || sharpConsensusHome);
+    const lowestVigDraw = findLowestVigForOutcome(drawOdds, fairDraw || sharpConsensusDraw);
+    const lowestVigAway = findLowestVigForOutcome(awayOdds, fairAway || sharpConsensusAway);
+
     // Format opportunities for UI
     const allOpportunities = [...evOpportunities, ...arbitrageOpportunities];
-    const hasOpportunities = allOpportunities.length > 0;
+    const hasEvOrArb = allOpportunities.length > 0;
 
-    const uiOpportunities = {
-      hasOpportunities,
-      opportunities: hasOpportunities ? allOpportunities.slice(0, 3).map(opp => ({
-        type: opp.type,
-        title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
-        description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.fractionalOdds || opp.odds}` : "3-way arbitrage opportunity",
-        icon: opp.icon || "dollar-sign",
-        percentage: opp.type === "ev" ? opp.ev : opp.profit,
-        odds: opp.odds,
-        fractionalOdds: opp.fractionalOdds
-      })) : [{
+    // Build UI opportunities array
+    const uiOpportunitiesArray = [];
+
+    if (hasEvOrArb) {
+      // Show EV+ and Arb opportunities
+      allOpportunities.slice(0, 3).forEach(opp => {
+        uiOpportunitiesArray.push({
+          type: opp.type,
+          title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
+          description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.fractionalOdds || opp.odds}` : "3-way arbitrage opportunity",
+          icon: opp.icon || "dollar-sign",
+          percentage: opp.type === "ev" ? opp.ev : opp.profit,
+          odds: opp.odds,
+          fractionalOdds: opp.fractionalOdds
+        });
+      });
+    } else {
+      // No EV+ or Arb - show efficient market message + lowest vig lines
+      uiOpportunitiesArray.push({
         type: "efficient",
         title: "Market efficiently priced",
         description: "No profitable opportunities found",
         icon: "x"
-      }],
-      summary: hasOpportunities ? `${allOpportunities.length} opportunities` : "Efficient market"
+      });
+
+      // Add lowest vig for Home Win
+      if (lowestVigHome) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Home Win at ${lowestVigHome.vig}%`,
+          description: `${lowestVigHome.bookmaker} • ${lowestVigHome.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigHome.vig,
+          bookmaker: lowestVigHome.bookmaker,
+          odds: lowestVigHome.odds,
+          fractionalOdds: lowestVigHome.fractionalOdds
+        });
+      }
+
+      // Add lowest vig for Draw
+      if (lowestVigDraw) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Draw at ${lowestVigDraw.vig}%`,
+          description: `${lowestVigDraw.bookmaker} • ${lowestVigDraw.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigDraw.vig,
+          bookmaker: lowestVigDraw.bookmaker,
+          odds: lowestVigDraw.odds,
+          fractionalOdds: lowestVigDraw.fractionalOdds
+        });
+      }
+
+      // Add lowest vig for Away Win
+      if (lowestVigAway) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Away Win at ${lowestVigAway.vig}%`,
+          description: `${lowestVigAway.bookmaker} • ${lowestVigAway.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigAway.vig,
+          bookmaker: lowestVigAway.bookmaker,
+          odds: lowestVigAway.odds,
+          fractionalOdds: lowestVigAway.fractionalOdds
+        });
+      }
+    }
+
+    const uiOpportunities = {
+      hasOpportunities: hasEvOrArb,
+      opportunities: uiOpportunitiesArray.slice(0, 4), // Max 4 items (1 efficient message + 3 lowest vig)
+      summary: hasEvOrArb ? `${allOpportunities.length} opportunities` : "Efficient market"
     };
 
     return {
@@ -5746,7 +5834,10 @@ function formatSoccerOddsTable(bookmakers, event) {
         moneyline: {
           home: homeOutcome?.price || null,
           draw: drawOutcome?.price || null,
-          away: awayOutcome?.price || null
+          away: awayOutcome?.price || null,
+          homeFractional: homeOutcome?.price ? decimalToFractional(homeOutcome.price) : null,
+          drawFractional: drawOutcome?.price ? decimalToFractional(drawOutcome.price) : null,
+          awayFractional: awayOutcome?.price ? decimalToFractional(awayOutcome.price) : null
         }
       }
     };

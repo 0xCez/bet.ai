@@ -622,16 +622,64 @@ export default function MarketIntelNew() {
           </View>
 
           {marketResult?.marketIntelligence?.oddsTable && marketResult.marketIntelligence.oddsTable.length > 0 ? (
-            <View style={styles.oddsTableContainer}>
-              {/* Column Headers */}
-              <View style={styles.oddsTableHeaderRow}>
-                <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelMoneyline").toUpperCase()}</Text>
-                <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelSpread").toUpperCase()}</Text>
-                <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>{i18n.t("marketIntelTotal").toUpperCase()}S</Text>
-              </View>
+            params.sport?.includes('soccer') ? (
+              // SOCCER: Single section with Home/Draw/Away columns
+              <View style={styles.oddsTableContainer}>
+                {/* Column Headers */}
+                <View style={styles.oddsTableHeaderRow}>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>HOME W</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>DRAW</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>AWAY W</Text>
+                </View>
 
-              {/* Team 1 Section */}
-              <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team1)}</Text>
+                {/* Bookmaker Rows */}
+                {marketResult.marketIntelligence.oddsTable.slice(0, 5).map((bookmaker, index) => (
+                  <View key={`soccer-${index}`} style={styles.oddsTableRow}>
+                    <View style={styles.oddsTableCell}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.homeFractional || formatOdds(bookmaker.odds?.moneyline?.home)}
+                      </Text>
+                    </View>
+                    <View style={styles.oddsTableCell}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.drawFractional || formatOdds(bookmaker.odds?.moneyline?.draw)}
+                      </Text>
+                    </View>
+                    <View style={[styles.oddsTableCell, styles.oddsTableCellLast]}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.awayFractional || formatOdds(bookmaker.odds?.moneyline?.away)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              // NFL/NBA: Team 1 and Team 2 sections with ML/Spread/Total
+              <View style={styles.oddsTableContainer}>
+                {/* Column Headers */}
+                <View style={styles.oddsTableHeaderRow}>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelMoneyline").toUpperCase()}</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelSpread").toUpperCase()}</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>{i18n.t("marketIntelTotal").toUpperCase()}S</Text>
+                </View>
+
+                {/* Team 1 Section */}
+                <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team1)}</Text>
 
             {/* Dynamic Bookmaker Rows for Team 1 */}
             {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
@@ -735,7 +783,8 @@ export default function MarketIntelNew() {
                 </View>
               </View>
             ))}
-            </View>
+              </View>
+            )
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No odds table data available</Text>
