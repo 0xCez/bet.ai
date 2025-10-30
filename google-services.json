@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "878948709969",
+    "project_id": "betai-dev-16",
+    "storage_bucket": "betai-dev-16.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:878948709969:android:5a635a5891fe16f2ec2a70",
+        "android_client_info": {
+          "package_name": "com.betai.android"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9EfOhsph0kPC1zaTcb1DA4NLt4GuY1Yg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,589 @@
+{
+    "sport": "nfl",
+    "teams": {
+        "home": "New Orleans Saints",
+        "away": "Tampa Bay Buccaneers"
+    },
+    "keyInsights": {
+        "confidence": "Medium",
+        "marketActivity": "High",
+        "lineShift": "High",
+        "publicVsSharps": {
+            "public": 63,
+            "sharps": 37
+        }
+    },
+    "matchSnapshot": {
+        "recentPerformance": {
+            "home": "NO 1-5 (L-L-W-L-L)",
+            "away": "TB 4-2 (L-W-W-L-W)"
+        },
+        "headToHead": "4-2 in last 6 matchups",
+        "momentum": {
+            "home": "NO struggling, 1 win in last 6",
+            "away": "TB on a roll, 4 wins in last 5"
+        }
+    },
+    "xFactors": [
+        {
+            "title": "Health & Availability",
+            "detail": "Saints missing key players like Julian Blackmon; Bucs without Mike Evans",
+            "type": 1
+        },
+        {
+            "title": "Location & Weather",
+            "detail": "Game at Caesars Superdome, no weather impact",
+            "type": 2
+        },
+        {
+            "title": "Officiating & Rules",
+            "detail": "Standard officiating expected",
+            "type": 3
+        },
+        {
+            "title": "Travel & Fatigue",
+            "detail": "Normal rest for both teams",
+            "type": 4
+        }
+    ],
+    "aiAnalysis": {
+        "confidenceScore": "Medium",
+        "bettingSignal": "Sharp Trap",
+        "breakdown": "The betting market is buzzing with high activity, and the line has shifted significantly. Public money is heavily on the Saints, but sharps are lurking, suggesting a potential trap. The line movement indicates some sharp action early, but the market's current stance is suspicious.\n\nOn the field, the Saints are struggling with a 1-5 record, plagued by injuries to key players like Julian Blackmon. The Buccaneers, on the other hand, are in good form with a 4-2 record, despite missing Mike Evans. The Saints' defense is leaky, and their offense is inconsistent, while the Bucs have been more balanced.\n\nSharp bettors might be wary of the Saints' poor form and lean towards the Buccaneers, especially with the line movement suggesting a trap. Pre-game, the Bucs look like the stronger side, but live betting could offer opportunities if the Saints show any signs of life. Watch for any early momentum shifts."
+    },
+    "image_url": "https://firebasestorage.googleapis.com/v0/b/betai-dev-16.firebasestorage.app/o/images%2F12B09FA7-BBB3-42B5-935B-0DC8149C96D5.jpg?alt=media&token=0abd578a-101b-4787-a69b-e48d0fc81928",
+    "marketIntelligence": {
+        "bestLines": {
+            "consensusSpreadPoint": 3.5,
+            "consensusTotal": 46,
+            "consensusHomeML": 2.75,
+            "consensusAwayML": 1.48,
+            "bestLines": [
+                {
+                    "type": "moneyline",
+                    "label": "Best Home ML",
+                    "odds": 2.65,
+                    "bookmaker": "BetRivers",
+                    "team": "New Orleans Saints"
+                },
+                {
+                    "type": "moneyline",
+                    "label": "Best Away ML",
+                    "odds": 1.46,
+                    "bookmaker": "DraftKings",
+                    "team": "Tampa Bay Buccaneers"
+                },
+                {
+                    "type": "spread",
+                    "label": "Best Favorite Spread",
+                    "line": -4.5,
+                    "odds": 1.95,
+                    "bookmaker": "DraftKings",
+                    "team": "Tampa Bay Buccaneers"
+                },
+                {
+                    "type": "spread",
+                    "label": "Best Underdog Spread",
+                    "line": 4.5,
+                    "odds": 1.83,
+                    "bookmaker": "ESPN BET",
+                    "team": "New Orleans Saints"
+                },
+                {
+                    "type": "total",
+                    "label": "Best Over",
+                    "line": 46,
+                    "odds": 2.01,
+                    "bookmaker": "Pinnacle",
+                    "team": "Over 46"
+                },
+                {
+                    "type": "total",
+                    "label": "Best Under",
+                    "line": 46,
+                    "odds": 1.93,
+                    "bookmaker": "Caesars",
+                    "team": "Under 46"
+                }
+            ],
+            "rawData": {
+                "totalSpreads": 30,
+                "totalMoneylines": 30,
+                "totalTotals": 30
+            }
+        },
+        "lineMovement": {
+            "error": "Cannot get historical data for future games",
+            "note": "Game hasn't started yet, odds history not available",
+            "gameDate": "2025-10-26T20:05:00Z",
+            "currentDate": "2025-10-26T19:15:55.862Z"
+        },
+        "sharpMeter": {
+            "line1": "No clear sharp lean",
+            "line2": "Limited data",
+            "line3": "No comparison available",
+            "gaugeValue": 50,
+            "gaugeLabel": "HIGH",
+            "pointGap": 0,
+            "avgSharpSpread": 3.7,
+            "avgPublicSpread": 3.7,
+            "avgSharpVig": 3.1,
+            "avgPublicVig": 4.3,
+            "vigGap": 1.2,
+            "confidenceLevel": "high",
+            "dataQuality": "excellent",
+            "sharpBookCount": 3,
+            "publicBookCount": 12
+        },
+        "marketTightness": {
+            "tightness": "Loose",
+            "pointRange": 1,
+            "priceRange": 0,
+            "comment": "Big disagreement, high value in line-shopping.",
+            "summary": "Loose • Spread market • point range 1.0 • price range 0¢",
+            "marketBreakdown": {
+                "spread": {
+                    "market": "Spread",
+                    "tightness": "Loose",
+                    "pointRange": 1,
+                    "priceRange": 0,
+                    "comment": "Big disagreement, high value in line-shopping.",
+                    "valid": true
+                },
+                "moneyline": {
+                    "market": "Moneyline",
+                    "tightness": "Tight",
+                    "pointRange": 0,
+                    "priceRange": 0,
+                    "comment": "Books agree, edges harder to find.",
+                    "valid": true
+                },
+                "total": {
+                    "market": "Total",
+                    "tightness": "Loose",
+                    "pointRange": 1,
+                    "priceRange": 0,
+                    "comment": "Big disagreement, high value in line-shopping.",
+                    "valid": true
+                }
+            }
+        },
+        "evAnalysis": {
+            "teams": "New Orleans Saints vs Tampa Bay Buccaneers",
+            "sharpConsensus": {
+                "moneyline": {
+                    "home": 2.7899999999999996,
+                    "away": 1.4866666666666666
+                },
+                "spread": {
+                    "home": 1.8866666666666667,
+                    "away": 1.9900000000000002,
+                    "point": 4.5
+                },
+                "total": {
+                    "over": 1.95,
+                    "under": 1.9066666666666665,
+                    "point": 46.5
+                }
+            },
+            "fairValue": {
+                "moneyline": {
+                    "fair1": 2.88,
+                    "fair2": 1.53
+                },
+                "spread": {
+                    "fair1": 1.95,
+                    "fair2": 2.05
+                },
+                "total": {
+                    "fair1": 2.02,
+                    "fair2": 1.98
+                }
+            },
+            "vigAnalysis": {
+                "moneyline": {
+                    "sharp": 3.1,
+                    "market": 4.1
+                },
+                "spread": {
+                    "sharp": 3.2547898503116235,
+                    "market": 4.495692722244438
+                },
+                "total": {
+                    "sharp": 3.7296037296037365,
+                    "market": 4.604049236848784
+                }
+            },
+            "lowestVigBooks": {
+                "moneyline": {
+                    "bookmaker": "Pinnacle",
+                    "vig": 2.8,
+                    "odds1": 2.77,
+                    "odds2": 1.5
+                },
+                "spread": {
+                    "bookmaker": "LowVig.ag",
+                    "vig": 2.3,
+                    "odds1": 1.93,
+                    "odds2": 1.98
+                },
+                "total": {
+                    "bookmaker": "Pinnacle",
+                    "vig": 2.9,
+                    "odds1": 2.01,
+                    "odds2": 1.88
+                }
+            },
+            "arbitrage": null,
+            "evOpportunities": [],
+            "uiOpportunities": {
+                "hasOpportunities": null,
+                "opportunities": [
+                    {
+                        "type": "efficient",
+                        "title": "Market is efficiently priced",
+                        "description": "No +EV or Arb opportunities found",
+                        "icon": "x"
+                    },
+                    {
+                        "type": "lowvig",
+                        "title": "Lowest Vig at 2.8%",
+                        "description": "ML on New Orleans Saints 2.77 at Pinnacle",
+                        "icon": "pinnacle",
+                        "vig": 2.8,
+                        "bookmaker": "Pinnacle"
+                    },
+                    {
+                        "type": "lowvig",
+                        "title": "Lowest Vig Spread at 2.3%",
+                        "description": "Spread 1.93 at LowVig.ag",
+                        "icon": "generic",
+                        "vig": 2.3,
+                        "bookmaker": "LowVig.ag"
+                    }
+                ],
+                "summary": "0 opportunities found"
+            },
+            "summary": {
+                "totalBooks": 15,
+                "sharpBooks": 3,
+                "hasOpportunities": false
+            }
+        },
+        "oddsTable": [
+            {
+                "bookmaker": "LowVig.ag",
+                "bookmakerKey": "lowvig",
+                "isSharp": true,
+                "odds": {
+                    "moneyline": {
+                        "home": 2.8,
+                        "away": 1.48
+                    },
+                    "spread": {
+                        "home": {
+                            "point": 3.5,
+                            "price": 1.93
+                        },
+                        "away": {
+                            "point": -3.5,
+                            "price": 1.98
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 46,
+                            "price": 1.93
+                        },
+                        "under": {
+                            "point": 46,
+                            "price": 1.93
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetOnline.ag",
+                "bookmakerKey": "betonlineag",
+                "isSharp": true,
+                "odds": {
+                    "moneyline": {
+                        "home": 2.8,
+                        "away": 1.48
+                    },
+                    "spread": {
+                        "home": {
+                            "point": 3.5,
+                            "price": 1.88
+                        },
+                        "away": {
+                            "point": -3.5,
+                            "price": 1.93
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 46,
+                            "price": 1.91
+                        },
+                        "under": {
+                            "point": 46,
+                            "price": 1.91
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "DraftKings",
+                "bookmakerKey": "draftkings",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 2.8,
+                        "away": 1.46
+                    },
+                    "spread": {
+                        "home": {
+                            "point": 4.5,
+                            "price": 1.87
+                        },
+                        "away": {
+                            "point": -4.5,
+                            "price": 1.95
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 46.5,
+                            "price": 1.91
+                        },
+                        "under": {
+                            "point": 46.5,
+                            "price": 1.91
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetMGM",
+                "bookmakerKey": "betmgm",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 2.7,
+                        "away": 1.48
+                    },
+                    "spread": {
+                        "home": {
+                            "point": 3.5,
+                            "price": 1.91
+                        },
+                        "away": {
+                            "point": -3.5,
+                            "price": 1.91
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 46.5,
+                            "price": 1.91
+                        },
+                        "under": {
+                            "point": 46.5,
+                            "price": 1.91
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetUS",
+                "bookmakerKey": "betus",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 2.75,
+                        "away": 1.49
+                    },
+                    "spread": {
+                        "home": {
+                            "point": 3.5,
+                            "price": 1.91
+                        },
+                        "away": {
+                            "point": -3.5,
+                            "price": 1.91
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 46,
+                            "price": 1.95
+                        },
+                        "under": {
+                            "point": 46,
+                            "price": 1.87
+                        }
+                    }
+                }
+            }
+        ],
+        "rawBookmakerCount": 15,
+        "event": {
+            "id": "a8dd9bb0681692540d067bd0e9e66989",
+            "home_team": "New Orleans Saints",
+            "away_team": "Tampa Bay Buccaneers",
+            "commence_time": "2025-10-26T20:05:00Z"
+        }
+    },
+    "teamStats": {
+        "team1": {
+            "teamId": 27,
+            "stats": {
+                "team": "New Orleans Saints",
+                "season": "2025",
+                "offense": {
+                    "passing": {
+                        "yardsPerGame": 197.7,
+                        "totalYards": 1,
+                        "touchdowns": 8,
+                        "completions": 239,
+                        "attempts": 160,
+                        "completionPct": 0,
+                        "interceptions": 5,
+                        "sacks": 15,
+                        "sackedYards": 85
+                    },
+                    "rushing": {
+                        "yardsPerGame": 100.1,
+                        "totalYards": 701,
+                        "touchdowns": 3,
+                        "attempts": 183,
+                        "yardsPerRush": 3.8,
+                        "fumbles": 5,
+                        "fumblesLost": 3
+                    },
+                    "efficiency": {
+                        "thirdDownPct": 36.78,
+                        "fourthDownPct": 27.27,
+                        "totalFirstDowns": 136,
+                        "penaltyYards": 392,
+                        "penalties": 55
+                    }
+                },
+                "defense": {
+                    "passing": {
+                        "yardsAllowedPerGame": 206.3,
+                        "touchdownsAllowed": 14,
+                        "interceptions": 4,
+                        "sacks": 14
+                    },
+                    "rushing": {
+                        "yardsAllowedPerGame": 129.4,
+                        "touchdownsAllowed": 6,
+                        "fumblesRecovered": 5
+                    }
+                },
+                "specialTeams": {
+                    "fieldGoals": {
+                        "made": 14,
+                        "attempts": 20,
+                        "percentage": "70.0"
+                    }
+                },
+                "calculated": {
+                    "totalYardsPerGame": 297.79999999999995,
+                    "turnoverDifferential": 1
+                }
+            },
+            "error": null
+        },
+        "team2": {
+            "teamId": 24,
+            "stats": {
+                "team": "Tampa Bay Buccaneers",
+                "season": "2025",
+                "offense": {
+                    "passing": {
+                        "yardsPerGame": 239.3,
+                        "totalYards": 1,
+                        "touchdowns": 13,
+                        "completions": 245,
+                        "attempts": 157,
+                        "completionPct": 0,
+                        "interceptions": 2,
+                        "sacks": 14,
+                        "sackedYards": 92
+                    },
+                    "rushing": {
+                        "yardsPerGame": 99.6,
+                        "totalYards": 697,
+                        "touchdowns": 5,
+                        "attempts": 175,
+                        "yardsPerRush": 4,
+                        "fumbles": 7,
+                        "fumblesLost": 2
+                    },
+                    "efficiency": {
+                        "thirdDownPct": 38.2,
+                        "fourthDownPct": 50,
+                        "totalFirstDowns": 137,
+                        "penaltyYards": 372,
+                        "penalties": 46
+                    }
+                },
+                "defense": {
+                    "passing": {
+                        "yardsAllowedPerGame": 229,
+                        "touchdownsAllowed": 11,
+                        "interceptions": 5,
+                        "sacks": 20
+                    },
+                    "rushing": {
+                        "yardsAllowedPerGame": 99,
+                        "touchdownsAllowed": 7,
+                        "fumblesRecovered": 3
+                    }
+                },
+                "specialTeams": {
+                    "fieldGoals": {
+                        "made": 14,
+                        "attempts": 18,
+                        "percentage": "77.8"
+                    }
+                },
+                "calculated": {
+                    "totalYardsPerGame": 338.9,
+                    "turnoverDifferential": 4
+                }
+            },
+            "error": null
+        }
+    },
+    "keyInsightsNew": {
+        "marketConsensus": {
+            "type": "2-way",
+            "homePercent": 35,
+            "awayPercent": 65,
+            "favorite": "away",
+            "favoritePercent": 65
+        },
+        "bestValue": {
+            "hasValue": false,
+            "message": "Efficient market"
+        },
+        "offensiveEdge": {
+            "team1PPG": 0,
+            "team2PPG": 0,
+            "differential": 0,
+            "leader": "team2",
+            "advantage": 0
+        },
+        "defensiveEdge": {
+            "team1OppPPG": 0,
+            "team2OppPPG": 0,
+            "differential": 0,
+            "leader": "team2",
+            "advantage": 0
+        }
+    }
+}

@@ -444,14 +444,17 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
 
             // Add lightweight data for chatbot context (~4k chars total)
             jsonResponse.marketIntelligence = marketIntelligence;  // ~2 chars (null) or small
-            jsonResponse.teamStats = teamStats;  // ~2k chars - reasonable
 
             // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
+            // First enhance teamStats with game data to add pointsPerGame fields
+            const enhancedTeamStats = enhanceTeamStatsWithGameData(teamStats, gameData);
+            jsonResponse.teamStats = enhancedTeamStats;  // Use ENHANCED version with pointsPerGame/opponentPointsPerGame
             jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
               marketIntelligence,
-              teamStats,
+              enhancedTeamStats,
               jsonResponse.teams?.home || team1,
-              jsonResponse.teams?.away || team2
+              jsonResponse.teams?.away || team2,
+              sport
             );
 
             // NOTE: We do NOT include playerStats here because it's massive (55k+ chars).
@@ -3094,7 +3097,8 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
         },
         enhanceTeamStatsWithGameData(teamStats, gameData),
         team1,
-        team2
+        team2,
+        sport
       ),
       // Metadata (same as analyzeImage)
       timestamp: new Date().toISOString(),
@@ -5297,6 +5301,50 @@ function calculateSoccerSharpMeter(bookmakers, event) {
   };
 }
 
+// Helper function to convert decimal odds to fractional odds (for soccer)
+function decimalToFractional(decimal) {
+  if (!decimal || decimal === 1) return "1/1";
+
+  // Get the profit (decimal - 1)
+  const profit = decimal - 1;
+
+  // Convert to fraction
+  let numerator = profit;
+  let denominator = 1;
+
+  // Find common fraction by multiplying until we get close to integers
+  const precision = 1000; // For accuracy
+  numerator = Math.round(profit * precision);
+  denominator = precision;
+
+  // Simplify the fraction by finding GCD
+  const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+  const divisor = gcd(numerator, denominator);
+
+  numerator = numerator / divisor;
+  denominator = denominator / divisor;
+
+  // Common fractional odds simplifications
+  const commonFractions = {
+    '1/1': 1, '2/1': 2, '3/1': 3, '4/1': 4, '5/1': 5, '10/1': 10, '20/1': 20,
+    '1/2': 0.5, '1/3': 0.333, '2/5': 0.4, '4/5': 0.8, '5/6': 0.833,
+    '10/11': 0.909, '5/4': 1.25, '6/4': 1.5, '7/4': 1.75, '9/4': 2.25,
+    '11/4': 2.75, '13/4': 3.25, '15/4': 3.75, '8/5': 1.6, '11/5': 2.2,
+    '13/5': 2.6, '7/2': 3.5, '9/2': 4.5, '11/2': 5.5, '13/2': 6.5,
+    '15/2': 7.5, '17/2': 8.5, '19/2': 9.5
+  };
+
+  // Check if it matches a common fraction
+  for (const [frac, val] of Object.entries(commonFractions)) {
+    if (Math.abs(profit - val) < 0.05) {
+      return frac;
+    }
+  }
+
+  // Return simplified fraction
+  return `${numerator}/${denominator}`;
+}
+
 function calculateSoccerBestLines(bookmakers, event) {
   const moneylines = { home: [], draw: [], away: [] };
 
@@ -5347,25 +5395,32 @@ function calculateSoccerBestLines(bookmakers, event) {
     consensusHomeML: consensusHome,
     consensusAwayML: consensusAway,
     consensusDrawML: consensusDraw,
+    // Add fractional odds for UI display
+    consensusHomeMLFractional: decimalToFractional(consensusHome),
+    consensusAwayMLFractional: decimalToFractional(consensusAway),
+    consensusDrawMLFractional: decimalToFractional(consensusDraw),
     bestLines: [
       bestHome && {
-        type: "moneyline",
-        label: "Best Home ML",
+        type: "soccer_win",
+        label: "Best Home to Win",
         odds: bestHome.odds,
+        fractionalOdds: decimalToFractional(bestHome.odds),
         bookmaker: bestHome.bookmaker,
         team: bestHome.team
       },
       bestDraw && {
-        type: "moneyline",
-        label: "Best Draw ML",
+        type: "soccer_draw",
+        label: "Best Draw",
         odds: bestDraw.odds,
+        fractionalOdds: decimalToFractional(bestDraw.odds),
         bookmaker: bestDraw.bookmaker,
         team: "Draw"
       },
       bestAway && {
-        type: "moneyline",
-        label: "Best Away ML",
+        type: "soccer_win",
+        label: "Best Away to Win",
         odds: bestAway.odds,
+        fractionalOdds: decimalToFractional(bestAway.odds),
         bookmaker: bestAway.bookmaker,
         team: bestAway.team
       }
@@ -5375,6 +5430,34 @@ function calculateSoccerBestLines(bookmakers, event) {
       totalMoneylines: moneylines.home.length + moneylines.draw.length + moneylines.away.length,
       totalTotals: 0
     }
+  };
+}
+
+// Helper function to find lowest vig (best odds) for a single outcome in 3-way betting
+function findLowestVigForOutcome(outcomeOdds, fairValue) {
+  if (!outcomeOdds || outcomeOdds.length === 0) return null;
+
+  // Find the bookmaker with the best (highest) odds for this outcome
+  // Higher odds = better value = lower implied vig
+  const bestBook = outcomeOdds.sort((a, b) => b.odds - a.odds)[0];
+
+  if (!bestBook) return null;
+
+  // Calculate vig if we have fair value
+  let vig = null;
+  if (fairValue && bestBook.odds) {
+    // Vig = difference between implied probability at book odds vs fair value
+    const impliedProb = 1 / bestBook.odds;
+    const fairProb = 1 / fairValue;
+    vig = ((impliedProb - fairProb) / fairProb * 100);
+    vig = Math.max(0, parseFloat(vig.toFixed(1))); // Ensure non-negative
+  }
+
+  return {
+    bookmaker: bestBook.bookmaker,
+    odds: bestBook.odds,
+    fractionalOdds: decimalToFractional(bestBook.odds),
+    vig: vig || 0
   };
 }
 
@@ -5406,9 +5489,9 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       return {
         teams: `${event.home_team} vs ${event.away_team}`,
         sharpConsensus: { moneyline: { home: null, away: null, draw: null } },
-        fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+        fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
         vigAnalysis: {
-          moneyline: { sharp: null, market: null },
+          moneyline: { sharp: null, market: null, sharpHome: null, sharpDraw: null, sharpAway: null, marketHome: null, marketDraw: null, marketAway: null },
           spread: { sharp: null, market: null },
           total: { sharp: null, market: null }
         },
@@ -5436,6 +5519,11 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
 
     // Calculate 3-way fair value (remove vig from sharp consensus)
     let fairHome = null, fairDraw = null, fairAway = null;
+    let fairHomeFractional = null, fairDrawFractional = null, fairAwayFractional = null;
+
+    console.log('=== FAIR VALUE CALCULATION DEBUG ===');
+    console.log('Sharp Consensus - Home:', sharpConsensusHome, 'Draw:', sharpConsensusDraw, 'Away:', sharpConsensusAway);
+    console.log('Sharp book count:', sharpHomeOdds.length);
 
     if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
       const impliedHome = 1 / sharpConsensusHome;
@@ -5451,14 +5539,44 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       fairHome = parseFloat((1 / trueImpliedHome).toFixed(2));
       fairDraw = parseFloat((1 / trueImpliedDraw).toFixed(2));
       fairAway = parseFloat((1 / trueImpliedAway).toFixed(2));
+
+      // Convert to fractional odds
+      fairHomeFractional = decimalToFractional(fairHome);
+      fairDrawFractional = decimalToFractional(fairDraw);
+      fairAwayFractional = decimalToFractional(fairAway);
+
+      console.log('Fair Value Calculated - Home:', fairHome, 'Draw:', fairDraw, 'Away:', fairAway);
+      console.log('Fair Value Fractional - Home:', fairHomeFractional, 'Draw:', fairDrawFractional, 'Away:', fairAwayFractional);
+    } else {
+      console.log('Cannot calculate fair value - missing sharp consensus data');
     }
+    console.log('====================================');
 
     // Calculate 3-way vig analysis
     const allHomeOdds = homeOdds.map(o => o.odds);
     const allDrawOdds = drawOdds.map(o => o.odds);
     const allAwayOdds = awayOdds.map(o => o.odds);
 
-    // Market vig (average across all books)
+    // Calculate individual vig per outcome (comparing average book odds to fair value)
+    const avgHomeOdds = allHomeOdds.length > 0 ? allHomeOdds.reduce((a, b) => a + b, 0) / allHomeOdds.length : null;
+    const avgDrawOdds = allDrawOdds.length > 0 ? allDrawOdds.reduce((a, b) => a + b, 0) / allDrawOdds.length : null;
+    const avgAwayOdds = allAwayOdds.length > 0 ? allAwayOdds.reduce((a, b) => a + b, 0) / allAwayOdds.length : null;
+
+    // Calculate vig for each outcome (Market books)
+    const marketVigHome = fairHome && avgHomeOdds ? validateVig(((1 / avgHomeOdds) - (1 / fairHome)) / (1 / fairHome) * 100) : null;
+    const marketVigDraw = fairDraw && avgDrawOdds ? validateVig(((1 / avgDrawOdds) - (1 / fairDraw)) / (1 / fairDraw) * 100) : null;
+    const marketVigAway = fairAway && avgAwayOdds ? validateVig(((1 / avgAwayOdds) - (1 / fairAway)) / (1 / fairAway) * 100) : null;
+
+    // Calculate vig for each outcome (Sharp books)
+    const sharpAvgHome = sharpHomeOdds.length > 0 ? sharpHomeOdds.reduce((a, b) => a + b, 0) / sharpHomeOdds.length : null;
+    const sharpAvgDraw = sharpDrawOdds.length > 0 ? sharpDrawOdds.reduce((a, b) => a + b, 0) / sharpDrawOdds.length : null;
+    const sharpAvgAway = sharpAwayOdds.length > 0 ? sharpAwayOdds.reduce((a, b) => a + b, 0) / sharpAwayOdds.length : null;
+
+    const sharpVigHome = fairHome && sharpAvgHome ? validateVig(((1 / sharpAvgHome) - (1 / fairHome)) / (1 / fairHome) * 100) : null;
+    const sharpVigDraw = fairDraw && sharpAvgDraw ? validateVig(((1 / sharpAvgDraw) - (1 / fairDraw)) / (1 / fairDraw) * 100) : null;
+    const sharpVigAway = fairAway && sharpAvgAway ? validateVig(((1 / sharpAvgAway) - (1 / fairAway)) / (1 / fairAway) * 100) : null;
+
+    // Overall market vig (for backwards compatibility)
     let marketVig = null;
     if (allHomeOdds.length > 0) {
       const avgVigs = [];
@@ -5471,7 +5589,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       marketVig = avgVigs.length > 0 ? parseFloat((avgVigs.reduce((a, b) => a + b, 0) / avgVigs.length).toFixed(1)) : null;
     }
 
-    // Sharp vig (from sharp books only)
+    // Overall sharp vig (for backwards compatibility)
     let sharpVig = null;
     if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
       sharpVig = parseFloat(calculateMarketVig(sharpConsensusHome, sharpConsensusAway, sharpConsensusDraw).toFixed(1));
@@ -5493,6 +5611,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairHome,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5510,6 +5629,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairDraw,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5527,6 +5647,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
             bookmaker: book.bookmaker,
             bookmakerKey: book.bookmakerKey,
             odds: book.odds,
+            fractionalOdds: decimalToFractional(book.odds),
             fairOdds: fairAway,
             ev: parseFloat(ev.toFixed(1)),
             icon: "trending-up"
@@ -5554,25 +5675,87 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       }
     }
 
+    // Calculate lowest vig for each outcome (use fair value if available, otherwise sharp consensus)
+    const lowestVigHome = findLowestVigForOutcome(homeOdds, fairHome || sharpConsensusHome);
+    const lowestVigDraw = findLowestVigForOutcome(drawOdds, fairDraw || sharpConsensusDraw);
+    const lowestVigAway = findLowestVigForOutcome(awayOdds, fairAway || sharpConsensusAway);
+
     // Format opportunities for UI
     const allOpportunities = [...evOpportunities, ...arbitrageOpportunities];
-    const hasOpportunities = allOpportunities.length > 0;
+    const hasEvOrArb = allOpportunities.length > 0;
 
-    const uiOpportunities = {
-      hasOpportunities,
-      opportunities: hasOpportunities ? allOpportunities.slice(0, 3).map(opp => ({
-        type: opp.type,
-        title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
-        description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.odds}` : "3-way arbitrage opportunity",
-        icon: opp.icon || "dollar-sign",
-        percentage: opp.type === "ev" ? opp.ev : opp.profit
-      })) : [{
+    // Build UI opportunities array
+    const uiOpportunitiesArray = [];
+
+    if (hasEvOrArb) {
+      // Show EV+ and Arb opportunities
+      allOpportunities.slice(0, 3).forEach(opp => {
+        uiOpportunitiesArray.push({
+          type: opp.type,
+          title: opp.type === "ev" ? `${opp.ev}% EV+ ${opp.outcome}` : `${opp.profit}% Arbitrage`,
+          description: opp.type === "ev" ? `${opp.bookmaker} • ${opp.fractionalOdds || opp.odds}` : "3-way arbitrage opportunity",
+          icon: opp.icon || "dollar-sign",
+          percentage: opp.type === "ev" ? opp.ev : opp.profit,
+          odds: opp.odds,
+          fractionalOdds: opp.fractionalOdds
+        });
+      });
+    } else {
+      // No EV+ or Arb - show efficient market message + lowest vig lines
+      uiOpportunitiesArray.push({
         type: "efficient",
         title: "Market efficiently priced",
         description: "No profitable opportunities found",
         icon: "x"
-      }],
-      summary: hasOpportunities ? `${allOpportunities.length} opportunities` : "Efficient market"
+      });
+
+      // Add lowest vig for Home Win
+      if (lowestVigHome) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Home Win at ${lowestVigHome.vig}%`,
+          description: `${lowestVigHome.bookmaker} • ${lowestVigHome.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigHome.vig,
+          bookmaker: lowestVigHome.bookmaker,
+          odds: lowestVigHome.odds,
+          fractionalOdds: lowestVigHome.fractionalOdds
+        });
+      }
+
+      // Add lowest vig for Draw
+      if (lowestVigDraw) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Draw at ${lowestVigDraw.vig}%`,
+          description: `${lowestVigDraw.bookmaker} • ${lowestVigDraw.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigDraw.vig,
+          bookmaker: lowestVigDraw.bookmaker,
+          odds: lowestVigDraw.odds,
+          fractionalOdds: lowestVigDraw.fractionalOdds
+        });
+      }
+
+      // Add lowest vig for Away Win
+      if (lowestVigAway) {
+        uiOpportunitiesArray.push({
+          type: "lowvig",
+          title: `Lowest Vig Away Win at ${lowestVigAway.vig}%`,
+          description: `${lowestVigAway.bookmaker} • ${lowestVigAway.fractionalOdds}`,
+          icon: "dollar-sign",
+          vig: lowestVigAway.vig,
+          bookmaker: lowestVigAway.bookmaker,
+          odds: lowestVigAway.odds,
+          fractionalOdds: lowestVigAway.fractionalOdds
+        });
+      }
+    }
+
+    const uiOpportunities = {
+      hasOpportunities: hasEvOrArb,
+      opportunities: uiOpportunitiesArray.slice(0, 4), // Max 4 items (1 efficient message + 3 lowest vig)
+      summary: hasEvOrArb ? `${allOpportunities.length} opportunities` : "Efficient market"
     };
 
     return {
@@ -5588,13 +5771,23 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
         moneyline: {
           fairHome,
           fairDraw,
-          fairAway
+          fairAway,
+          fairHomeFractional,
+          fairDrawFractional,
+          fairAwayFractional
         }
       },
       vigAnalysis: {
         moneyline: {
           sharp: validateVig(sharpVig),
-          market: validateVig(marketVig)
+          market: validateVig(marketVig),
+          // Individual vig per outcome for UI display
+          sharpHome: sharpVigHome,
+          sharpDraw: sharpVigDraw,
+          sharpAway: sharpVigAway,
+          marketHome: marketVigHome,
+          marketDraw: marketVigDraw,
+          marketAway: marketVigAway
         },
         spread: { sharp: null, market: null },
         total: { sharp: null, market: null }
@@ -5609,9 +5802,9 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
     return {
       teams: `${event.home_team} vs ${event.away_team}`,
       sharpConsensus: { moneyline: { home: null, draw: null, away: null } },
-      fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null } },
+      fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
       vigAnalysis: {
-        moneyline: { sharp: null, market: null },
+        moneyline: { sharp: null, market: null, sharpHome: null, sharpDraw: null, sharpAway: null, marketHome: null, marketDraw: null, marketAway: null },
         spread: { sharp: null, market: null },
         total: { sharp: null, market: null }
       },
@@ -5669,7 +5862,10 @@ function formatSoccerOddsTable(bookmakers, event) {
         moneyline: {
           home: homeOutcome?.price || null,
           draw: drawOutcome?.price || null,
-          away: awayOutcome?.price || null
+          away: awayOutcome?.price || null,
+          homeFractional: homeOutcome?.price ? decimalToFractional(homeOutcome.price) : null,
+          drawFractional: drawOutcome?.price ? decimalToFractional(drawOutcome.price) : null,
+          awayFractional: awayOutcome?.price ? decimalToFractional(awayOutcome.price) : null
         }
       }
     };
@@ -5775,14 +5971,74 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
       if (lowestVigML) {
         const bookmakerShort = getBookmakerShortName(lowestVigML.bookmaker);
+        const isHome = lowestVigML.team === homeTeam;
+        const teamLabel = isHome ? "Home" : "Away";
         return {
-          display: `Home ML at ${bookmakerShort}`,
+          display: `${teamLabel} ML at ${bookmakerShort}`,
           label: "Best Value"
         };
       }
     }
 
-    // STEP 3: Fallback - truly efficient market
+    // STEP 3: Fallback to bestLines - find best ML for market favorite
+    console.log('=== BEST VALUE FALLBACK DEBUG ===');
+    console.log('marketIntelligence structure:', JSON.stringify({
+      hasBestLines: !!marketIntelligence?.bestLines,
+      hasBestLinesArray: !!marketIntelligence?.bestLines?.bestLines,
+      bestLinesLength: marketIntelligence?.bestLines?.bestLines?.length
+    }));
+
+    const bestLinesArray = marketIntelligence?.bestLines?.bestLines || [];
+
+    // Get consensus to determine market favorite
+    const consensusHomeML = marketIntelligence?.bestLines?.consensusHomeML ||
+                           marketIntelligence?.consensusHomeML || 0;
+    const consensusAwayML = marketIntelligence?.bestLines?.consensusAwayML ||
+                           marketIntelligence?.consensusAwayML || 0;
+
+    console.log(`Consensus - Home ML: ${consensusHomeML}, Away ML: ${consensusAwayML}`);
+
+    // Determine favorite (lower odds = favorite)
+    const favoriteIsHome = consensusHomeML < consensusAwayML;
+    const favoriteTeam = favoriteIsHome ? homeTeam : awayTeam;
+
+    console.log(`Market Favorite: ${favoriteTeam} (${favoriteIsHome ? 'Home' : 'Away'})`);
+
+
+    // Find best ML line for the favorite (support both moneyline and soccer_win types)
+    const mlLines = Array.isArray(bestLinesArray) ?
+      bestLinesArray.filter(line => line?.type === "moneyline" || line?.type === "soccer_win") : [];
+
+    console.log(`Found ${mlLines.length} ML/Win lines in bestLines`);
+    console.log('ML/Win lines:', JSON.stringify(mlLines, null, 2));
+
+    if (mlLines.length > 0) {
+      // Find the line for the market favorite
+      const favoriteLine = mlLines.find(line =>
+        line.team === favoriteTeam ||
+        line.label?.includes(favoriteIsHome ? "Home" : "Away")
+      );
+
+      console.log('Favorite line found:', JSON.stringify(favoriteLine));
+
+      if (favoriteLine) {
+        const bookmakerShort = getBookmakerShortName(favoriteLine.bookmaker);
+        const teamLabel = favoriteIsHome ? "Home" : "Away";
+
+        // For soccer, show fractional odds; for other sports show ML
+        const oddsDisplay = favoriteLine.fractionalOdds ? favoriteLine.fractionalOdds : "";
+
+        return {
+          display: favoriteLine.type === "soccer_win" ? `${oddsDisplay} at ${bookmakerShort}` : `${teamLabel} ML at ${bookmakerShort}`,
+          label: "Best Value"
+        };
+      }
+    }
+
+    console.log('No ML lines found, returning efficient market');
+    console.log('===================================');
+
+    // STEP 4: Final fallback - truly efficient market
     return {
       display: "Efficient market",
       label: "Best Value"
@@ -5817,10 +6073,22 @@ function getBookmakerShortName(bookmaker) {
 
 // Calculate Offensive Edge - Scoring power differential
 // Output format: "+7.2 PPG" for UI display (positive = team1 advantage)
-function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
+// For soccer: "+1.2 GPG" (Goals Per Game)
+function calculateOffensiveEdge(teamStats, homeTeam, awayTeam, sport = 'nfl') {
   try {
-    const team1PPG = teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
-    const team2PPG = teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
+    console.log('=== OFFENSIVE EDGE DEBUG ===');
+    console.log('Sport:', sport);
+    console.log('teamStats.team1.stats keys:', teamStats?.team1?.stats ? Object.keys(teamStats.team1.stats) : 'no stats');
+    console.log('teamStats.team1.stats.goals:', JSON.stringify(teamStats?.team1?.stats?.goals, null, 2));
+    console.log('teamStats.team1.stats.calculated:', JSON.stringify(teamStats?.team1?.stats?.calculated, null, 2));
+
+    // For soccer, check goals.for.average.total first, then fallback to calculated.pointsPerGame (NFL/NBA)
+    const team1PPG = teamStats?.team1?.stats?.goals?.for?.average?.total ||
+                     teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
+    const team2PPG = teamStats?.team2?.stats?.goals?.for?.average?.total ||
+                     teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
+
+    console.log(`Team1 PPG: ${team1PPG}, Team2 PPG: ${team2PPG}`);
 
     const differential = team1PPG - team2PPG;
     const roundedDiff = Math.round(differential * 10) / 10;
@@ -5828,10 +6096,18 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
-    return {
-      display: `${sign}${roundedDiff} PPG`,
+    // Use GPG for soccer, PPG for other sports
+    const unit = sport?.includes('soccer') ? 'GPG' : 'PPG';
+
+    const result = {
+      display: `${sign}${roundedDiff} ${unit}`,
       label: "Offensive Edge"
     };
+
+    console.log('Offensive Edge Result:', result);
+    console.log('===========================');
+
+    return result;
   } catch (error) {
     console.error('Error calculating offensive edge:', error);
     return null;
@@ -5840,23 +6116,39 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
 
 // Calculate Defensive Edge - Points allowed differential
 // Output format: "-3.7 PPG" for UI display (negative = team1 has better defense)
-function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
+// For soccer: "-0.8 GPG" (Goals Per Game allowed)
+function calculateDefensiveEdge(teamStats, homeTeam, awayTeam, sport = 'nfl') {
   try {
-    const team1OppPPG = teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
-    const team2OppPPG = teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
+    console.log('=== DEFENSIVE EDGE DEBUG ===');
+    console.log('Sport:', sport);
+    // For soccer, check goals.against.average.total first, then fallback to calculated.opponentPointsPerGame (NFL/NBA)
+    const team1OppPPG = teamStats?.team1?.stats?.goals?.against?.average?.total ||
+                        teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
+    const team2OppPPG = teamStats?.team2?.stats?.goals?.against?.average?.total ||
+                        teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
 
-    // Lower is better for defense, so reverse the logic
-    // Positive differential = team1 has better defense (allows fewer points)
-    const differential = team2OppPPG - team1OppPPG;
+    console.log(`Team1 Opp PPG: ${team1OppPPG}, Team2 Opp PPG: ${team2OppPPG}`);
+
+    // Lower is better for defense, so flip to show "fewer goals/points allowed"
+    // Negative value = team1 allows fewer = better defense
+    const differential = team1OppPPG - team2OppPPG;
     const roundedDiff = Math.round(differential * 10) / 10;
 
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
-    return {
-      display: `${sign}${roundedDiff} PPG`,
+    // Use "GA" (Goals Against) for soccer, "PA" (Points Against) for other sports
+    const unit = sport?.includes('soccer') ? 'GA' : 'PA';
+
+    const result = {
+      display: `${sign}${roundedDiff} ${unit}`,
       label: "Defensive Edge"
     };
+
+    console.log('Defensive Edge Result:', result);
+    console.log('============================');
+
+    return result;
   } catch (error) {
     console.error('Error calculating defensive edge:', error);
     return null;
@@ -5864,13 +6156,25 @@ function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
 }
 
 // Master function to calculate all new Key Insights
-function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam) {
-  return {
+function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam, sport = 'nfl') {
+  console.log('=== CALCULATE KEY INSIGHTS NEW ===');
+  console.log('Sport:', sport);
+  console.log('Home Team:', homeTeam);
+  console.log('Away Team:', awayTeam);
+  console.log('Has teamStats:', !!teamStats);
+  console.log('Has marketIntelligence:', !!marketIntelligence);
+
+  const result = {
     marketConsensus: calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam),
     bestValue: findBestValue(marketIntelligence, homeTeam, awayTeam),
-    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam),
-    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam)
+    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam, sport),
+    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam, sport)
   };
+
+  console.log('Final Key Insights Result:', JSON.stringify(result, null, 2));
+  console.log('===================================');
+
+  return result;
 }
 
 // ====================================================================
@@ -5893,8 +6197,13 @@ function enhanceTeamStatsWithGameData(teamStats, gameData) {
       if (game.teams?.home?.id === parseInt(teamId)) {
         // Team is home
         isHome = true;
-        // NFL/Soccer structure: scores.home.total / scores.away.total
-        if (game.scores?.home?.total !== undefined) {
+        // Soccer structure: score.fulltime.home / score.fulltime.away
+        if (game.score?.fulltime?.home !== undefined) {
+          teamScore = game.score.fulltime.home || 0;
+          oppScore = game.score.fulltime.away || 0;
+        }
+        // NFL structure: scores.home.total / scores.away.total
+        else if (game.scores?.home?.total !== undefined) {
           teamScore = game.scores.home.total || 0;
           oppScore = game.scores.away.total || 0;
         }
@@ -5906,8 +6215,13 @@ function enhanceTeamStatsWithGameData(teamStats, gameData) {
       } else if (game.teams?.away?.id === parseInt(teamId) || game.teams?.visitors?.id === parseInt(teamId)) {
         // Team is away/visitor
         isHome = false;
-        // NFL/Soccer structure
-        if (game.scores?.away?.total !== undefined) {
+        // Soccer structure: score.fulltime.away / score.fulltime.home
+        if (game.score?.fulltime?.away !== undefined) {
+          teamScore = game.score.fulltime.away || 0;
+          oppScore = game.score.fulltime.home || 0;
+        }
+        // NFL structure
+        else if (game.scores?.away?.total !== undefined) {
           teamScore = game.scores.away.total || 0;
           oppScore = game.scores.home.total || 0;
         }

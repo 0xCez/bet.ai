@@ -49,6 +49,9 @@ interface SoccerMarketIntelResult {
       consensusHomeML: number;
       consensusDrawML: number;
       consensusAwayML: number;
+      consensusHomeMLFractional?: string;
+      consensusDrawMLFractional?: string;
+      consensusAwayMLFractional?: string;
       bestLines: Array<{
         type: string;
         label: string;
@@ -371,7 +374,7 @@ export default function SoccerMarketIntelScreen() {
               />
               <View style={styles.bestLineTextSection}>
                 <BlurText card="best-home-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {params.team1?.split(' ').pop()} Win at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.odds || 1.43)}
+                  {params.team1?.split(' ').pop()} {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home to Win")?.fractionalOdds || marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.fractionalOdds || "1/1"} to win
                 </BlurText>
                 <BlurText card="best-home-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
                   Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker || "Pinnacle"}
@@ -387,10 +390,10 @@ export default function SoccerMarketIntelScreen() {
               />
               <View style={styles.bestLineTextSection}>
                 <BlurText card="best-draw-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  Draw at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.odds || 5.0)}
+                  Draw {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw" || line.label === "Best Draw ML")?.fractionalOdds || "4/1"}
                 </BlurText>
                 <BlurText card="best-draw-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Best available draw odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.bookmaker || "Fanatics"}
+                  Best available draw odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw" || line.label === "Best Draw ML")?.bookmaker || "Fanatics"}
                 </BlurText>
               </View>
             </View>
@@ -398,15 +401,15 @@ export default function SoccerMarketIntelScreen() {
             {/* 3. Away ML */}
             <View style={styles.bestLineItem}>
               <Image
-                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.bookmaker)}
+                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.bookmaker)}
                 style={styles.bestLineBookmakerLogo}
               />
               <View style={styles.bestLineTextSection}>
                 <BlurText card="best-away-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {params.team2?.split(' ').pop()} Win at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.odds || 7.5)}
+                  {params.team2?.split(' ').pop()} {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.fractionalOdds || "7/1"} to win
                 </BlurText>
                 <BlurText card="best-away-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away ML")?.bookmaker || "FanDuel"}
+                  Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.bookmaker || "FanDuel"}
                 </BlurText>
               </View>
             </View>
@@ -439,17 +442,17 @@ export default function SoccerMarketIntelScreen() {
                <View style={styles.consensusOddsContainer}>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-home" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusHomeML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusHomeMLFractional || "1/1"}
                    </BlurText>
                  </View>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-draw" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusDrawML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusDrawMLFractional || "4/1"}
                    </BlurText>
                  </View>
                  <View style={styles.consensusOddsBox}>
                    <BlurText card="consensus-away" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusAwayML)}
+                     {marketResult?.marketIntelligence?.bestLines?.consensusAwayMLFractional || "7/1"}
                    </BlurText>
                  </View>
                </View>

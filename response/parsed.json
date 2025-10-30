@@ -1,0 +1,155 @@
+{
+    "sport": "nfl",
+    "teams": {
+        "home": "New England Patriots",
+        "away": "Atlanta Falcons"
+    },
+    "keyInsights": {
+        "confidence": "Medium",
+        "marketActivity": "Moderate",
+        "lineShift": "Moderate",
+        "publicVsSharps": {
+            "public": 60,
+            "sharps": 40
+        }
+    },
+    "matchSnapshot": {
+        "recentPerformance": {
+            "home": "NEP 5-1 (W-W-W-W-W-L)",
+            "away": "ATL 3-3 (L-L-W-W-L-W)"
+        },
+        "headToHead": "4-0 in last 4 matchups",
+        "momentum": {
+            "home": "NEP 5-game win streak",
+            "away": "ATL Just lost at home"
+        }
+    },
+    "xFactors": [
+        {
+            "title": "Health & Availability",
+            "detail": "Key injuries for both teams, including Kyle Dugger and Storm Norton",
+            "type": 1
+        },
+        {
+            "title": "Location & Weather",
+            "detail": "Game at Gillette Stadium, no significant weather impact",
+            "type": 2
+        },
+        {
+            "title": "Officiating & Rules",
+            "detail": "Standard officiating expected",
+            "type": 3
+        },
+        {
+            "title": "Travel & Fatigue",
+            "detail": "Normal rest for both teams",
+            "type": 4
+        }
+    ],
+    "aiAnalysis": {
+        "confidenceScore": "Medium",
+        "bettingSignal": "Value Bet",
+        "breakdown": "The market is showing moderate activity with a slight lean towards the Patriots, as the public is backing them at 60%. The line has shifted moderately, suggesting some sharp interest in the Falcons. However, the Patriots' strong form and home advantage are keeping the line stable.\n\nThe Patriots are on a hot streak with a 5-game win streak and have dominated the Falcons in recent head-to-head matchups. The Falcons are inconsistent, struggling with injuries and coming off a home loss. Key players like Kyle Dugger and Storm Norton are questionable, impacting both teams' depth.\n\nGiven the Patriots' momentum and the Falcons' injury concerns, sharp bettors might see value in backing the Patriots. The line movement suggests some sharp interest in the Falcons, but the Patriots' form and head-to-head dominance make them the more reliable play. Consider live betting if the Falcons start strong."
+    },
+    "image_url": "https://firebasestorage.googleapis.com/v0/b/betai-dev-16.firebasestorage.app/o/images%2FB648565C-5C5E-4818-AA50-E3FCE8C99D82.jpg?alt=media&token=9e856c6e-5070-4331-b636-12d736ed8bdf",
+    "marketIntelligence": {
+        "error": "Event not found",
+        "availableEvents": [
+            {
+                "home": "Cincinnati Bengals",
+                "away": "New York Jets"
+            },
+            {
+                "home": "New Orleans Saints",
+                "away": "Tampa Bay Buccaneers"
+            },
+            {
+                "home": "Denver Broncos",
+                "away": "Dallas Cowboys"
+            }
+        ]
+    },
+    "teamStats": {
+        "team1": {
+            "teamId": 3,
+            "stats": null,
+            "error": "Request failed with status code 500"
+        },
+        "team2": {
+            "teamId": 8,
+            "stats": {
+                "team": "Atlanta Falcons",
+                "season": "2025",
+                "offense": {
+                    "passing": {
+                        "yardsPerGame": 228,
+                        "totalYards": 1,
+                        "touchdowns": 5,
+                        "completions": 202,
+                        "attempts": 124,
+                        "completionPct": 0,
+                        "interceptions": 3,
+                        "sacks": 9,
+                        "sackedYards": 70
+                    },
+                    "rushing": {
+                        "yardsPerGame": 136.3,
+                        "totalYards": 818,
+                        "touchdowns": 6,
+                        "attempts": 179,
+                        "yardsPerRush": 4.6,
+                        "fumbles": 6,
+                        "fumblesLost": 3
+                    },
+                    "efficiency": {
+                        "thirdDownPct": 42.31,
+                        "fourthDownPct": 36.36,
+                        "totalFirstDowns": 124,
+                        "penaltyYards": 230,
+                        "penalties": 33
+                    }
+                },
+                "defense": {
+                    "passing": {
+                        "yardsAllowedPerGame": 141.2,
+                        "touchdownsAllowed": 7,
+                        "interceptions": 6,
+                        "sacks": 15
+                    },
+                    "rushing": {
+                        "yardsAllowedPerGame": 124,
+                        "touchdownsAllowed": 4,
+                        "fumblesRecovered": 3
+                    }
+                },
+                "specialTeams": {
+                    "fieldGoals": {
+                        "made": 11,
+                        "attempts": 15,
+                        "percentage": "73.3"
+                    }
+                },
+                "calculated": {
+                    "totalYardsPerGame": 364.3,
+                    "turnoverDifferential": 3
+                }
+            },
+            "error": null
+        }
+    },
+    "keyInsightsNew": {
+        "marketConsensus": null,
+        "bestValue": {
+            "display": "Efficient market",
+            "label": "Best Value"
+        },
+        "offensiveEdge": {
+            "display": "0 PPG",
+            "label": "Offensive Edge"
+        },
+        "defensiveEdge": {
+            "display": "0 PPG",
+            "label": "Defensive Edge"
+        }
+    }
+}

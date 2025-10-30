@@ -1,40 +1,39 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  Image,
+  Text,
   StyleSheet,
   ScrollView,
-  Text,
-  ViewStyle,
+  Pressable,
   Animated,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { Image } from "expo-image";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import APIService from "../services/api";
-import { GradientButton } from "../components/ui/GradientButton";
-import { BorderButton } from "../components/ui/BorderButton";
-import { TopBar } from "../components/ui/TopBar";
-import { db, auth } from "../firebaseConfig";
-import { BlurText } from "../components/ui/BlurText";
-import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
-import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
-import { usePostHog } from "posthog-react-native";
-import { usePageTransition } from "../hooks/usePageTransition";
-import i18n from "../i18n";
+import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { ScreenBackground } from "@/components/ui/ScreenBackground";
+import { Card } from "@/components/ui/Card";
+import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
+import { GaugeProgressBar } from "@/components/ui/GaugeProgressBar";
+import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
+import { TopBar } from "@/components/ui/TopBar";
+import APIService from "@/services/api";
+import { usePageTransition } from "@/hooks/usePageTransition";
+import i18n from "@/i18n";
+import { auth } from "@/firebaseConfig";
+import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 // Static variables to persist market data between screen navigation
 let cachedMarketResult: MarketIntelResult | null = null;
-let cachedDisplayImageUrl: string | null = null;
 let cachedParams: any = null;
 
-// Track page view time
-let pageEntryTime: number | null = null;
+// Track last refresh time for rate limiting (10 minutes cooldown)
+let lastRefreshTime: number = 0;
+const REFRESH_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-// Interface matching the EXACT backend output structure
+// Interface matching the backend market intelligence structure
 interface MarketIntelResult {
   sport: string;
   teams: {
@@ -59,36 +58,13 @@ interface MarketIntelResult {
         bookmaker: string;
         team: string;
       }>;
-      rawData: {
-        totalSpreads: number;
-        totalMoneylines: number;
-        totalTotals: number;
-      };
     };
     sharpMeter: {
-
-      // Display text (3 sentences) - NEW FORMAT
       line1: string;
       line2: string;
       line3: string;
-
-      // Gauge data
       gaugeValue: number;
       gaugeLabel: string;
-
-      // Backend calculation data
-      pointGap: number;
-      avgSharpSpread: number;
-      avgPublicSpread: number;
-      avgSharpVig: number;
-      avgPublicVig: number;
-      vigGap: number;
-      confidenceLevel: string;
-      dataQuality: string;
-
-      // Metadata
-      sharpBookCount: number;
-      publicBookCount: number;
     };
     vigAnalysis: {
       moneyline: { sharp: number; market: number };
@@ -123,39 +99,20 @@ interface MarketIntelResult {
     oddsTable: Array<{
       bookmaker: string;
       bookmakerKey: string;
-      marketsCount?: number;
-      isSharp?: boolean;
       odds?: {
-        moneyline?: {
-          home?: number;
-          away?: number;
-        };
+        moneyline?: { home?: number; away?: number };
         spread?: {
-          home?: {
-            point?: number;
-            price?: number;
-          };
-          away?: {
-            point?: number;
-            price?: number;
-          };
+          home?: { point?: number; price?: number };
+          away?: { point?: number; price?: number };
         };
         total?: {
-          over?: {
-            point?: number;
-            price?: number;
-          };
-          under?: {
-            point?: number;
-            price?: number;
-          };
+          over?: { point?: number; price?: number };
+          under?: { point?: number; price?: number };
         };
       };
     }>;
   };
-  teamStats: any;
   timestamp: string;
-  teamIds: { team1Id: number; team2Id: number };
 }
 
 type MarketIntelParams = {
@@ -170,32 +127,32 @@ type MarketIntelParams = {
 };
 
 // Helper function to get bookmaker logo
-function getBookmakerLogo(bookmakerName?: string) {
-  if (!bookmakerName) return require("../assets/images/logo.png"); // Use logo.png as fallback
+const getBookmakerLogo = (bookmakerName?: string) => {
+  if (!bookmakerName) return require("../assets/images/logo.png");
 
   const logoMap: { [key: string]: any } = {
-    'DraftKings': require("../assets/images/Draftkings.png"), // Match exact filename
-    'FanDuel': require("../assets/images/Fanduel.png"), // Match exact filename
-    'BetMGM': require("../assets/images/Betmgm.png"), // Match exact filename
-    'Pinnacle': require("../assets/images/Pinaccle.png"), // Use existing typo filename
-    'BetUS': require("../assets/images/Betus.png"), // Match exact filename
-    'BetRivers': require("../assets/images/Betrivers.png"), // Match exact filename
-    'Bovada': require("../assets/images/Bovada.png"), // Match exact filename
+    'DraftKings': require("../assets/images/Draftkings.png"),
+    'FanDuel': require("../assets/images/Fanduel.png"),
+    'BetMGM': require("../assets/images/Betmgm.png"),
+    'Pinnacle': require("../assets/images/Pinaccle.png"),
+    'BetUS': require("../assets/images/Betus.png"),
+    'BetRivers': require("../assets/images/Betrivers.png"),
+    'Bovada': require("../assets/images/Bovada.png"),
     'MyBookie.ag': require("../assets/images/mybookie.png"),
-    'ESPN BET': require("../assets/images/Espnbet.png"), // Match exact filename
-    'Caesars': require("../assets/images/Caesars.png"), // Match exact filename
-    'LowVig.ag': require("../assets/images/logo.png"), // Use logo.png as fallback (lowvig.png missing)
-    'BetOnline.ag': require("../assets/images/Betonline.png"), // Match exact filename
-    'Fanatics': require("../assets/images/fanatics.png"), // Match exact filename
-    'Bally Bet': require("../assets/images/Ballybet.png"), // Match exact filename
-    'Hard Rock Bet': require("../assets/images/Hardrockbet.png"), // Match exact filename
+    'ESPN BET': require("../assets/images/Espnbet.png"),
+    'Caesars': require("../assets/images/Caesars.png"),
+    'LowVig.ag': require("../assets/images/Lowvig.png"),
+    'BetOnline.ag': require("../assets/images/Betonline.png"),
+    'Fanatics': require("../assets/images/fanatics.png"),
+    'Bally Bet': require("../assets/images/Ballybet.png"),
+    'Hard Rock Bet': require("../assets/images/Hardrockbet.png"),
   };
 
-  return logoMap[bookmakerName] || require("../assets/images/logo.png"); // Use logo.png as fallback
-}
+  return logoMap[bookmakerName] || require("../assets/images/logo.png");
+};
 
 // Helper function to format decimal odds to American odds
-function formatOdds(decimalOdds?: number): string {
+const formatOdds = (decimalOdds?: number): string => {
   if (!decimalOdds) return "-110";
 
   if (decimalOdds >= 2.0) {
@@ -203,88 +160,37 @@ function formatOdds(decimalOdds?: number): string {
   } else {
     return `-${Math.round(100 / (decimalOdds - 1))}`;
   }
-}
+};
 
-// Helper functions to extract lowest vig data from EXISTING calculations
-function getLowestVigSpreadBook(marketResult: MarketIntelResult | null): string {
-  const spreadOpportunity = marketResult?.marketIntelligence?.evOpportunities?.opportunities?.find(
-    opp => opp.type === "lowvig" && opp.title?.includes("Spread")
-  );
-  return spreadOpportunity?.bookmaker || "LowVig.ag";
-}
+// Helper function to get team display name
+const getTeamDisplayName = (teamName?: string): string => {
+  if (!teamName) return "TEAM";
 
-function getLowestVigSpreadVig(marketResult: MarketIntelResult | null): string {
-  const spreadOpportunity = marketResult?.marketIntelligence?.evOpportunities?.opportunities?.find(
-    opp => opp.type === "lowvig" && opp.title?.includes("Spread")
-  );
-  return spreadOpportunity?.vig?.toFixed(1) || "2.3";
-}
+  // Default: return last word (team nickname), capitalized
+  return (teamName.split(' ').pop() || teamName).toUpperCase();
+};
 
-// Helper function to get team logo from SVG files
-function getTeamLogo(teamName?: string) {
-  if (!teamName) return require("../assets/images/logo.png"); // Use logo.png as fallback
+// Helper function to get team logo based on sport
+const getTeamLogo = (teamName: string, sport?: string) => {
+  if (!sport || !teamName) return require("../assets/images/logo.png");
 
-  // Convert team name to file format (replace spaces with underscores)
-  const fileName = teamName.replace(/\s+/g, '_');
-
-  try {
-    // Try to load the SVG file
-    return { uri: `../assets/images/${fileName}.svg` };
-  } catch {
-    // Fallback to generic logo if team logo not found
-    return require("../assets/images/logo.png"); // Use logo.png as fallback
+  switch (sport.toLowerCase()) {
+    case 'nba':
+      return getNBATeamLogo(teamName);
+    case 'nfl':
+      return getNFLTeamLogo(teamName);
+    case 'soccer':
+    case 'football':
+      return getSoccerTeamLogo(teamName);
+    default:
+      return require("../assets/images/logo.png");
   }
-}
+};
 
-// Helper function to get team display name for Consensus Lines
-function getTeamDisplayName(teamName?: string): string {
-  if (!teamName) return "Team";
-
-  // Special cases for Figma layout
-  if (teamName.includes('Washington')) return 'WAS Wizards';
-  if (teamName.includes('Philadelphia')) return '76ers';
-  if (teamName.includes('New Orleans')) return 'Saints';
-  if (teamName.includes('New York') && teamName.includes('Giants')) return 'Giants';
-
-  // Default: return last word (team nickname)
-  return teamName.split(' ').pop() || teamName;
-}
-
-export default function MarketIntelScreen() {
+export default function MarketIntelNew() {
   const params = useLocalSearchParams<MarketIntelParams>();
-  const { isSubscribed } = useRevenueCatPurchases();
-  const posthog = usePostHog();
+  const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
-
-  // Track page view time
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    pageEntryTime = Date.now();
-
-    posthog?.capture("market_intel_page_viewed", {
-      userId: (auth.currentUser as any)?.uid,
-      sport: params.sport,
-      teams: `${params.team1} vs ${params.team2}`,
-    });
-
-    return () => {
-      if (pageEntryTime && auth.currentUser) {
-        const timeSpentMs = Date.now() - pageEntryTime;
-        const timeSpentSeconds = Math.round(timeSpentMs / 1000);
-
-        posthog?.capture("market_intel_page_exit", {
-          userId: (auth.currentUser as any)?.uid,
-          sport: params.sport,
-          teams: `${params.team1} vs ${params.team2}`,
-          timeSpentSeconds: timeSpentSeconds,
-          timeSpentMinutes: Math.round((timeSpentSeconds / 60) * 10) / 10,
-        });
-
-        pageEntryTime = null;
-      }
-    };
-  }, [params.team1, params.team2, params.sport]);
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -297,23 +203,16 @@ export default function MarketIntelScreen() {
     cachedParams = { ...params };
   }
 
-  const team1 = params.team1;
-  const team2 = params.team2;
-  const sport = params.sport;
+  const hasInitializedRef = useRef(false);
 
-  const hasInitializedRef = React.useRef(false);
-
-  // Initialize state, potentially from cache
-  const [isLoading, setIsLoading] = useState(
-    !isSameAnalysis || !cachedMarketResult
-  );
+  // Initialize state
+  const [isLoading, setIsLoading] = useState(!isSameAnalysis || !cachedMarketResult);
   const [marketResult, setMarketResult] = useState<MarketIntelResult | null>(
     isSameAnalysis && cachedMarketResult ? cachedMarketResult : null
   );
-  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(
-    isSameAnalysis && cachedDisplayImageUrl ? cachedDisplayImageUrl : null
-  );
   const [error, setError] = useState<string | null>(null);
+  const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -328,50 +227,102 @@ export default function MarketIntelScreen() {
     // Reset cache when loading new analysis
     if (!isSameAnalysis) {
       cachedMarketResult = null;
-      cachedDisplayImageUrl = null;
     }
 
-    if (team1 && team2 && sport) {
-      console.log(
-        `Market Intel Flow: Starting analysis for ${sport}: ${team1} vs ${team2}`
-      );
+    if (params.team1 && params.team2 && params.sport) {
       getMarketIntelligence();
     } else {
-      console.error("Error: Missing required parameters (team1, team2, sport).");
       setError("Missing game data. Please go back and try again.");
       setIsLoading(false);
     }
-  }, [team1, team2, sport, auth.currentUser, isSameAnalysis]);
+  }, [params.team1, params.team2, params.sport, auth.currentUser, isSameAnalysis]);
 
   // Main function to fetch market intelligence data
   const getMarketIntelligence = async () => {
     if (marketResult) return;
     setIsLoading(true);
     setError(null);
-    setDisplayImageUrl(null);
 
     try {
-      console.log("Fetching market intelligence data...");
-
-      // Set display image URL from params
-      if (params.team1Logo) {
-        setDisplayImageUrl(params.team1Logo);
-        cachedDisplayImageUrl = params.team1Logo;
-      }
-
-      if (!sport) {
+      if (!params.sport) {
         throw new Error("Sport parameter is required but missing");
       }
 
       const response = await APIService.getMarketIntelligence(
-        sport,
-        team1 || "",
-        team2 || "",
+        params.sport,
+        params.team1 || "",
+        params.team2 || "",
         params.team1_code,
         params.team2_code
       );
 
-      console.log("Market Intelligence Response:", response);
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      if (response.status === "error") {
+        throw new Error(response.message || "Failed to fetch market intelligence");
+      }
+
+      const marketData: MarketIntelResult = response;
+
+      setMarketResult(marketData);
+      cachedMarketResult = marketData;
+    } catch (err) {
+      console.error("Error in getMarketIntelligence:", err);
+      setError(err instanceof Error ? err.message : "Failed to get market intelligence");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Shake animation for button when in cooldown
+  const triggerShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+    ]).start();
+  };
+
+  // Function to refresh market intelligence (clear cache and fetch fresh data)
+  const refreshMarketIntelligence = async () => {
+    // Check if enough time has passed since last refresh (10 minutes)
+    const now = Date.now();
+    const timeElapsed = now - lastRefreshTime;
+    const remainingTime = Math.ceil((REFRESH_COOLDOWN_MS - timeElapsed) / 1000 / 60); // Minutes remaining
+
+    if (lastRefreshTime > 0 && timeElapsed < REFRESH_COOLDOWN_MS) {
+      // Still in cooldown period - trigger shake and show message
+      triggerShake();
+      setCooldownMessage(`Try again in ${remainingTime} minute${remainingTime > 1 ? 's' : ''}`);
+      setTimeout(() => setCooldownMessage(null), 3000); // Clear message after 3 seconds
+      return;
+    }
+
+    // Clear cached data to force fresh fetch
+    setMarketResult(null);
+    cachedMarketResult = null;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (!params.sport) {
+        throw new Error("Sport parameter is required but missing");
+      }
+
+      console.log("Fetching FRESH market intelligence data...");
+
+      const response = await APIService.getMarketIntelligence(
+        params.sport,
+        params.team1 || "",
+        params.team2 || "",
+        params.team1_code,
+        params.team2_code
+      );
 
       if (response.error) {
         throw new Error(response.error);
@@ -386,49 +337,58 @@ export default function MarketIntelScreen() {
       setMarketResult(marketData);
       cachedMarketResult = marketData;
 
+      // Update last refresh time
+      lastRefreshTime = Date.now();
+
+      console.log("Fresh market intelligence data loaded successfully!");
+
     } catch (err) {
-      console.error("Error in getMarketIntelligence:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to get market intelligence"
-      );
+      console.error("Error in refreshMarketIntelligence:", err);
+      setError(err instanceof Error ? err.message : "Failed to get fresh market intelligence");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Navigate to info page
+  const navigateToInfo = (section: string) => {
+    router.push({
+      pathname: "/info",
+      params: {
+        section,
+        from: "market-intel",
+        team1: params.team1,
+        team2: params.team2,
+        sport: params.sport,
+        team1Logo: params.team1Logo,
+        team2Logo: params.team2Logo,
+        analysisId: params.analysisId,
+      },
+    });
+  };
+
   // Shimmer rendering
   const renderShimmer = () => (
     <View style={styles.shimmerContainer}>
-      <View style={styles.imageContainer}>
-        {displayImageUrl ? (
-          <Image
-            source={{ uri: displayImageUrl }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={styles.placeholderImage} />
-        )}
-      </View>
-
-      {/* Content Shimmer Groups */}
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
+      {[1, 2, 3, 4].map((_, index) => (
+        <View key={index} style={styles.shimmerGroup}>
+          <LinearGradient
+            colors={["#1A1A1A", "#363636"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientContainer}
+          >
+            <ShimmerPlaceholder
+              style={styles.shimmerLine}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={[styles.shimmerLine, { width: "100%" }]}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </LinearGradient>
+        </View>
+      ))}
     </View>
   );
 
@@ -437,538 +397,885 @@ export default function MarketIntelScreen() {
     if (error) {
       return (
         <View style={styles.errorContainer}>
-          <View style={styles.imageContainer}>
-            {displayImageUrl ? (
-              <Image
-                source={{ uri: displayImageUrl }}
-                style={styles.image}
-                resizeMode="contain"
-              />
-            ) : (
-              <View></View>
-            )}
-          </View>
           <Text style={styles.errorText}>{error}</Text>
         </View>
       );
     }
 
     return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.analysisContent}
-      >
-        {/* Image Container - REMOVED as requested */}
-
-        {/* Best Lines Card - EXACT Figma structure: 6 vertical items */}
-        <View style={[styles.card, styles.bestLinesCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Best Lines 💰</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        {/* Top Card - Market Intelligence Header */}
+        <Card style={styles.topCard}>
+          <View style={styles.marketHeader}>
+            <Text style={styles.marketTitle}>{i18n.t("marketIntelTitle")}</Text>
           </View>
+        </Card>
+
+        {/* Best Lines Section */}
+        <Card style={styles.bestLinesCard}>
           <View style={styles.bestLinesContent}>
-            {/* 1. ML Home Team */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Home ML")?.bookmaker)}
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-home-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Home ML")?.team?.split(' ').pop() || params.team1?.split(' ').pop()} ML at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Home ML")?.odds || 1.77)}
-                </BlurText>
-                <BlurText card="best-home-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Best available ML at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Home ML")?.bookmaker || "BetUS"}
-                </BlurText>
-              </View>
+            {/* Header */}
+            <View style={styles.bestLinesHeader}>
+              <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelBestLines")}</Text>
+              <Pressable onPress={() => navigateToInfo("bestLines")}>
+                <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
-            {/* 2. ML Away Team */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Away ML")?.bookmaker)}
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-away-ml" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Away ML")?.team?.split(' ').pop() || params.team2?.split(' ').pop()} ML at {formatOdds(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Away ML")?.odds || 1.97)}
-                </BlurText>
-                <BlurText card="best-away-ml-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Best available ML at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.type === "moneyline" && line.label === "Best Away ML")?.bookmaker || "BetRivers"}
-                </BlurText>
-              </View>
-            </View>
-
-            {/* 3. Spread Home Team - CONSENSUS + LOWEST VIG */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={getBookmakerLogo(getLowestVigSpreadBook(marketResult))}
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-home-spread" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {params.team1?.split(' ').pop()} {marketResult?.marketIntelligence?.bestLines?.consensusSpreadPoint || "-2.5"} at -105
-                </BlurText>
-                <BlurText card="best-home-spread-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Consensus spread with lowest vig ({getLowestVigSpreadVig(marketResult)}%)
-                </BlurText>
-              </View>
-            </View>
-
-            {/* 4. Spread Away Team - CONSENSUS + LOWEST VIG */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={getBookmakerLogo(getLowestVigSpreadBook(marketResult))}
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-away-spread" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  {params.team2?.split(' ').pop()} +{Math.abs(marketResult?.marketIntelligence?.bestLines?.consensusSpreadPoint || -2.5)} at -105
-                </BlurText>
-                <BlurText card="best-away-spread-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Consensus spread with lowest vig ({getLowestVigSpreadVig(marketResult)}%)
-                </BlurText>
-              </View>
-            </View>
-
-            {/* 5. Best Over - CONSENSUS + LOWEST VIG */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={require("../assets/images/logo.png")} // Use logo.png as Over icon fallback
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-over" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  Over {marketResult?.marketIntelligence?.bestLines?.consensusTotal || "47"} -102
-                </BlurText>
-                <BlurText card="best-over-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Consensus total with lowest vig
-                </BlurText>
-              </View>
-            </View>
-
-            {/* 6. Best Under - CONSENSUS + LOWEST VIG */}
-            <View style={styles.bestLineItem}>
-              <Image
-                source={require("../assets/images/logo.png")} // Use logo.png as Under icon fallback
-                style={styles.bestLineBookmakerLogo}
-              />
-              <View style={styles.bestLineTextSection}>
-                <BlurText card="best-under" blur={!auth.currentUser} style={styles.bestLineMainText}>
-                  Under {(marketResult?.marketIntelligence?.bestLines?.consensusTotal || 47) + 0.5} -106
-                </BlurText>
-                <BlurText card="best-under-desc" blur={!auth.currentUser} style={styles.bestLineDescription}>
-                  Consensus total with lowest vig
-                </BlurText>
-              </View>
+            {/* Dynamic Line Items */}
+            <View style={styles.linesList}>
+              {marketResult?.marketIntelligence?.bestLines?.bestLines && marketResult.marketIntelligence.bestLines.bestLines.length > 0 ? (
+                marketResult.marketIntelligence.bestLines.bestLines.slice(0, 6).map((line, index) => (
+                  <View key={index} style={styles.lineItem}>
+                    <Image
+                      source={getBookmakerLogo(line.bookmaker)}
+                      style={styles.bookmakerLogo}
+                      contentFit="contain"
+                    />
+                    <View style={styles.lineTextContainer}>
+                      <Text style={styles.lineBigText}>
+                        {line.team?.split(' ').pop() || ""} {
+                          line.type === "soccer_win" ? (line.fractionalOdds || formatOdds(line.odds)) + " to win" :
+                          line.type === "soccer_draw" ? (line.fractionalOdds || formatOdds(line.odds)) :
+                          line.type === "moneyline" ? "ML " + formatOdds(line.odds) :
+                          line.type === "spread" ? (line.line || "") + " " + formatOdds(line.odds) :
+                          `${line.type === "over" ? "Over" : "Under"} ${line.line || ""} ${formatOdds(line.odds)}`
+                        }
+                      </Text>
+                      <Text style={styles.lineSmallText}>{line.label}</Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No best lines data available</Text>
+                </View>
+              )}
             </View>
           </View>
-        </View>
+        </Card>
 
-        {/* Consensus Lines Card */}
-        <View style={[styles.card, styles.consensusLinesCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Consensus Lines 📊</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+        {/* Consensus Lines Section */}
+        <Card style={styles.consensusLinesCard}>
           <View style={styles.consensusLinesContent}>
-            {/* Header Row */}
-            <View style={styles.consensusHeaderRow}>
-              <View style={styles.consensusHeaderSpacer} />
-              <Text style={styles.consensusHeaderText}>Spread</Text>
-              <Text style={styles.consensusHeaderText}>Moneyline</Text>
-              <Text style={styles.consensusHeaderText}>Total</Text>
+            {/* Header */}
+            <View style={styles.consensusLinesHeader}>
+              <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelConsensusLines")}</Text>
+              <Pressable onPress={() => navigateToInfo("consensusLines")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
-             {/* Team 1 Row */}
-             <View style={styles.consensusTeamRow}>
-               <View style={styles.consensusTeamInfo}>
-                 <Image
-                   source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
-                   style={styles.consensusTeamLogo}
-                 />
-                 <Text style={styles.consensusTeamName}>
-                   {getTeamDisplayName(params.team1)}
-                 </Text>
-               </View>
-               <View style={styles.consensusOddsContainer}>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-spread-1" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {marketResult?.marketIntelligence?.bestLines?.consensusSpreadPoint || "-2"}
-                   </BlurText>
-                   <BlurText card="consensus-spread-juice-1" blur={!auth.currentUser} style={styles.consensusJuice}>
-                     -105
-                   </BlurText>
-                 </View>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-ml-1" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusHomeML || 1.77)}
-                   </BlurText>
-                 </View>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-total-1" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     O{marketResult?.marketIntelligence?.bestLines?.consensusTotal || "42"}
-                   </BlurText>
-                   <BlurText card="consensus-total-juice-1" blur={!auth.currentUser} style={styles.consensusJuice}>
-                     -105
-                   </BlurText>
-                 </View>
-               </View>
-             </View>
+            {marketResult?.marketIntelligence?.bestLines ? (
+              params.sport?.includes('soccer') ? (
+                // SOCCER: 1 row with Home/Draw/Away
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
+                  </View>
 
-             {/* Team 2 Row */}
-             <View style={styles.consensusTeamRow}>
-               <View style={styles.consensusTeamInfo}>
-                 <Image
-                   source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
-                   style={styles.consensusTeamLogo}
-                 />
-                 <Text style={styles.consensusTeamName}>
-                   {getTeamDisplayName(params.team2)}
-                 </Text>
-               </View>
-               <View style={styles.consensusOddsContainer}>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-spread-2" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     +{Math.abs(marketResult?.marketIntelligence?.bestLines?.consensusSpreadPoint || -2)}
-                   </BlurText>
-                   <BlurText card="consensus-spread-juice-2" blur={!auth.currentUser} style={styles.consensusJuice}>
-                     -105
-                   </BlurText>
-                 </View>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-ml-2" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     {formatOdds(marketResult?.marketIntelligence?.bestLines?.consensusAwayML || 1.97)}
-                   </BlurText>
-                 </View>
-                 <View style={styles.consensusOddsBox}>
-                   <BlurText card="consensus-total-2" blur={!auth.currentUser} style={styles.consensusOdds}>
-                     U{(marketResult?.marketIntelligence?.bestLines?.consensusTotal || 42) + 0.5}
-                   </BlurText>
-                   <BlurText card="consensus-total-juice-2" blur={!auth.currentUser} style={styles.consensusJuice}>
-                     -105
-                   </BlurText>
-                 </View>
-               </View>
-             </View>
+                  {/* Single Match Winner Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={require("../assets/images/logo.png")}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>Match Winner</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusHomeMLFractional || "1/1"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusDrawMLFractional || "4/1"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.bestLines.consensusAwayMLFractional || "7/1"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                // NFL/NBA: 2 rows with Spread/ML/Total
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
+
+                  {/* Team 1 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team1 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{marketResult.marketIntelligence.bestLines.consensusSpreadPoint || "-2"}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusHomeML)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>O{marketResult.marketIntelligence.bestLines.consensusTotal || "42"}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Team 2 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team2 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>+{Math.abs(marketResult.marketIntelligence.bestLines.consensusSpreadPoint || -2)}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>{formatOdds(marketResult.marketIntelligence.bestLines.consensusAwayML)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>U{(marketResult.marketIntelligence.bestLines.consensusTotal || 42) + 0.5}</Text>
+                        <Text style={styles.dataSecondary}>-105</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No consensus lines data available</Text>
+              </View>
+            )}
           </View>
-        </View>
+        </Card>
 
         {/* Public vs Sharp Meter Card */}
-        <View style={[styles.card, styles.sharpMeterCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Public vs Sharp Meter 🌡️</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
+        <Card style={styles.publicSharpCard}>
+          {/* Header */}
+          <View style={styles.publicSharpHeader}>
+            <Text style={styles.publicSharpTitle}>{i18n.t("marketIntelPublicVsSharp")}</Text>
+            <Pressable onPress={() => navigateToInfo("publicVsSharp")}>
+              <Text style={styles.publicSharpInfo}>ⓘ</Text>
+            </Pressable>
           </View>
-          <View style={styles.sharpMeterContent}>
-            <View style={styles.sharpMeterContainer}>
-              {/* Left Side - Text Information (NEW FORMAT: 3 sentences) */}
-              <View style={styles.sharpMeterTextSection}>
-                {/* Line 1: Primary Signal */}
-                <BlurText card="sharp-line-1" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.line1 || "No clear sharp lean"}
-                </BlurText>
 
-                {/* Line 2: Secondary Signal */}
-                <BlurText card="sharp-line-2" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.line2 || "Limited data"}
-                </BlurText>
+          {marketResult?.marketIntelligence?.sharpMeter ? (
+            <View style={styles.publicSharpContent}>
+              {/* Left Side - Text Content */}
+              <View style={styles.publicSharpLeft}>
+                {/* Line 1 */}
+                <View style={styles.publicSharpRow}>
+                  <Text style={styles.publicSharpText}>
+                    {marketResult.marketIntelligence.sharpMeter.line1 || "No clear sharp lean"}
+                  </Text>
+                </View>
 
-                {/* Line 3: Detail Line */}
-                <BlurText card="sharp-line-3" blur={!auth.currentUser} style={styles.sharpMeterLineText}>
-                  {marketResult?.marketIntelligence?.sharpMeter?.line3 || "No comparison available"}
-                </BlurText>
-              </View>
+                {/* Line 2 with borders */}
+                <View style={[styles.publicSharpRow, styles.publicSharpRowBordered]}>
+                  <Text style={styles.publicSharpText}>
+                    {marketResult.marketIntelligence.sharpMeter.line2 || "Limited data"}
+                  </Text>
+                </View>
 
-              {/* Right Side - Circular Gauge (NEW FORMAT: shows gauge value) */}
-              <View style={styles.sharpMeterGaugeSection}>
-                <View style={styles.sharpMeterCircle}>
-                  <BlurText card="sharp-gauge-value" blur={!auth.currentUser} style={styles.sharpMeterGaugeText}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeValue || "50"}
-                  </BlurText>
-                  <BlurText card="sharp-gauge-label" blur={!auth.currentUser} style={styles.sharpMeterGaugeSubtext}>
-                    {marketResult?.marketIntelligence?.sharpMeter?.gaugeLabel || "MED"}
-                  </BlurText>
+                {/* Line 3 */}
+                <View style={styles.publicSharpRow}>
+                  <Text style={styles.publicSharpText}>
+                    {marketResult.marketIntelligence.sharpMeter.line3 || "No comparison available"}
+                  </Text>
                 </View>
               </View>
+
+              {/* Right Side - Gauge */}
+              <View style={styles.publicSharpRight}>
+                <GaugeProgressBar
+                  value={marketResult.marketIntelligence.sharpMeter.gaugeValue || 50}
+                  maxValue={100}
+                  primaryText={String(marketResult.marketIntelligence.sharpMeter.gaugeValue || "50")}
+                  secondaryText={marketResult.marketIntelligence.sharpMeter.gaugeLabel || "MED"}
+                />
+              </View>
             </View>
-          </View>
-        </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No sharp meter data available</Text>
+            </View>
+          )}
+        </Card>
 
         {/* Market Efficiency Card */}
-        <View style={[styles.card, styles.marketEfficiencyCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Market Efficiency 🦾</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
+        <Card style={styles.marketEfficiencyCard}>
+          {/* Header */}
+          <View style={styles.marketEfficiencyHeader}>
+            <Text style={styles.marketEfficiencyTitle}>{i18n.t("marketIntelEfficiency")}</Text>
+            <Pressable onPress={() => navigateToInfo("marketEfficiency")}>
+              <Text style={styles.marketEfficiencyInfo}>ⓘ</Text>
+            </Pressable>
           </View>
-          <View style={styles.marketEfficiencyContent}>
-            <View style={styles.efficiencyMeter}>
-              <View style={styles.efficiencyScale}>
-                <Text style={styles.efficiencyLabel}>Loose</Text>
-                <Text style={styles.efficiencyLabel}>Tight</Text>
-              </View>
-              <View style={styles.efficiencyBar}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.efficiencyGradient}
+
+          {marketResult?.marketIntelligence?.marketTightness ? (
+            <View style={styles.marketEfficiencyContent}>
+              {/* Progress Bar with Labels */}
+              <View style={styles.progressBarContainer}>
+                <GradientProgressBar
+                  value={marketResult.marketIntelligence.marketTightness.tightness === "Tight" ? 80 :
+                         marketResult.marketIntelligence.marketTightness.tightness === "Normal" ? 50 : 20}
+                  maxValue={100}
                 />
-                <View style={[
-                  styles.efficiencyIndicator,
-                  { left: `${marketResult?.marketIntelligence?.marketTightness?.tightness === "Tight" ? "80%" :
-                           marketResult?.marketIntelligence?.marketTightness?.tightness === "Normal" ? "50%" : "20%"}` }
-                ]} />
+                <View style={styles.progressBarLabels}>
+                  <Text style={styles.progressBarLabel}>{i18n.t("marketIntelLoose")}</Text>
+                  <Text style={styles.progressBarLabel}>{i18n.t("marketIntelTight")}</Text>
+                </View>
               </View>
+
+              {/* Description */}
+              <Text style={styles.marketEfficiencyDescription}>
+                {marketResult.marketIntelligence.marketTightness.summary || "Normal market conditions"}
+              </Text>
             </View>
-            <BlurText card="market-efficiency" blur={!auth.currentUser} style={styles.efficiencyDescription}>
-              {marketResult?.marketIntelligence?.marketTightness?.summary || "Normal • Spread market • point range 1.0 • price range 0¢"}
-            </BlurText>
-          </View>
-        </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No market efficiency data available</Text>
+            </View>
+          )}
+        </Card>
 
         {/* Odds Table Card */}
-        <View style={[styles.card, styles.oddsTableCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Odds Table 🔎</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
+        <Card style={styles.oddsTableCard}>
+          {/* Header */}
+          <View style={styles.oddsTableHeader}>
+            <Text style={styles.oddsTableTitle}>{i18n.t("marketIntelOddsTable")}</Text>
+            <Pressable onPress={() => navigateToInfo("oddsTable")}>
+              <Text style={styles.oddsTableInfo}>ⓘ</Text>
+            </Pressable>
           </View>
-          <View style={styles.oddsTableContent}>
-            {/* Header Row */}
-            <View style={styles.oddsTableHeaderRow}>
-              <Text style={styles.oddsTableHeaderText}>MONEYLINE</Text>
-              <Text style={styles.oddsTableHeaderText}>SPREAD</Text>
-              <Text style={styles.oddsTableHeaderText}>TOTALS</Text>
-            </View>
 
-            {/* Team 1 Section */}
-            <View style={styles.oddsTableTeamHeaderRow}>
-              <Text style={styles.oddsTableTeamHeaderText}>{getTeamDisplayName(params.team1)}</Text>
-            </View>
+          {marketResult?.marketIntelligence?.oddsTable && marketResult.marketIntelligence.oddsTable.length > 0 ? (
+            params.sport?.includes('soccer') ? (
+              // SOCCER: Single section with Home/Draw/Away columns
+              <View style={styles.oddsTableContainer}>
+                {/* Column Headers */}
+                <View style={styles.oddsTableHeaderRow}>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>HOME W</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>DRAW</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>AWAY W</Text>
+                </View>
+
+                {/* Bookmaker Rows */}
+                {marketResult.marketIntelligence.oddsTable.slice(0, 5).map((bookmaker, index) => (
+                  <View key={`soccer-${index}`} style={styles.oddsTableRow}>
+                    <View style={styles.oddsTableCell}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.homeFractional || formatOdds(bookmaker.odds?.moneyline?.home)}
+                      </Text>
+                    </View>
+                    <View style={styles.oddsTableCell}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.drawFractional || formatOdds(bookmaker.odds?.moneyline?.draw)}
+                      </Text>
+                    </View>
+                    <View style={[styles.oddsTableCell, styles.oddsTableCellLast]}>
+                      <Image
+                        source={getBookmakerLogo(bookmaker.bookmaker)}
+                        style={styles.oddsTableLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.oddsTableValue}>
+                        {bookmaker.odds?.moneyline?.awayFractional || formatOdds(bookmaker.odds?.moneyline?.away)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              // NFL/NBA: Team 1 and Team 2 sections with ML/Spread/Total
+              <View style={styles.oddsTableContainer}>
+                {/* Column Headers */}
+                <View style={styles.oddsTableHeaderRow}>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelMoneyline").toUpperCase()}</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelSpread").toUpperCase()}</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>{i18n.t("marketIntelTotal").toUpperCase()}S</Text>
+                </View>
+
+                {/* Team 1 Section */}
+                <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team1)}</Text>
 
             {/* Dynamic Bookmaker Rows for Team 1 */}
-            {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
-              <TeamOddsRow
-                key={`${bookmaker.bookmakerKey}-team1`}
-                bookmakerLogo={getBookmakerLogo(bookmaker.bookmaker)}
-                mlOdds={formatOdds(bookmaker.odds?.moneyline?.home || 1.77)}
-                spreadPoint={bookmaker.odds?.spread?.home?.point ?
-                  `${bookmaker.odds.spread.home.point > 0 ? '+' : ''}${bookmaker.odds.spread.home.point}` : "+1.5"}
-                spreadOdds={formatOdds(bookmaker.odds?.spread?.home?.price || 1.91)}
-                totalLine={bookmaker.odds?.total?.over ?
-                  `O ${bookmaker.odds.total.over.point}` : "O 43"}
-                totalOdds={formatOdds(bookmaker.odds?.total?.over?.price || 1.83)}
-              />
+            {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
+              <View key={`team1-${index}`} style={styles.oddsTableRow}>
+                <View style={styles.oddsTableCell}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <Text style={styles.oddsTableValue}>
+                    {formatOdds(bookmaker.odds?.moneyline?.home)}
+                  </Text>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.oddsTableMultiValue}>
+                    <Text style={styles.oddsTableValue}>
+                      {bookmaker.odds?.spread?.home?.point ?
+                        `${bookmaker.odds.spread.home.point > 0 ? '+' : ''}${bookmaker.odds.spread.home.point}` :
+                        "+1.5"}
+                    </Text>
+                    <Text style={styles.oddsTableValue}>
+                      {formatOdds(bookmaker.odds?.spread?.home?.price)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.oddsTableCell, styles.oddsTableCellLast]}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.oddsTableMultiValue}>
+                    <Text style={styles.oddsTableValue}>
+                      {bookmaker.odds?.total?.over ?
+                        `O ${bookmaker.odds.total.over.point}` :
+                        "O 43"}
+                    </Text>
+                    <Text style={styles.oddsTableValue}>
+                      {formatOdds(bookmaker.odds?.total?.over?.price)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             ))}
 
             {/* Team 2 Section */}
-            <View style={styles.oddsTableTeamHeaderRow}>
-              <Text style={styles.oddsTableTeamHeaderText}>{getTeamDisplayName(params.team2)}</Text>
-            </View>
+            <Text style={styles.oddsTableTeamName}>{getTeamDisplayName(params.team2)}</Text>
 
             {/* Dynamic Bookmaker Rows for Team 2 */}
-            {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
-              <TeamOddsRow
-                key={`${bookmaker.bookmakerKey}-team2`}
-                bookmakerLogo={getBookmakerLogo(bookmaker.bookmaker)}
-                mlOdds={formatOdds(bookmaker.odds?.moneyline?.away || 1.97)}
-                spreadPoint={bookmaker.odds?.spread?.away?.point ?
-                  `${bookmaker.odds.spread.away.point > 0 ? '+' : ''}${bookmaker.odds.spread.away.point}` : "-1.5"}
-                spreadOdds={formatOdds(bookmaker.odds?.spread?.away?.price || 1.91)}
-                totalLine={bookmaker.odds?.total?.under ?
-                  `U ${bookmaker.odds.total.under.point}` : "U 53.4"}
-                totalOdds={formatOdds(bookmaker.odds?.total?.under?.price || 1.87)}
-              />
+            {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
+              <View key={`team2-${index}`} style={styles.oddsTableRow}>
+                <View style={styles.oddsTableCell}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <Text style={styles.oddsTableValue}>
+                    {formatOdds(bookmaker.odds?.moneyline?.away)}
+                  </Text>
+                </View>
+                <View style={styles.oddsTableCell}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.oddsTableMultiValue}>
+                    <Text style={styles.oddsTableValue}>
+                      {bookmaker.odds?.spread?.away?.point ?
+                        `${bookmaker.odds.spread.away.point > 0 ? '+' : ''}${bookmaker.odds.spread.away.point}` :
+                        "-1.5"}
+                    </Text>
+                    <Text style={styles.oddsTableValue}>
+                      {formatOdds(bookmaker.odds?.spread?.away?.price)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.oddsTableCell, styles.oddsTableCellLast]}>
+                  <Image
+                    source={getBookmakerLogo(bookmaker.bookmaker)}
+                    style={styles.oddsTableLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.oddsTableMultiValue}>
+                    <Text style={styles.oddsTableValue}>
+                      {bookmaker.odds?.total?.under ?
+                        `U ${bookmaker.odds.total.under.point}` :
+                        "U 53.4"}
+                    </Text>
+                    <Text style={styles.oddsTableValue}>
+                      {formatOdds(bookmaker.odds?.total?.under?.price)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             ))}
-          </View>
-        </View>
+              </View>
+            )
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No odds table data available</Text>
+            </View>
+          )}
+        </Card>
 
         {/* Vig Analysis Card */}
-        <View style={[styles.card, styles.vigAnalysisCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Vig Analysis 🧃</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
-          <View style={styles.vigAnalysisContent}>
-            {/* Header Row - Match Consensus Lines layout */}
-            <View style={styles.vigHeaderRow}>
-              <View style={styles.vigHeaderSpacer} />
-              <Text style={styles.vigHeaderText}>Spread</Text>
-              <Text style={styles.vigHeaderText}>Moneyline</Text>
-              <Text style={styles.vigHeaderText}>Total</Text>
+        <Card style={styles.consensusLinesCard}>
+          <View style={styles.consensusLinesContent}>
+            {/* Header */}
+            <View style={styles.consensusLinesHeader}>
+              <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelVigAnalysis")}</Text>
+              <Pressable onPress={() => navigateToInfo("vigAnalysis")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
-            {/* Sharp Books Row - Match team row layout */}
-            <View style={styles.vigTeamRow}>
-              <View style={styles.vigTeamInfo}>
-                <Text style={styles.vigTeamIcon}>🎯</Text>
-                <Text style={styles.vigTeamName}>Sharp Books</Text>
-              </View>
-              <View style={styles.vigOddsContainer}>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-sharp-spread" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.spread?.sharp ?
-                      `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` : "3.3%"}
-                  </BlurText>
-                </View>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-sharp-ml" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.sharp ?
-                      `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` : "3.2%"}
-                  </BlurText>
-                </View>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-sharp-total" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.total?.sharp ?
-                      `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` : "3.9%"}
-                  </BlurText>
-                </View>
-              </View>
-            </View>
+            {marketResult?.marketIntelligence?.vigAnalysis ? (
+              params.sport?.includes('soccer') ? (
+                // SOCCER: Home Win / Draw / Away Win columns
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
+                  </View>
 
-            {/* All Books Row - Match team row layout */}
-            <View style={styles.vigTeamRow}>
-              <View style={styles.vigTeamInfo}>
-                <Text style={styles.vigTeamIcon}>👥</Text>
-                <Text style={styles.vigTeamName}>All books</Text>
+                  {/* Sharp Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelSharpBooks")} 🎯</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpHome ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpHome.toFixed(1)}%` :
+                            "5.2%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpDraw ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpDraw.toFixed(1)}%` :
+                            "5.8%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpAway ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpAway.toFixed(1)}%` :
+                            "5.5%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* All Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelAllBooks")} 👥</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketHome ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketHome.toFixed(1)}%` :
+                            "6.4%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketDraw ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketDraw.toFixed(1)}%` :
+                            "7.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketAway ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketAway.toFixed(1)}%` :
+                            "6.8%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                // NFL/NBA: Spread / Moneyline / Total columns
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
+
+                  {/* Sharp Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelSharpBooks")} 🎯</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.spread?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` :
+                            "3.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` :
+                            "3.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.total?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` :
+                            "3.7%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* All books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelAllBooks")} 👥</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.spread?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` :
+                            "4.5%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` :
+                            "4.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.total?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` :
+                            "4.6%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No vig analysis data available</Text>
               </View>
-              <View style={styles.vigOddsContainer}>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-market-spread" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.spread?.market ?
-                      `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` : "4.4%"}
-                  </BlurText>
-                </View>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-market-ml" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.moneyline?.market ?
-                      `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` : "4.1%"}
-                  </BlurText>
-                </View>
-                <View style={styles.vigOddsBox}>
-                  <BlurText card="vig-market-total" blur={!auth.currentUser} style={styles.vigOdds}>
-                    {marketResult?.marketIntelligence?.vigAnalysis?.total?.market ?
-                      `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` : "4.6%"}
-                  </BlurText>
-                </View>
-              </View>
-            </View>
+            )}
           </View>
-        </View>
+        </Card>
 
         {/* Fair Value Card */}
-        <View style={[styles.card, styles.fairValueCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Fair Value ⚖️</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
-          <View style={styles.fairValueContent}>
-            <View style={styles.fairValueHeader}>
-              <View style={styles.fairValueHeaderSpacer} />
-              <Text style={styles.fairValueHeaderText}>Spread</Text>
-              <Text style={styles.fairValueHeaderText}>Moneyline</Text>
-              <Text style={styles.fairValueHeaderText}>Total</Text>
+        <Card style={styles.consensusLinesCard}>
+          <View style={styles.consensusLinesContent}>
+            {/* Header */}
+            <View style={styles.consensusLinesHeader}>
+              <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelFairValue")}</Text>
+              <Pressable onPress={() => navigateToInfo("fairValue")}>
+                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+              </Pressable>
             </View>
 
-            {/* Team 1 Row */}
-            <View style={styles.fairValueTeamRow}>
-              <View style={styles.fairValueTeamInfo}>
-                <Image
-                  source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
-                  style={styles.fairValueTeamLogo}
-                />
-                <Text style={styles.fairValueTeamName}>
-                  {getTeamDisplayName(params.team1)}
-                </Text>
-              </View>
-              <View style={styles.fairValueOddsContainer}>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-spread-1" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {marketResult?.marketIntelligence?.fairValue?.spread?.fair1 ?
-                      formatOdds(marketResult.marketIntelligence.fairValue.spread.fair1) : "-105"}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-ml-1" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fair1 || 1.71)}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-total-1" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {marketResult?.marketIntelligence?.fairValue?.total?.fair1 ?
-                      formatOdds(marketResult.marketIntelligence.fairValue.total.fair1) : "-105"}
-                  </BlurText>
-                </View>
-              </View>
-            </View>
+            {marketResult?.marketIntelligence?.fairValue ? (
+              params.sport?.includes('soccer') ? (
+                // SOCCER: 1 row with Home/Draw/Away fractional odds
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
+                  </View>
 
-            {/* Team 2 Row */}
-            <View style={styles.fairValueTeamRow}>
-              <View style={styles.fairValueTeamInfo}>
-                <Image
-                  source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
-                  style={styles.fairValueTeamLogo}
-                />
-                <Text style={styles.fairValueTeamName}>
-                  {getTeamDisplayName(params.team2)}
-                </Text>
+                  {/* Single Fair Value Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={require("../assets/images/logo.png")}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>Fair Value</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairHomeFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairHome)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairDrawFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairDraw)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.fairValue.moneyline?.fairAwayFractional || formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fairAway)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                // NFL/NBA: 2 rows with Spread/ML/Total
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
+
+                  {/* Team 1 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team1 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team1)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair1)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair1)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair1)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Team 2 Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Image
+                        source={getTeamLogo(params.team2 || "", params.sport)}
+                        style={styles.teamLogo}
+                        contentFit="contain"
+                      />
+                      <Text style={styles.teamName}>{getTeamDisplayName(params.team2)}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.spread?.fair2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.moneyline?.fair2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {formatOdds(marketResult.marketIntelligence.fairValue.total?.fair2)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No fair value data available</Text>
               </View>
-              <View style={styles.fairValueOddsContainer}>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-spread-2" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {marketResult?.marketIntelligence?.fairValue?.spread?.fair2 ?
-                      formatOdds(marketResult.marketIntelligence.fairValue.spread.fair2) : "-105"}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-ml-2" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {formatOdds(marketResult?.marketIntelligence?.fairValue?.moneyline?.fair2 || 2.29)}
-                  </BlurText>
-                </View>
-                <View style={styles.fairValueOddsBox}>
-                  <BlurText card="fair-total-2" blur={!auth.currentUser} style={styles.fairValueOdds}>
-                    {marketResult?.marketIntelligence?.fairValue?.total?.fair2 ?
-                      formatOdds(marketResult.marketIntelligence.fairValue.total.fair2) : "-105"}
-                  </BlurText>
-                </View>
-              </View>
-            </View>
+            )}
           </View>
-        </View>
+        </Card>
 
         {/* EV+ & Arb Opportunities Card */}
-        <View style={[styles.card, styles.evOpportunitiesCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>EV+ & Arb Opportunities 💸</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
+        <Card style={styles.bestLinesCard}>
+          <View style={styles.bestLinesContent}>
+            {/* Header */}
+            <View style={styles.bestLinesHeader}>
+              <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelEVOpportunities")}</Text>
+              <Pressable onPress={() => navigateToInfo("evOpportunities")}>
+                <Text style={styles.bestLinesInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
+
+            {/* Dynamic Line Items */}
+            {marketResult?.marketIntelligence?.evOpportunities?.opportunities &&
+             marketResult.marketIntelligence.evOpportunities.opportunities.length > 0 ? (
+              <View style={styles.linesList}>
+                {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
+                  <View key={index} style={styles.lineItem}>
+                    <Image
+                      source={getBookmakerLogo(opportunity.bookmaker)}
+                      style={styles.bookmakerLogo}
+                      contentFit="contain"
+                    />
+                    <View style={styles.lineTextContainer}>
+                      <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
+                      <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.linesList}>
+                <View style={styles.lineItem}>
+                  <Image
+                    source={require("../assets/images/noevopps.png")}
+                    style={styles.bookmakerLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.lineTextContainer}>
+                    <Text style={styles.opportunityBigText}>No EV+ Opportunities</Text>
+                    <Text style={styles.lineSmallText}>No EV+ or arbitrage opportunities available</Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
-          <View style={styles.evOpportunitiesContent}>
-            <EVArbSection marketData={marketResult} params={params} />
-          </View>
-        </View>
+        </Card>
 
+        {/* Get Fresh Odds Button */}
+        <View style={styles.buttonContainer}>
+          <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+            <Pressable style={styles.freshOddsButton} onPress={refreshMarketIntelligence}>
+              <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
+            </Pressable>
+          </Animated.View>
 
-        {/* Action Buttons */}
-        <View style={styles.debateContainer}>
-          <BorderButton
-            onPress={() => {
-              router.back();
-            }}
-            containerStyle={styles.floatingButton}
-            borderColor="#00C2E0"
-            backgroundColor="#00C2E020"
-            opacity={1}
-            borderWidth={1}
-          >
-            <Text style={styles.buttonText}>Back to Analysis</Text>
-          </BorderButton>
-
-          <GradientButton
-            onPress={getMarketIntelligence}
-            style={{ marginTop: 16 }}
-          >
-            <Text style={styles.buttonText}>Get Fresh Odds 🎲</Text>
-          </GradientButton>
+          {/* Cooldown Message */}
+          {cooldownMessage && (
+            <Text style={styles.cooldownMessage}>{cooldownMessage}</Text>
+          )}
         </View>
       </ScrollView>
     );
@@ -976,234 +1283,44 @@ export default function MarketIntelScreen() {
 
   // Main render
   return (
-    <ScreenBackground hideBg>
-      <TopBar />
+    <ScreenBackground>
+      <TopBar showBack={false} />
+      <Animated.View style={[styles.mainContainer, animatedStyle]}>
+        {isLoading ? renderShimmer() : renderMarketContent()}
+      </Animated.View>
 
-      <View style={styles.container}>
-        <Animated.ScrollView
-          showsVerticalScrollIndicator={false}
-          style={[styles.scrollView, animatedStyle]}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.analysisContainer}>
-            {isLoading ? renderShimmer() : renderMarketContent()}
-          </View>
-        </Animated.ScrollView>
-
-        {/* Floating Bottom Navigation */}
-        <FloatingBottomNav
-          activeTab="market"
-          analysisData={{
-            team1: params.team1,
-            team2: params.team2,
-            sport: params.sport,
-            team1Logo: params.team1Logo,
-            team2Logo: params.team2Logo,
-            analysisId: params.analysisId, // Pass analysisId if available
-          }}
-        />
-      </View>
+      {/* Floating Bottom Nav */}
+      <FloatingBottomNav
+        activeTab="market"
+        analysisData={{
+          team1: params.team1,
+          team2: params.team2,
+          sport: params.sport,
+          team1Logo: params.team1Logo,
+          team2Logo: params.team2Logo,
+          analysisId: params.analysisId,
+        }}
+      />
     </ScreenBackground>
   );
 }
 
-// Helper Components
-const EVArbSection: React.FC<{
-  marketData: MarketIntelResult | null;
-  params: MarketIntelParams;
-}> = ({ marketData, params }) => {
-  const opportunities = marketData?.marketIntelligence?.evOpportunities?.opportunities || [];
-
-  if (opportunities.length === 0) {
-    return (
-      <View style={evStyles.evArbContainer}>
-        {/* No Opportunities Item - Match Best Lines dimensions */}
-        <View style={evStyles.noEvArbItem}>
-          <Image
-            source={require("../assets/images/noevopps.png")}
-            style={evStyles.noEvIcon}
-          />
-          <View style={evStyles.noEvInfo}>
-            <BlurText card="no-ev-title" blur={!auth.currentUser} style={evStyles.noEvTitle}>
-              Market is efficiently priced
-            </BlurText>
-            <BlurText card="no-ev-desc" blur={!auth.currentUser} style={evStyles.noEvDescription}>
-              No +EV or Arb opportunities found
-            </BlurText>
-          </View>
-        </View>
-
-        {/* Lowest Vig Items - Match Best Lines dimensions */}
-        <View style={evStyles.lowVigItem}>
-          <Image
-            source={require("../assets/images/Pinaccle.png")} // Match existing filename
-            style={evStyles.lowVigLogo}
-          />
-          <View style={evStyles.lowVigInfo}>
-            <BlurText card="lowest-vig-ml" blur={!auth.currentUser} style={evStyles.lowVigTitle}>
-              Lowest Vig at 2.5%
-            </BlurText>
-            <BlurText card="lowest-vig-ml-desc" blur={!auth.currentUser} style={evStyles.lowVigDescription}>
-              ML on Wizards -210 at Pinnacle
-            </BlurText>
-          </View>
-        </View>
-
-        <View style={evStyles.lowVigItem}>
-          <Image
-            source={require("../assets/images/logo.png")} // Use logo.png as fallback
-            style={evStyles.lowVigLogo}
-          />
-          <View style={evStyles.lowVigInfo}>
-            <BlurText card="lowest-vig-spread" blur={!auth.currentUser} style={evStyles.lowVigTitle}>
-              Lowest Vig Spread at 2.6%
-            </BlurText>
-            <BlurText card="lowest-vig-spread-desc" blur={!auth.currentUser} style={evStyles.lowVigDescription}>
-              ML on 76ers +190 at LowVig.AG
-            </BlurText>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={evStyles.evArbContainer}>
-      {opportunities.map((opportunity, index) => (
-        <View key={index} style={evStyles.opportunityItem}>
-          {opportunity.type === 'arbitrage' ? (
-            <>
-              <View style={evStyles.arbLogosContainer}>
-                <Image source={{ uri: params.team1Logo || 'https://via.placeholder.com/48x48' }} style={evStyles.arbLogo} />
-                <Image source={{ uri: params.team2Logo || 'https://via.placeholder.com/48x48' }} style={evStyles.arbLogo} />
-              </View>
-              <View style={evStyles.opportunityInfo}>
-                <BlurText card={`ev-arb-title-${index}`} blur={!auth.currentUser} style={evStyles.opportunityTitle}>
-                  {opportunity.title}
-                </BlurText>
-                <BlurText card={`ev-arb-desc-${index}`} blur={!auth.currentUser} style={evStyles.opportunityDescription}>
-                  {opportunity.description}
-                </BlurText>
-              </View>
-            </>
-          ) : (
-            <>
-              <Image
-                source={getBookmakerLogo(opportunity.bookmaker)}
-                style={evStyles.bookmakerLogo}
-              />
-              <View style={evStyles.opportunityInfo}>
-                <BlurText card={`ev-title-${index}`} blur={!auth.currentUser} style={evStyles.opportunityTitle}>
-                  {opportunity.title}
-                </BlurText>
-                <BlurText card={`ev-desc-${index}`} blur={!auth.currentUser} style={evStyles.opportunityDescription}>
-                  {opportunity.description}
-                </BlurText>
-              </View>
-            </>
-          )}
-        </View>
-      ))}
-    </View>
-  );
-};
-
-// TeamOddsRow Component - Matches Figma exactly
-const TeamOddsRow: React.FC<{
-  bookmakerLogo: any;
-  mlOdds: string;
-  spreadPoint: string;
-  spreadOdds: string;
-  totalLine: string;
-  totalOdds: string;
-}> = ({
-  bookmakerLogo,
-  mlOdds,
-  spreadPoint,
-  spreadOdds,
-  totalLine,
-  totalOdds
-}) => (
-  <View style={styles.oddsTableRow}>
-    {/* Moneyline Column */}
-    <View style={styles.oddsTableCell}>
-      <Image source={bookmakerLogo} style={styles.oddsTableBookmakerLogo} />
-      <BlurText card={`ml-${mlOdds}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-        {mlOdds}
-      </BlurText>
-    </View>
-
-    {/* Spread Column */}
-    <View style={styles.oddsTableCell}>
-      <Image source={bookmakerLogo} style={styles.oddsTableBookmakerLogo} />
-      <View style={styles.oddsTableSpreadContainer}>
-        <BlurText card={`spread-${spreadPoint}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-          {spreadPoint}
-        </BlurText>
-        <BlurText card={`spread-juice-${spreadOdds}`} blur={!auth.currentUser} style={styles.oddsTableJuice}>
-          {spreadOdds}
-        </BlurText>
-      </View>
-    </View>
-
-    {/* Totals Column */}
-    <View style={styles.oddsTableCell}>
-      <Image source={bookmakerLogo} style={styles.oddsTableBookmakerLogo} />
-      <View style={styles.oddsTableSpreadContainer}>
-        <BlurText card={`total-${totalLine}`} blur={!auth.currentUser} style={styles.oddsTableOdds}>
-          {totalLine}
-        </BlurText>
-        <BlurText card={`total-juice-${totalOdds}`} blur={!auth.currentUser} style={styles.oddsTableJuice}>
-          {totalOdds}
-        </BlurText>
-      </View>
-    </View>
-  </View>
-);
-
-// Styles - EXACTLY matching Figma dimensions
 const styles = StyleSheet.create({
-  debateContainer: {
-    marginBottom: 0,
-  },
-  buttonText: {
-    fontSize: 20,
-    color: "#FFFFFF",
-    fontFamily: "Aeonik-Medium",
+  mainContainer: {
+    flex: 1,
   },
   container: {
     flex: 1,
-    paddingBottom: 0,
   },
-  scrollView: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  scrollContent: {
-    paddingBottom: 120, // Extra padding for floating nav
-  },
-  imageContainer: {
-    width: "100%",
-    height: 300,
-    aspectRatio: 1,
-    alignSelf: "center",
-    marginBottom: 20,
-    borderRadius: 35,
-    overflow: "hidden",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 20,
-    objectFit: "cover",
-  },
-  analysisContainer: {
+  contentContainer: {
+    paddingHorizontal: 16,
     paddingTop: 20,
-    flex: 1,
+    paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   shimmerContainer: {
     width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   shimmerGroup: {
     width: "100%",
@@ -1225,647 +1342,409 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     width: "100%",
   },
-  analysisContent: {
+  errorContainer: {
     flex: 1,
-    paddingBottom: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
-  errorContainer: {},
   errorText: {
-    color: "#424242",
+    color: "#FF5252",
     fontSize: 16,
-    marginTop: 30,
     textAlign: "center",
     fontFamily: "Aeonik-Regular",
   },
-  card: {
-    backgroundColor: "#101010",
-    borderWidth: 0.2,
-    borderColor: "#505050",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-  },
-  // Universal Card Header Styles
-  cardHeader: {
-    flexDirection: "row",
+  emptyState: {
+    padding: 32,
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
+    justifyContent: "center",
   },
-  cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
+  emptyStateText: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    fontFamily: "Aeonik-Regular",
+  },
+  topCard: {
+    height: 85.87,
+  },
+  marketHeader: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13.44,
+    paddingHorizontal: 22,
+  },
+  marketTitle: {
     fontFamily: "Aeonik-Medium",
-  },
-  infoIcon: {
     fontSize: 20,
-    color: "#00c2e0",
+    color: "#FFFFFF",
   },
-  // Best Lines Card Styles - EXACT Figma dimensions
   bestLinesCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Figma cornerRadius: 40 (reduced as requested)
-    borderColor: "#212121", // Exact stroke color as requested
-    padding: 20,
+    marginTop: 16,
   },
   bestLinesContent: {
-    gap: 20,
+    paddingVertical: 22,
+    paddingHorizontal: 0,
   },
-  bestLineItem: {
+  bestLinesHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
+  },
+  bestLinesTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  bestLinesInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
+  },
+  linesList: {
+    gap: 16,
+  },
+  lineItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12,
-    padding: 12, // Smaller padding to match Figma
-    minHeight: 60, // Smaller height to match Figma
+    paddingHorizontal: 20.15,
+    gap: 16,
   },
-  bestLineBookmakerLogo: {
-    width: 24, // Much smaller to match Figma
-    height: 24, // Much smaller to match Figma
-    borderRadius: 12,
-    marginRight: 12, // Smaller margin
+  bookmakerLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
-  bestLineTextSection: {
+  lineTextContainer: {
     flex: 1,
-    justifyContent: "center",
+    gap: 4,
   },
-  bestLineMainText: {
-    fontSize: 16, // Match analysis.tsx sizing
+  lineBigText: {
     fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  bestLineDescription: {
+    fontSize: 16.5,
     color: "#FFFFFF",
-    fontSize: 12, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    opacity: 0.7,
-    lineHeight: 18,
   },
-  // Consensus Lines Card Styles
+  lineSmallText: {
+    fontFamily: "Aeonik-Light",
+    fontSize: 14,
+    color: "#FFFFFF",
+    opacity: 0.7,
+  },
   consensusLinesCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
+    marginTop: 16,
   },
   consensusLinesContent: {
-    gap: 15,
+    paddingVertical: 22,
+    paddingHorizontal: 0,
   },
-  consensusHeaderRow: {
+  consensusLinesHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
   },
-  consensusHeaderSpacer: {
-    flex: 1,
-  },
-  consensusHeaderText: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    flex: 1,
-    textAlign: "center",
-  },
-  consensusTeamRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-  },
-  consensusTeamInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  consensusTeamLogo: {
-    width: 40, // Match analysis.tsx sizing
-    height: 40, // Match analysis.tsx sizing
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  consensusTeamName: {
-    fontSize: 16, // Match analysis.tsx sizing
+  consensusLinesTitle: {
     fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
-  consensusOddsContainer: {
+  consensusLinesInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
+  },
+  consensusTable: {
+    paddingHorizontal: 20.15,
+    gap: 12,
+  },
+  tableHeader: {
     flexDirection: "row",
-    flex: 2,
-    justifyContent: "space-around",
+    alignItems: "center",
   },
-  consensusOddsBox: {
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  teamColumn: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  dataColumn: {
+    flex: 0.85,
+    alignItems: "center",
+  },
+  dataCell: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     backgroundColor: "#161616",
-    borderRadius: 20, // Match analysis.tsx sizing
     borderWidth: 1,
     borderColor: "#212121",
-    width: 66, // Match analysis.tsx sizing
-    height: 66, // Match analysis.tsx sizing
     justifyContent: "center",
-    alignItems: "center",
-  },
-  consensusOdds: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-  },
-  consensusJuice: {
-    fontSize: 12, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    opacity: 0.5,
-  },
-  // Sharp Meter Card Styles - EXACT Figma layout
-  sharpMeterCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
-  },
-  sharpMeterContent: {
-    height: 324, // Figma height: 324
-  },
-  sharpMeterContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: "100%",
-  },
-  sharpMeterTextSection: {
-    flex: 1,
-    height: "100%",
-    justifyContent: "space-between",
-  },
-  sharpMeterTextRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    height: 108, // Figma height: 108
-    borderBottomWidth: 1,
-    borderBottomColor: "#686868",
-  },
-  sharpMeterPrimaryText: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-  },
-  sharpMeterValueText: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-  },
-  sharpMeterSecondaryText: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-  },
-  sharpMeterSpreadText: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-  },
-  sharpMeterDetailText: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-  },
-  sharpMeterGaugeSection: {
-    width: 120, // Reasonable size like analysis.tsx
-    height: 120, // Reasonable size like analysis.tsx
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 20,
-  },
-  sharpMeterCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: "#00c2e0",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 194, 224, 0.1)",
-  },
-  sharpMeterGaugeText: {
-    fontSize: 24, // Reasonable size for gauge center
-    fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  sharpMeterGaugeSubtext: {
-    fontSize: 12, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Light",
-    color: "#ffffff",
-    textAlign: "center",
-    lineHeight: 16,
-  },
-  // Sharp Meter NEW FORMAT - 3 line text style
-  sharpMeterLineText: {
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  // Market Efficiency Card Styles - PERFECT Figma alignment
-  marketEfficiencyCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Same as all other cards
-    padding: 20,
-  },
-  marketEfficiencyContent: {
-    gap: 15,
-  },
-  efficiencyMeter: {
-    gap: 10,
-  },
-  efficiencyScale: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    // NO paddingHorizontal - align with title edges
-  },
-  efficiencyLabel: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    opacity: 0.6,
-  },
-  efficiencyBar: {
-    height: 16, // Figma height: 16
-    borderRadius: 100,
-    position: "relative",
-    overflow: "hidden",
-    // NO margin - align with title edges
-  },
-  efficiencyGradient: {
-    flex: 1,
-    height: "100%",
-  },
-  efficiencyIndicator: {
-    position: "absolute",
-    top: -3,
-    width: 22, // Figma width: 22.36079978942871
-    height: 22, // Figma height: 22.36079978942871
-    borderRadius: 11,
-    backgroundColor: "#ffffff",
-  },
-  efficiencyDescription: {
-    fontSize: 14, // SMALLER to fit 1-liner (was 16)
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    opacity: 0.8,
-    textAlign: "center",
-    lineHeight: 18, // Tight line height for 1-liner
-  },
-  // Odds Table Card Styles - Clean AF Table Design
-  oddsTableCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
-  },
-  oddsTableContent: {
-    gap: 0,
-  },
-  oddsTableHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  oddsTableHeaderText: {
-    fontSize: 14,
-    fontFamily: "Aeonik-Bold",
-    color: "#ffffff",
-    textAlign: "center",
-    flex: 1,
-  },
-  oddsTableTeamHeaderRow: {
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
-  },
-  oddsTableTeamHeaderText: {
-    fontSize: 16,
-    fontFamily: "Aeonik-Bold",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-  oddsTableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222222",
-    minHeight: 50,
-  },
-  oddsTableCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: 6,
-  },
-  oddsTableBookmakerLogo: {
-    width: 18, // Proportionally smaller than Best Lines (24px)
-    height: 18,
-    borderRadius: 9,
-  },
-  oddsTableOdds: {
-    fontSize: 14,
-    fontFamily: "Aeonik-Bold",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-  oddsTableSpreadContainer: {
     alignItems: "center",
     gap: 2,
   },
-  oddsTableJuice: {
+  columnHeaderText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 11,
+    color: "#FFFFFF",
+  },
+  teamLogo: {
+    width: 40.31,
+    height: 40.31,
+  },
+  teamName: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 14,
+    color: "#FFFFFF",
+  },
+  dataValue: {
+    fontFamily: "Aeonik-Medium",
     fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    color: "#888888",
-    textAlign: "center",
+    color: "#FFFFFF",
   },
-  // Vig Analysis Card Styles
-  vigAnalysisCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
-  },
-  vigAnalysisContent: {
-    gap: 15,
-  },
-  vigHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  vigHeaderSpacer: {
-    flex: 1,
-  },
-  vigHeaderText: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    flex: 1,
-    textAlign: "center",
-  },
-  vigRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    height: 156, // Figma height: 156
-  },
-  vigTeamName: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    minWidth: 60,
-  },
-  vigCell: {
-    backgroundColor: "#161616",
-    borderRadius: 38, // Figma cornerRadius: 37.6699104309082
-    borderWidth: 1,
-    borderColor: "#212121",
-    width: 132, // Figma width: 132
-    height: 132, // Figma height: 132
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 10,
-  },
-  vigPercentage: {
-    fontSize: 14, // Match analysis.tsx sizing
+  dataSecondary: {
     fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-  },
-  // New Vig Analysis Styles (matching Consensus Lines layout)
-  vigTeamRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  vigTeamInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  vigTeamIcon: {
-    fontSize: 16,
-    marginRight: 8,
-    width: 24, // Same width as team logos
-    textAlign: "center",
-  },
-  vigOddsContainer: {
-    flexDirection: "row",
-    flex: 2,
-  },
-  vigOddsBox: {
-    flex: 1,
-    alignItems: "center",
-  },
-  vigOdds: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Bold",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-  // Fair Value Card Styles
-  fairValueCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
-  },
-  fairValueContent: {
-    gap: 15,
-  },
-  fairValueHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  fairValueHeaderSpacer: {
-    flex: 1,
-  },
-  fairValueHeaderText: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-    flex: 1,
-    textAlign: "center",
-  },
-  fairValueTeamRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 15,
-    height: 156, // Figma height: 156
-  },
-  fairValueTeamInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  fairValueTeamLogo: {
-    width: 120, // Figma width: 120
-    height: 120, // Figma height: 120
-    borderRadius: 60,
-    marginRight: 12,
-  },
-  fairValueTeamName: {
-    fontSize: 16, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-  },
-  fairValueOddsContainer: {
-    flexDirection: "row",
-    flex: 2,
-    justifyContent: "space-around",
-  },
-  fairValueOddsBox: {
-    backgroundColor: "#161616",
-    borderRadius: 38, // Figma cornerRadius: 37.6699104309082
-    borderWidth: 1,
-    borderColor: "#212121",
-    width: 132, // Figma width: 132
-    height: 132, // Figma height: 132
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  fairValueOdds: {
-    fontSize: 14, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Medium",
-    color: "#ffffff",
-  },
-  fairValueJuice: {
-    fontSize: 12, // Match analysis.tsx sizing
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
+    fontSize: 12,
+    color: "#FFFFFF",
     opacity: 0.5,
   },
-  // EV Opportunities Card Styles
-  evOpportunitiesCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40, // Standardized across all cards
-    padding: 20,
+  publicSharpCard: {
+    marginTop: 16,
   },
-  evOpportunitiesContent: {
-    gap: 24,
+  publicSharpHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    paddingTop: 22,
+    paddingBottom: 16,
   },
-  floatingButton: {
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    padding: 10,
+  publicSharpTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
-  placeholderImage: {
-    backgroundColor: "#333",
+  publicSharpInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
+  },
+  publicSharpContent: {
+    flexDirection: "row",
+    paddingHorizontal: 31.91,
+    paddingBottom: 22,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  publicSharpLeft: {
+    flex: 1,
+    gap: 12,
+  },
+  publicSharpRight: {
+    marginLeft: 20,
+    marginTop: -30,
+    marginRight: -10,
+  },
+  publicSharpRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  publicSharpRowBordered: {
+    borderTopWidth: 0.2,
+    borderBottomWidth: 0.2,
+    borderColor: "#686868",
+    paddingVertical: 12,
+  },
+  publicSharpText: {
+    fontFamily: "Aeonik-Light",
+    fontSize: 12,
+    color: "#FFFFFF",
+  },
+  marketEfficiencyCard: {
+    marginTop: 16,
+  },
+  marketEfficiencyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    paddingTop: 22,
+    paddingBottom: 16,
+  },
+  marketEfficiencyTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  marketEfficiencyInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
+  },
+  marketEfficiencyContent: {
+    paddingHorizontal: 31.91,
+    paddingBottom: 22,
+    gap: 12,
+  },
+  progressBarContainer: {
+    gap: 8,
+  },
+  progressBarLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  progressBarLabel: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 10,
+    color: "#FFFFFF",
+    opacity: 0.6,
+  },
+  marketEfficiencyDescription: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 12,
+    color: "#FFFFFF",
+    opacity: 0.8,
+  },
+  oddsTableCard: {
+    marginTop: 16,
+  },
+  oddsTableHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    paddingTop: 22,
+    paddingBottom: 16,
+  },
+  oddsTableTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  oddsTableInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
+  },
+  oddsTableContainer: {
+    paddingHorizontal: 20.15,
+    paddingBottom: 22,
+  },
+  oddsTableHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#2A2A2A",
+  },
+  oddsTableColumnHeader: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 14,
+    color: "#FFFFFF",
+    flex: 1,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  oddsTableColumnHeaderCell: {
+    borderRightWidth: 0.5,
+    borderRightColor: "#2A2A2A",
+  },
+  oddsTableColumnHeaderCellLast: {
+    borderRightWidth: 0,
+  },
+  oddsTableTeamName: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 14,
+    color: "#FFFFFF",
+    paddingVertical: 12,
+    textAlign: "center",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#2A2A2A",
+  },
+  oddsTableRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#2A2A2A",
+  },
+  oddsTableCell: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRightWidth: 0.5,
+    borderRightColor: "#2A2A2A",
+  },
+  oddsTableLogo: {
+    width: 30.23,
+    height: 30.23,
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  oddsTableValue: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 13.5,
+    color: "#FFFFFF",
+  },
+  oddsTableMultiValue: {
+    gap: 4,
+    alignItems: "center",
+  },
+  oddsTableCellLast: {
+    borderRightWidth: 0,
+  },
+  opportunityLogo: {
+    width: 40.31,
+    height: 40.31,
+  },
+  opportunityTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  opportunityBigText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 15,
+    color: "#0BFF13",
+  },
+  opportunitySmallText: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 14,
+    color: "#FFFFFF",
+  },
+  buttonContainer: {
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  freshOddsButton: {
+    width: 176.35,
+    height: 43.67,
+    backgroundColor: "#00C2E0",
+    borderRadius: 33.59,
     justifyContent: "center",
     alignItems: "center",
-    width: "100%",
-    height: "100%",
   },
-  placeholderText: {
-    color: "#888",
-    fontSize: 16,
+  freshOddsButtonText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 14,
+    color: "#FFFFFF",
   },
-});
-
-// EV Section Styles - Match Best Lines dimensions
-const evStyles = StyleSheet.create({
-  evArbContainer: {
-    gap: 15, // Match Best Lines gap
-  },
-  // No Opportunities Item - Match Best Lines dimensions
-  noEvArbItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12, // Match Best Lines borderRadius
-    padding: 12, // Match Best Lines padding
-    minHeight: 60, // Match Best Lines minHeight
-  },
-  noEvIcon: {
-    width: 24, // Match Best Lines logo size
-    height: 24,
-    marginRight: 12,
-  },
-  noEvInfo: {
-    flex: 1,
-  },
-  noEvTitle: {
-    fontSize: 16, // Match Best Lines main text
-    fontFamily: "Aeonik-Bold",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  noEvDescription: {
-    fontSize: 14, // Match Best Lines description
+  cooldownMessage: {
     fontFamily: "Aeonik-Regular",
+    fontSize: 13,
     color: "#888888",
-  },
-  // Lowest Vig Items - Match Best Lines dimensions
-  lowVigItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12, // Match Best Lines borderRadius
-    padding: 12, // Match Best Lines padding
-    minHeight: 60, // Match Best Lines minHeight
-  },
-  lowVigLogo: {
-    width: 24, // Match Best Lines logo size
-    height: 24,
-    marginRight: 12,
-  },
-  lowVigInfo: {
-    flex: 1,
-  },
-  lowVigTitle: {
-    fontSize: 16, // Match Best Lines main text
-    fontFamily: "Aeonik-Bold",
-    color: "#00ff41", // Green for lowest vig
-    marginBottom: 4,
-  },
-  lowVigDescription: {
-    fontSize: 14, // Match Best Lines description
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-  },
-  // Opportunity Items - Match Best Lines dimensions
-  opportunityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12, // Match Best Lines borderRadius
-    padding: 12, // Match Best Lines padding
-    minHeight: 60, // Match Best Lines minHeight
-  },
-  bookmakerLogo: {
-    width: 24, // Match Best Lines logo size
-    height: 24,
-    marginRight: 12,
-  },
-  opportunityInfo: {
-    flex: 1,
-  },
-  opportunityTitle: {
-    fontSize: 16, // Match Best Lines main text
-    fontFamily: "Aeonik-Bold",
-    color: "#00ff41", // Green for +EV
-    marginBottom: 4,
-  },
-  opportunityDescription: {
-    fontSize: 14, // Match Best Lines description
-    fontFamily: "Aeonik-Regular",
-    color: "#ffffff",
-  },
-  // Arbitrage specific styles
-  arbLogosContainer: {
-    flexDirection: "row",
-    marginRight: 12,
-  },
-  arbLogo: {
-    width: 20, // Even smaller for dual logos
-    height: 20,
-    borderRadius: 10,
-    marginLeft: -3, // Slight overlap
+    marginTop: 8,
+    textAlign: "center",
   },
 });

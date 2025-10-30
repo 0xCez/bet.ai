@@ -1,40 +1,37 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  Image,
+  Text,
   StyleSheet,
   ScrollView,
-  Text,
-  ViewStyle,
+  Pressable,
   Animated,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { Image } from "expo-image";
+import { useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import APIService from "../services/api";
-import { GradientButton } from "../components/ui/GradientButton";
-import { BorderButton } from "../components/ui/BorderButton";
-import { TopBar } from "../components/ui/TopBar";
-import { db, auth } from "../firebaseConfig";
-import { BlurText } from "../components/ui/BlurText";
-import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
-import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
-import { usePostHog } from "posthog-react-native";
-import { usePageTransition } from "../hooks/usePageTransition";
-import i18n from "../i18n";
+import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { ScreenBackground } from "@/components/ui/ScreenBackground";
+import { Card } from "@/components/ui/Card";
+import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
+import { GaugeProgressBar } from "@/components/ui/GaugeProgressBar";
+import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
+import { TopBar } from "@/components/ui/TopBar";
+import APIService from "@/services/api";
+import { usePageTransition } from "@/hooks/usePageTransition";
+import i18n from "@/i18n";
+import { auth } from "@/firebaseConfig";
+import { getNBATeamLogo } from "@/utils/teamLogos";
+import { useRouter } from "expo-router";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 // Static variables to persist team data between screen navigation
-let cachedTeamResult: TeamStatsResult | null = null;
+let cachedTeamResult: NBATeamStatsResult | null = null;
 let cachedParams: any = null;
 
-// Track page view time
-let pageEntryTime: number | null = null;
-
 // Interface matching the backend NBA team stats structure
-interface TeamStatsResult {
+interface NBATeamStatsResult {
   sport: string;
   teams: {
     home: string;
@@ -93,7 +90,7 @@ interface TeamStatsResult {
   teamIds: { team1Id: number; team2Id: number };
 }
 
-type TeamStatsParams = {
+type NBATeamStatsParams = {
   team1?: string;
   team2?: string;
   sport?: string;
@@ -101,190 +98,54 @@ type TeamStatsParams = {
   team2_code?: string;
   team1Logo?: string;
   team2Logo?: string;
-  selectedTeam?: "team1" | "team2";
   analysisId?: string;
+  selectedTeam?: string;
 };
 
-// Helper function to get team logo - PROPER SVG HANDLING WITH react-native-svg
-function getTeamLogo(teamName?: string): string {
-  if (!teamName) return "logo"; // Return identifier, not require()
+// Helper function to parse momentum from recent form string
+const parseMomentumFromForm = (recentForm?: string, momentum?: string) => {
+  if (!recentForm || !momentum) return { value: 0, maxValue: 5, primaryText: "N/A", secondaryText: "No data" };
 
-  // Systematic mapping of team names to SVG file identifiers
-  const teamLogoMap: { [key: string]: string } = {
-    // NFL Teams - Map to SVG file names (without extension)
-    'Philadelphia Eagles': 'Philadelphia_Eagles',
-    'New York Giants': 'New_York_Giants',
-    'Dallas Cowboys': 'Dallas_Cowboys',
-    'Washington Commanders': 'Washington_Redskins',
-    'Washington Redskins': 'Washington_Redskins',
-    'Chicago Bears': 'Chicago_Bears',
-    'Detroit Lions': 'Detroit_lions',
-    'Minnesota Vikings': 'Minnesota_Vikings',
-    'Carolina Panthers': 'Carolina_Panthers',
-    'New Orleans Saints': 'New_Orleans_Saints',
-    'Houston Texans': 'Houston_Texans',
-    'Denver Broncos': 'Denver_Broncos',
-    'San Francisco 49ers': 'San_Francisco_49ers',
-    'San Diego Chargers': 'San_Diego_Chargers',
-    'Los Angeles Chargers': 'San_Diego_Chargers',
-    'New England Patriots': 'New_England_Patriots',
+  // momentum is like "4W" or "2L"
+  const streakCount = parseInt(momentum.slice(0, -1)) || 0;
+  const streakType = momentum.slice(-1);
+  const streakText = streakType === "W" ?
+    `${streakCount}-game win streak` :
+    `${streakCount}-game loss streak`;
 
-    // Add partial name matching for flexibility
-    'Eagles': 'Philadelphia_Eagles',
-    'Giants': 'New_York_Giants',
-    'Cowboys': 'Dallas_Cowboys',
-    'Bears': 'Chicago_Bears',
-    'Lions': 'Detroit_lions',
-    'Vikings': 'Minnesota_Vikings',
-    'Panthers': 'Carolina_Panthers',
-    'Saints': 'New_Orleans_Saints',
-    'Texans': 'Houston_Texans',
-    'Broncos': 'Denver_Broncos',
-    '49ers': 'San_Francisco_49ers',
-    'Chargers': 'San_Diego_Chargers',
-    'Patriots': 'New_England_Patriots',
-  };
+  // For losses, show 0 momentum (no positive momentum)
+  const gaugeValue = streakType === "W" ? streakCount : 0;
 
-  // Try exact match first
-  if (teamLogoMap[teamName]) {
-    return teamLogoMap[teamName];
-  }
+  return { value: gaugeValue, maxValue: 5, primaryText: momentum, secondaryText: streakText };
+};
 
-  // Try partial match (last word of team name)
-  const teamNickname = teamName.split(' ').pop();
-  if (teamNickname && teamLogoMap[teamNickname]) {
-    return teamLogoMap[teamNickname];
-  }
-
-  // Fallback identifier
-  return "logo";
-}
-
-// Helper function to get actual team logo source for Image component
-function getTeamLogoSource(teamName?: string) {
-  const logoId = getTeamLogo(teamName);
-
-  // If we have a team logo, try to use it as PNG (converted from SVG)
-  if (logoId !== "logo") {
-    // For now, fallback to logo.png until we have PNG versions
-    // TODO: Convert SVG files to PNG or implement proper SVG rendering
-    return require("../assets/images/logo.png");
-  }
-
-  return require("../assets/images/logo.png");
-}
-
-// Helper function to calculate recent form from last 10 games
-function calculateRecentForm(last10Games: any[]): { record: string; winRate: number; streak: string } {
-  if (!last10Games || last10Games.length === 0) {
-    return { record: "0-0", winRate: 0, streak: "No data" };
-  }
-
-  // Take last 5 games for recent form
-  const recentGames = last10Games.slice(0, 5);
-  let wins = 0;
-  let currentStreak = 0;
-  let streakType = "";
-
-  // Calculate wins and current streak
-  recentGames.forEach((game, index) => {
-    // This would need to be implemented based on actual game data structure
-    const isWin = Math.random() > 0.5; // Placeholder logic
-    if (isWin) wins++;
-
-    // Calculate streak from most recent games
-    if (index === 0) {
-      streakType = isWin ? "W" : "L";
-      currentStreak = 1;
-    } else if ((isWin && streakType === "W") || (!isWin && streakType === "L")) {
-      currentStreak++;
-    }
-  });
-
-  const losses = recentGames.length - wins;
-  const winRate = Math.round((wins / recentGames.length) * 100);
-
-  return {
-    record: `${wins}-${losses}`,
-    winRate,
-    streak: `${currentStreak}${streakType}`
-  };
-}
-
-// Helper function to calculate home/away averages
-function calculateHomeAwayAverages(last10Games: any[], teamId: number): { home: number; away: number } {
-  if (!last10Games || last10Games.length === 0) {
-    return { home: 0, away: 0 };
-  }
-
-  // This would need actual game data to determine home/away and scores
-  // Placeholder calculation
-  return {
-    home: 29.4, // Average points at home
-    away: 23.8  // Average points away
-  };
-}
-
-export default function TeamStatsScreen() {
-  const params = useLocalSearchParams<TeamStatsParams>();
-  const { isSubscribed } = useRevenueCatPurchases();
-  const posthog = usePostHog();
+export default function TeamStatsNBANew() {
+  const params = useLocalSearchParams<NBATeamStatsParams>();
+  const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
-
-  // Track page view time
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    pageEntryTime = Date.now();
-
-    posthog?.capture("team_stats_page_viewed", {
-      userId: (auth.currentUser as any)?.uid,
-      sport: params.sport,
-      team: params.selectedTeam === "team1" ? params.team1 : params.team2,
-    });
-
-    return () => {
-      if (pageEntryTime && auth.currentUser) {
-        const timeSpentMs = Date.now() - pageEntryTime;
-        const timeSpentSeconds = Math.round(timeSpentMs / 1000);
-
-        posthog?.capture("team_stats_page_exit", {
-          userId: (auth.currentUser as any)?.uid,
-          sport: params.sport,
-          team: params.selectedTeam === "team1" ? params.team1 : params.team2,
-          timeSpentSeconds: timeSpentSeconds,
-        });
-
-        pageEntryTime = null;
-      }
-    };
-  }, [params.team1, params.team2, params.sport, params.selectedTeam]);
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
     cachedParams?.team1 === params.team1 &&
     cachedParams?.team2 === params.team2 &&
-    cachedParams?.sport === params.sport &&
-    cachedParams?.selectedTeam === params.selectedTeam;
+    cachedParams?.sport === params.sport;
 
   // Cache params for future comparison
   if (!isSameAnalysis) {
     cachedParams = { ...params };
   }
 
-  const selectedTeamName = params.selectedTeam === "team1" ? params.team1 : params.team2;
-  const selectedTeamLogo = params.selectedTeam === "team1" ? params.team1Logo : params.team2Logo;
+  const hasInitializedRef = useRef(false);
 
-  const hasInitializedRef = React.useRef(false);
-
-  // Initialize state, potentially from cache
-  const [isLoading, setIsLoading] = useState(
-    !isSameAnalysis || !cachedTeamResult
-  );
-  const [teamResult, setTeamResult] = useState<TeamStatsResult | null>(
+  // Initialize state
+  const [isLoading, setIsLoading] = useState(!isSameAnalysis || !cachedTeamResult);
+  const [teamResult, setTeamResult] = useState<NBATeamStatsResult | null>(
     isSameAnalysis && cachedTeamResult ? cachedTeamResult : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2" | null>(
+    (params.selectedTeam as "team1" | "team2") || null
+  );
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -302,16 +163,12 @@ export default function TeamStatsScreen() {
     }
 
     if (params.team1 && params.team2 && params.sport) {
-      console.log(
-        `Team Stats Flow: Starting analysis for ${params.sport}: ${selectedTeamName}`
-      );
       getTeamStats();
     } else {
-      console.error("Error: Missing required parameters (team1, team2, sport).");
       setError("Missing team data. Please go back and try again.");
       setIsLoading(false);
     }
-  }, [params.team1, params.team2, params.sport, params.selectedTeam, auth.currentUser, isSameAnalysis]);
+  }, [params.team1, params.team2, params.sport, auth.currentUser, isSameAnalysis]);
 
   // Main function to fetch team stats data
   const getTeamStats = async () => {
@@ -320,8 +177,6 @@ export default function TeamStatsScreen() {
     setError(null);
 
     try {
-      console.log("Fetching team stats data...");
-
       if (!params.sport) {
         throw new Error("Sport parameter is required but missing");
       }
@@ -334,8 +189,6 @@ export default function TeamStatsScreen() {
         params.team2_code
       );
 
-      console.log("Team Stats Response:", response);
-
       if (response.error) {
         throw new Error(response.error);
       }
@@ -344,269 +197,400 @@ export default function TeamStatsScreen() {
         throw new Error(response.message || "Failed to fetch team stats");
       }
 
-      const teamData: TeamStatsResult = response;
+      const teamData: NBATeamStatsResult = response;
 
       setTeamResult(teamData);
       cachedTeamResult = teamData;
-
     } catch (err) {
       console.error("Error in getTeamStats:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to get team stats"
-      );
+      setError(err instanceof Error ? err.message : "Failed to get team stats");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Helper function to render individual team stats
-  const renderTeamStats = (teamStats: any, teamName: string, teamKey: string) => {
-    if (!teamStats) return null;
+  // Navigate to info page
+  const navigateToInfo = (section: string) => {
+    router.push({
+      pathname: "/info",
+      params: {
+        section,
+        from: "team-stats-nba",
+        team1: params.team1,
+        team2: params.team2,
+        sport: params.sport,
+        team1Logo: params.team1Logo,
+        team2Logo: params.team2Logo,
+        analysisId: params.analysisId,
+        selectedTeam: selectedTeam || undefined,
+      },
+    });
+  };
 
-    const stats = teamStats.stats;
-    const calculated = stats?.calculated || {};
-
-    const recentForm = {
-      record: calculated.recentForm || "0-0",
-      winRate: calculated.recentForm ?
-        Math.round((parseInt(calculated.recentForm.split('-')[0]) /
-        (parseInt(calculated.recentForm.split('-')[0]) + parseInt(calculated.recentForm.split('-')[1]))) * 100) : 0,
-      streak: calculated.momentum || "No streak"
-    };
-    const homeAwayAvg = {
-      home: calculated.homeAverage || 0,
-      away: calculated.awayAverage || 0
-    };
+  // Render team selection screen
+  const renderTeamSelection = () => {
+    const teams = [
+      { name: params.team1 || "", key: "team1" as "team1" | "team2" },
+      { name: params.team2 || "", key: "team2" as "team1" | "team2" },
+    ];
 
     return (
-      <View key={teamKey}>
-        {/* Recent Form & Momentum Row */}
-        <View style={styles.formMomentumRow}>
-          {/* Recent Form Card */}
-          <View style={[styles.card, styles.formCard]}>
-            <Text style={styles.sectionLabel}>RECENT FORM</Text>
-            <View style={styles.formContent}>
-              <Text style={styles.recordText}>{recentForm.record}</Text>
-              <Text style={styles.winRateText}>{recentForm.winRate}% Win Rate</Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: `${recentForm.winRate}%` }
-                ]} />
-              </View>
+      <View style={styles.container}>
+        <TopBar showBack={false} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {teams.map((team) => (
+          <Pressable
+            key={team.key}
+            onPress={() => setSelectedTeam(team.key)}
+            style={styles.selectionItem}
+          >
+            <LinearGradient
+              colors={["#0D0D0D", "#161616"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.selectionGradient}
+            >
+              <Image
+                source={getNBATeamLogo(team.name)}
+                style={styles.selectionLogo}
+                contentFit="contain"
+              />
+              <Text style={styles.selectionName}>{team.name}</Text>
+              <Image
+                source={require("../assets/images/icons/chevron.svg")}
+                style={styles.chevronIcon}
+                contentFit="contain"
+              />
+            </LinearGradient>
+          </Pressable>
+        ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // Render team stats
+  const renderTeamStats = () => {
+    if (!selectedTeam || !teamResult) return null;
+
+    const teamData = selectedTeam === "team1" ? teamResult.teamStats.team1 : teamResult.teamStats.team2;
+    const teamName = selectedTeam === "team1" ? params.team1 : params.team2;
+    const stats = teamData.stats;
+    const calculated = stats?.calculated || {};
+
+    // Calculate win rate from recent form
+    const recentForm = calculated.recentForm || "0-0";
+    const [wins, losses] = recentForm.split('-').map((n: string) => parseInt(n) || 0);
+    const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0;
+
+    // Parse momentum
+    const momentum = parseMomentumFromForm(calculated.recentForm, calculated.momentum);
+
+  return (
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+
+        {/* Top Card - Team Header */}
+        <Card style={styles.topCard}>
+          <View style={styles.teamHeader}>
+            <View style={styles.nameLogoRow}>
+              <Text style={styles.teamName}>{teamName}</Text>
+              <Image
+                source={getNBATeamLogo(String(teamName))}
+                style={styles.teamLogo}
+                contentFit="contain"
+              />
             </View>
           </View>
+        </Card>
+
+        {/* Stats Row - Recent Form and Momentum */}
+        <View style={styles.statsRow}>
+          {/* Recent Form Card */}
+          <Card style={styles.statCard}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsNBARecentForm")}</Text>
+              <Text style={styles.statValue}>{recentForm}</Text>
+              <Text style={styles.statDescription}>{winRate}% {i18n.t("teamStatsWinRate")}</Text>
+              <GradientProgressBar value={winRate} maxValue={100} />
+            </View>
+          </Card>
 
           {/* Momentum Card */}
-          <View style={[styles.card, styles.momentumCard]}>
-            <Text style={styles.sectionLabel}>MOMENTUM</Text>
+          <Card style={styles.statCard}>
             <View style={styles.momentumContent}>
-              <View style={styles.momentumGauge}>
-                <Text style={styles.momentumValue}>{recentForm.streak}</Text>
-                <Text style={styles.momentumDescription}>2-game win streak</Text>
-              </View>
+              <Text style={styles.momentumLabel}>{i18n.t("teamStatsMomentum")}</Text>
+              <GaugeProgressBar
+                value={momentum.value}
+                maxValue={momentum.maxValue}
+                primaryText={momentum.primaryText}
+                secondaryText={momentum.secondaryText}
+              />
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Core KPIs Card */}
-        <View style={[styles.card, styles.coreKpisCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Core KPIs 🦾</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+        <Card style={styles.coreKPIsCard}>
+          <View style={styles.coreKPIsContent}>
+            {/* Header */}
+            <View style={styles.coreKPIsHeader}>
+              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsNBACoreKPIs")}</Text>
+              <Pressable onPress={() => navigateToInfo("coreKPIs")}>
+                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
-          {/* First Row - PPG, Opponent PPG */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.pointsPerGame?.toFixed(1) || stats?.points || "0.0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Points per game</Text>
+            {/* First Row of KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/meter.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.pointsPerGame?.toFixed(1) || stats?.points || "0.0"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAPointsPerGame")}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.opponentPointsPerGame?.toFixed(1) || "0.0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Opponent PPG</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Second Row - Field Goal %, 3-Points % */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.fgp || "0"}%
-                </Text>
-                <Text style={styles.kpiLabel}>Field Goal %</Text>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/target.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.opponentPointsPerGame?.toFixed(1) || "0.0"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAOpponentPPG")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.tpp || "0"}%
-                </Text>
-                <Text style={styles.kpiLabel}>3-Points %</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Third Row - Rebounds, Assists */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.reboundsPerGame || "0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Rebounds per game</Text>
+            {/* Second Row of KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/shield.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.fgp || "0"}%</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAFieldGoalPercent")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/bars.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.tpp || "0"}%</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBA3PointsPercent")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.assistsPerGame || "0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Assists per game</Text>
+
+            {/* Third Row of KPIs */}
+            <View style={[styles.kpiRow, styles.kpiRowLast]}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/bolt.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.reboundsPerGame || "0"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAReboundsPerGame")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/steps.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.assistsPerGame || "0"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAAssistsPerGame")}</Text>
+                </View>
               </View>
             </View>
           </View>
+        </Card>
+
+        {/* Stats Row - HOME AVG and AWAY AVG */}
+        <View style={styles.statsRow}>
+          {/* HOME AVG Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsNBAHomeAvg")}</Text>
+              <Text style={styles.statValue}>{calculated.homeAverage?.toFixed(1) || "0.0"}</Text>
+              <Text style={styles.statDescription}>{i18n.t("teamStatsNBAPointsPerGame")}</Text>
+              <GradientProgressBar value={parseFloat(calculated.homeAverage?.toFixed(1) || "0")} maxValue={140} />
+            </View>
+          </Card>
+
+          {/* AWAY AVG Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsNBAAwayAvg")}</Text>
+              <Text style={styles.statValue}>{calculated.awayAverage?.toFixed(1) || "0.0"}</Text>
+              <Text style={styles.statDescription}>{i18n.t("teamStatsNBAPointsPerGame")}</Text>
+              <GradientProgressBar value={parseFloat(calculated.awayAverage?.toFixed(1) || "0")} maxValue={140} />
+            </View>
+          </Card>
         </View>
 
-        {/* Home/Away Row - moved up before defensive */}
-
-        {/* Home/Away Averages Row */}
-        <View style={styles.homeAwayRow}>
-          {/* Home Average Card */}
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>HOME AVG</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>{homeAwayAvg.home}</Text>
-              <Text style={styles.averageLabel}>Points per Game</Text>
+        {/* Stats Row - STEALS and BLOCKS */}
+        <View style={styles.statsRow}>
+          {/* STEALS Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsNBASteals")}</Text>
+              <Text style={styles.statValue}>{calculated.stealsPerGame || stats?.steals || "0"}</Text>
+              <Text style={styles.statDescription}>{i18n.t("teamStatsNBAPerGame")}</Text>
             </View>
-          </View>
+          </Card>
 
-          {/* Away Average Card */}
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>AWAY AVG</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>{homeAwayAvg.away}</Text>
-              <Text style={styles.averageLabel}>Points per Game</Text>
+          {/* BLOCKS Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsNBABlocks")}</Text>
+              <Text style={styles.statValue}>{calculated.blocksPerGame || stats?.blocks || "0"}</Text>
+              <Text style={styles.statDescription}>{i18n.t("teamStatsNBAPerGame")}</Text>
             </View>
-          </View>
-        </View>
-
-        {/* Defensive Stats Row - Steals & Blocks */}
-        <View style={styles.homeAwayRow}>
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>STEALS</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>{calculated.stealsPerGame || stats?.steals || "0"}</Text>
-              <Text style={styles.averageLabel}>Per Game</Text>
-            </View>
-          </View>
-
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>BLOCKS</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>{calculated.blocksPerGame || stats?.blocks || "0"}</Text>
-              <Text style={styles.averageLabel}>Per Game</Text>
-            </View>
-          </View>
+          </Card>
         </View>
 
         {/* Advanced Metrics Card */}
-        <View style={[styles.card, styles.advancedMetricsCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Advanced Metrics 🚀</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+        <Card style={styles.coreKPIsCard}>
+          <View style={styles.coreKPIsContent}>
+            {/* Header */}
+            <View style={styles.coreKPIsHeader}>
+              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsNBAAdvancedMetrics")}</Text>
+              <Pressable onPress={() => navigateToInfo("advancedMetrics")}>
+                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
-          {/* Row 1: Turnover Differential, Plus/Minus */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.turnoverDifferential ?
-                    (calculated.turnoverDifferential > 0 ? "+" : "") + calculated.turnoverDifferential + " pg" :
-                    "-8.8 pg"}
-                </Text>
-                <Text style={styles.kpiLabel}>Turnover Differential</Text>
+            {/* First Row of Advanced Metrics */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/shield.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>
+                    {calculated.turnoverDifferential ?
+                      (calculated.turnoverDifferential > 0 ? "+" : "") + calculated.turnoverDifferential + " pg" :
+                      "0 pg"}
+                  </Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBATurnoverDiff")}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.plusMinus || "-17"}
-                </Text>
-                <Text style={styles.kpiLabel}>Plus/Minus</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Row 2: Off Rebounds, Def Rebounds */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.offRebPerGame || "0"} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Off Rebounds</Text>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/plus-minus.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.plusMinus || "0"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAPlusMinus")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.defRebPerGame || "0"} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Def Rebounds</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Row 3: Free Throw %, Personal Fouls */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.ftp || "0"}%
-                </Text>
-                <Text style={styles.kpiLabel}>Free Throw %</Text>
+            {/* Second Row of Advanced Metrics */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/bolt.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.offRebPerGame || "0"} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAOffRebounds")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/shield.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.defRebPerGame || "0"} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBADefRebounds")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {calculated.foulsPerGame || "0"} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Personal Fouls</Text>
+
+            {/* Third Row of Advanced Metrics */}
+            <View style={[styles.kpiRow, styles.kpiRowLast]}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/flame.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.ftp || "0"}%</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAFreeThrowPercent")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/card.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{calculated.foulsPerGame || "0"} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsNBAPersonalFouls")}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
+        </Card>
+        </ScrollView>
       </View>
     );
   };
@@ -652,8 +636,8 @@ export default function TeamStatsScreen() {
     </View>
   );
 
-  // Main content rendering
-  const renderTeamContent = () => {
+  // Main render logic
+  const renderContent = () => {
     if (error) {
       return (
         <View style={styles.errorContainer}>
@@ -662,119 +646,54 @@ export default function TeamStatsScreen() {
       );
     }
 
-    return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.analysisContent}
-      >
-        {/* Team 1 Header Card */}
-        <View style={[styles.card, styles.headerCard]}>
-          <View style={styles.headerContent}>
-            <Text style={styles.teamName}>{params.team1 || "Philadelphia Eagles"}</Text>
-            <Image
-              source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
-              style={styles.teamLogo}
-            />
-          </View>
-        </View>
+    if (selectedTeam) {
+      return renderTeamStats();
+    }
 
-        {/* Team 1 Stats */}
-        {renderTeamStats(teamResult?.teamStats?.team1, params.team1 || "", "team1")}
-
-        {/* Team 2 Header Card */}
-        <View style={[styles.card, styles.headerCard]}>
-          <View style={styles.headerContent}>
-            <Text style={styles.teamName}>{params.team2 || "Miami Heat"}</Text>
-            <Image
-              source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
-              style={styles.teamLogo}
-            />
-          </View>
-        </View>
-
-        {/* Team 2 Stats */}
-        {renderTeamStats(teamResult?.teamStats?.team2, params.team2 || "", "team2")}
-
-
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          <BorderButton
-            onPress={() => {
-              router.back();
-            }}
-            containerStyle={styles.floatingButton}
-            borderColor="#00C2E0"
-            backgroundColor="#00C2E020"
-            opacity={1}
-            borderWidth={1}
-          >
-            <Text style={styles.buttonText}>Back to Analysis</Text>
-          </BorderButton>
-
-          <GradientButton
-            onPress={getTeamStats}
-            style={{ marginTop: 16 }}
-          >
-            <Text style={styles.buttonText}>Refresh Stats 📊</Text>
-          </GradientButton>
-        </View>
-      </ScrollView>
-    );
+    return renderTeamSelection();
   };
 
-  // Main render
   return (
-    <ScreenBackground hideBg>
-      <TopBar />
+    <ScreenBackground>
+      <Animated.View style={[styles.mainContainer, animatedStyle]}>
+        {isLoading ? renderShimmer() : renderContent()}
+      </Animated.View>
 
-      <View style={styles.container}>
-        <Animated.ScrollView
-          showsVerticalScrollIndicator={false}
-          style={[styles.scrollView, animatedStyle]}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.analysisContainer}>
-            {isLoading ? renderShimmer() : renderTeamContent()}
-          </View>
-        </Animated.ScrollView>
-
-        {/* Floating Bottom Navigation */}
-        <FloatingBottomNav
-          activeTab="teams"
-          analysisData={{
-            team1: params.team1,
-            team2: params.team2,
-            sport: params.sport,
-            team1Logo: params.team1Logo,
-            team2Logo: params.team2Logo,
-            analysisId: params.analysisId, // Pass analysisId if available
-          }}
-        />
-      </View>
+      {/* Floating Bottom Nav */}
+      <FloatingBottomNav
+        activeTab="teams"
+        analysisData={{
+          team1: params.team1,
+          team2: params.team2,
+          sport: params.sport,
+          team1Logo: params.team1Logo,
+          team2Logo: params.team2Logo,
+          analysisId: params.analysisId,
+        }}
+      />
     </ScreenBackground>
   );
 }
 
-// Styles - EXACTLY matching Figma dimensions
 const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    paddingBottom: 0,
   },
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  scrollContent: {
-    paddingBottom: 120, // Extra padding for floating nav
-  },
-  analysisContainer: {
+  contentContainer: {
+    paddingHorizontal: 16,
     paddingTop: 20,
-    flex: 1,
+    paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   shimmerContainer: {
     width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   shimmerGroup: {
     width: "100%",
@@ -796,291 +715,201 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     width: "100%",
   },
-  analysisContent: {
-    flex: 1,
-    paddingBottom: 40,
-  },
   errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   errorText: {
-    color: "#424242",
+    color: "#FF5252",
     fontSize: 16,
     textAlign: "center",
     fontFamily: "Aeonik-Regular",
   },
-
-  // Universal Card Styles
-  card: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40,
-    borderWidth: 1,
-    borderColor: "#212121",
-    padding: 20,
-    marginBottom: 15,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 16, // Smaller font to match Figma
-    fontWeight: "500",
+  selectionTitle: {
     fontFamily: "Aeonik-Medium",
+    fontSize: 28,
+    color: "#FFFFFF",
+    marginBottom: 24,
   },
-  infoIcon: {
-    fontSize: 18,
-    color: "#ffffff",
+  selectionItem: {
+    height: 85.87,
+    borderRadius: 14,
+    marginBottom: 16,
+    overflow: "hidden",
   },
-
-  // Header Card Styles - Match Figma exactly
-  headerCard: {
-    backgroundColor: "#0c0c0c",
-    height: 80, // Smaller height
-    justifyContent: "center",
-    borderRadius: 40,
-  },
-  headerContent: {
+  selectionGradient: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 30,
+    paddingHorizontal: 22,
+    gap: 12,
+  },
+  selectionLogo: {
+    width: 58.11,
+    height: 38.28,
+  },
+  selectionName: {
+    flex: 1,
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20,
+    color: "#FFFFFF",
+  },
+  chevronIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#FFFFFF",
+  },
+  backButton: {
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16,
+    color: "#00C2E0",
+  },
+  topCard: {
+    height: 85.87,
+  },
+  teamHeader: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13.44,
+    paddingHorizontal: 22,
+    gap: 4,
+  },
+  nameLogoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   teamName: {
-    color: "#ffffff",
-    fontSize: 18, // Much smaller font
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    flex: 1,
-    textAlign: "left", // Left align like Figma
+    fontSize: 20,
+    color: "#FFFFFF",
   },
   teamLogo: {
-    width: 45, // Smaller logo
-    height: 45,
-    borderRadius: 22,
+    width: 58.11,
+    height: 38.28,
   },
-
-  // Form & Momentum Row - Match Figma exactly
-  formMomentumRow: {
+  statsRow: {
     flexDirection: "row",
-    gap: 15,
-    marginBottom: 15,
+    gap: 16,
+    marginTop: 16,
   },
-  formCard: {
+  statCard: {
     flex: 1,
-    height: 160, // Smaller height to match Figma
-    padding: 15, // Smaller padding
+    height: 132.55,
   },
-  momentumCard: {
+  statCardSmall: {
     flex: 1,
-    height: 160, // Smaller height to match Figma
-    padding: 15, // Smaller padding
+    height: 117.1,
   },
-  sectionLabel: {
-    color: "#ffffff",
-    fontSize: 12, // Smaller font
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    opacity: 0.6,
-    marginBottom: 15, // Less margin
-  },
-  formContent: {
+  statContent: {
     flex: 1,
-    justifyContent: "space-between",
-  },
-  recordText: {
-    color: "#ffffff",
-    fontSize: 24, // Smaller font
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-  },
-  winRateText: {
-    color: "#ffffff",
-    fontSize: 12, // Smaller font
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    marginBottom: 8, // Less margin
-  },
-  progressBarContainer: {
-    height: 12, // Smaller progress bar
-    borderRadius: 100,
-    position: "relative",
-    overflow: "hidden",
-    backgroundColor: "#333333",
-  },
-  progressBar: {
-    flex: 1,
-    height: "100%",
-  },
-  progressIndicator: {
-    position: "absolute",
-    top: -2, // Adjust for smaller bar
-    width: 16, // Smaller indicator
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+    paddingVertical: 20.15,
+    paddingHorizontal: 21.83,
+    gap: 8,
   },
   momentumContent: {
     flex: 1,
-    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 21.83,
     alignItems: "center",
-  },
-  momentumGauge: {
-    width: 90, // Smaller gauge
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 2,
-    borderColor: "#00c2e0",
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 194, 224, 0.1)",
+    gap: 4,
   },
-  momentumValue: {
-    color: "#ffffff",
-    fontSize: 18, // Smaller font
+  statLabel: {
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 2,
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.6,
   },
-  momentumDescription: {
-    color: "#ffffff",
-    fontSize: 8, // Much smaller font
+  momentumLabel: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.6,
+    alignSelf: "flex-start",
+  },
+  statValue: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 26.87,
+    color: "#FFFFFF",
+  },
+  statDescription: {
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    textAlign: "center",
+    fontSize: 11.42,
+    color: "#FFFFFF",
+    marginBottom: 4,
   },
-
-  // Core KPIs Card Styles - Match Figma exactly
-  coreKpisCard: {
-    minHeight: 300, // Smaller height
-    padding: 15, // Smaller padding
+  coreKPIsCard: {
+    marginTop: 16,
+  },
+  coreKPIsContent: {
+    paddingVertical: 22,
+    paddingHorizontal: 0,
+  },
+  coreKPIsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
+  },
+  coreKPIsTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  coreKPIsInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
   },
   kpiRow: {
     flexDirection: "row",
-    gap: 12, // Smaller gap
-    marginBottom: 12, // Less margin
+    paddingHorizontal: 20.15,
+    gap: 20,
+    marginBottom: 16,
+  },
+  kpiRowLast: {
+    marginBottom: 0,
   },
   kpiItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12, // Smaller radius
-    padding: 12, // Smaller padding
-    minHeight: 60, // Much smaller height
+    gap: 12,
+  },
+  kpiTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  iconContainer: {
+    width: 45.11,
+    height: 44.17,
+    borderRadius: 12.62,
+    backgroundColor: "#161616",
+    justifyContent: "center",
+    alignItems: "center",
   },
   kpiIcon: {
-    width: 35, // Much smaller icon
-    height: 35,
-    borderRadius: 12,
-    backgroundColor: "#161616",
-    marginRight: 10, // Less margin
-  },
-  kpiContent: {
-    flex: 1,
+    width: 24,
+    height: 24,
   },
   kpiValue: {
-    color: "#ffffff",
-    fontSize: 16, // Smaller font
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 2, // Less margin
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
   kpiLabel: {
-    color: "#ffffff",
-    fontSize: 10, // Much smaller font
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    opacity: 0.8,
-  },
-
-  // Efficiency Row Styles - Match Figma exactly
-  efficiencyRow: {
-    flexDirection: "row",
-    gap: 12, // Smaller gap
-    marginBottom: 15,
-  },
-  efficiencyCard: {
-    flex: 1,
-    height: 160, // Smaller height
-    padding: 15, // Smaller padding
-  },
-  efficiencyContent: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  percentageValue: {
-    color: "#ffffff",
-    fontSize: 24, // Smaller font
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-  },
-  perGameText: {
-    color: "#ffffff",
-    fontSize: 12, // Smaller font
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    marginBottom: 8, // Less margin
-  },
-
-  // Home/Away Row Styles - Match Figma exactly
-  homeAwayRow: {
-    flexDirection: "row",
-    gap: 12, // Smaller gap
-    marginBottom: 15,
-  },
-  homeAwayCard: {
-    flex: 1,
-    height: 140, // Smaller height
-    padding: 15, // Smaller padding
-  },
-  homeAwayContent: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  averageValue: {
-    color: "#ffffff",
-    fontSize: 24, // Smaller font
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 6, // Less margin
-  },
-  averageLabel: {
-    color: "#ffffff",
-    fontSize: 12, // Smaller font
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-  },
-
-  // Defensive Stats Card Styles - Match Figma exactly
-  defensiveStatsCard: {
-    minHeight: 280, // Smaller height
-    padding: 15, // Smaller padding
-  },
-
-  // Advanced Metrics Card Styles - Match Figma exactly
-  advancedMetricsCard: {
-    minHeight: 280, // Smaller height
-    padding: 15, // Smaller padding
-  },
-
-
-  // Action Buttons
-  actionContainer: {
-    marginBottom: 40,
-  },
-  buttonText: {
-    fontSize: 18,
+    fontSize: 11.42,
     color: "#FFFFFF",
-    fontFamily: "Aeonik-Medium",
-  },
-  floatingButton: {
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    padding: 10,
   },
 });
+

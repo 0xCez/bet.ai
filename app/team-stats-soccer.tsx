@@ -1,36 +1,34 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  Image,
+  Text,
   StyleSheet,
   ScrollView,
-  Text,
+  Pressable,
   Animated,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { Image } from "expo-image";
+import { useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import APIService from "../services/api";
-import { GradientButton } from "../components/ui/GradientButton";
-import { BorderButton } from "../components/ui/BorderButton";
-import { TopBar } from "../components/ui/TopBar";
-import { db, auth } from "../firebaseConfig";
-import { BlurText } from "../components/ui/BlurText";
-import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
-import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
-import { usePostHog } from "posthog-react-native";
-import { usePageTransition } from "../hooks/usePageTransition";
-import i18n from "../i18n";
+import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { ScreenBackground } from "@/components/ui/ScreenBackground";
+import { Card } from "@/components/ui/Card";
+import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
+import { GaugeProgressBar } from "@/components/ui/GaugeProgressBar";
+import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
+import { TopBar } from "@/components/ui/TopBar";
+import APIService from "@/services/api";
+import { usePageTransition } from "@/hooks/usePageTransition";
+import i18n from "@/i18n";
+import { auth } from "@/firebaseConfig";
+import { getSoccerTeamLogo } from "@/utils/teamLogos";
+import { useRouter } from "expo-router";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 // Static variables to persist team data between screen navigation
 let cachedTeamResult: SoccerTeamStatsResult | null = null;
 let cachedParams: any = null;
-
-// Track page view time
-let pageEntryTime: number | null = null;
 
 // Interface matching the backend soccer team stats structure
 interface SoccerTeamStatsResult {
@@ -96,42 +94,38 @@ type SoccerTeamStatsParams = {
   team1Logo?: string;
   team2Logo?: string;
   analysisId?: string;
+  selectedTeam?: string;
 };
 
-export default function SoccerTeamStatsScreen() {
+
+// Helper function to parse momentum from form string
+const parseMomentumFromForm = (form: string) => {
+  if (!form || form === "NNNNN") return { value: 0, maxValue: 5, primaryText: "N/A", secondaryText: "No data" };
+
+  // Count consecutive W or L from the end
+  const lastChar = form.slice(-1);
+  let count = 1;
+  for (let i = form.length - 2; i >= 0; i--) {
+    if (form[i] === lastChar) count++;
+    else break;
+  }
+
+  const streakText = lastChar === "W" ?
+    `${count}-game win streak` :
+    lastChar === "L" ?
+    `${count}-game loss streak` :
+    "Mixed form";
+
+  // For losses, show 0 momentum
+  const gaugeValue = lastChar === "W" ? count : 0;
+
+  return { value: gaugeValue, maxValue: 5, primaryText: `${count}${lastChar}`, secondaryText: streakText };
+};
+
+export default function TeamStatsSoccerNew() {
   const params = useLocalSearchParams<SoccerTeamStatsParams>();
-  const { isSubscribed } = useRevenueCatPurchases();
-  const posthog = usePostHog();
+  const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
-
-  // Track page view time
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    pageEntryTime = Date.now();
-
-    posthog?.capture("soccer_team_stats_page_viewed", {
-      userId: (auth.currentUser as any)?.uid,
-      sport: params.sport,
-      teams: `${params.team1} vs ${params.team2}`,
-    });
-
-    return () => {
-      if (pageEntryTime && auth.currentUser) {
-        const timeSpentMs = Date.now() - pageEntryTime;
-        const timeSpentSeconds = Math.round(timeSpentMs / 1000);
-
-        posthog?.capture("soccer_team_stats_page_exit", {
-          userId: (auth.currentUser as any)?.uid,
-          sport: params.sport,
-          teams: `${params.team1} vs ${params.team2}`,
-          timeSpentSeconds: timeSpentSeconds,
-        });
-
-        pageEntryTime = null;
-      }
-    };
-  }, [params.team1, params.team2, params.sport]);
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -144,16 +138,17 @@ export default function SoccerTeamStatsScreen() {
     cachedParams = { ...params };
   }
 
-  const hasInitializedRef = React.useRef(false);
+  const hasInitializedRef = useRef(false);
 
-  // Initialize state, potentially from cache
-  const [isLoading, setIsLoading] = useState(
-    !isSameAnalysis || !cachedTeamResult
-  );
+  // Initialize state
+  const [isLoading, setIsLoading] = useState(!isSameAnalysis || !cachedTeamResult);
   const [teamResult, setTeamResult] = useState<SoccerTeamStatsResult | null>(
     isSameAnalysis && cachedTeamResult ? cachedTeamResult : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2" | null>(
+    (params.selectedTeam as "team1" | "team2") || null
+  );
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -171,12 +166,8 @@ export default function SoccerTeamStatsScreen() {
     }
 
     if (params.team1 && params.team2 && params.sport) {
-      console.log(
-        `Soccer Team Stats Flow: Starting analysis for ${params.sport}: ${params.team1} vs ${params.team2}`
-      );
       getTeamStats();
     } else {
-      console.error("Error: Missing required parameters (team1, team2, sport).");
       setError("Missing team data. Please go back and try again.");
       setIsLoading(false);
     }
@@ -189,8 +180,6 @@ export default function SoccerTeamStatsScreen() {
     setError(null);
 
     try {
-      console.log("Fetching soccer team stats data...");
-
       if (!params.sport) {
         throw new Error("Sport parameter is required but missing");
       }
@@ -203,352 +192,389 @@ export default function SoccerTeamStatsScreen() {
         params.team2_code
       );
 
-      console.log("Soccer Team Stats Response:", response);
-
       if (response.error) {
         throw new Error(response.error);
       }
 
       if (response.status === "error") {
-        throw new Error(response.message || "Failed to fetch soccer team stats");
+        throw new Error(response.message || "Failed to fetch team stats");
       }
 
       const teamData: SoccerTeamStatsResult = response;
 
       setTeamResult(teamData);
       cachedTeamResult = teamData;
-
     } catch (err) {
       console.error("Error in getTeamStats:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to get soccer team stats"
-      );
+      setError(err instanceof Error ? err.message : "Failed to get team stats");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Helper function to render individual team stats
-  const renderSoccerTeamStats = (teamStats: any, teamName: string, teamKey: string) => {
-    if (!teamStats) return null;
+  // Navigate to info page
+  const navigateToInfo = (section: string) => {
+    router.push({
+      pathname: "/info",
+      params: {
+        section,
+        from: "team-stats-soccer",
+        team1: params.team1,
+        team2: params.team2,
+        sport: params.sport,
+        team1Logo: params.team1Logo,
+        team2Logo: params.team2Logo,
+        analysisId: params.analysisId,
+        selectedTeam: selectedTeam || undefined,
+      },
+    });
+  };
 
-    const stats = teamStats.stats;
+  // Render team selection screen
+  const renderTeamSelection = () => {
+    const teams = [
+      { name: params.team1 || "", key: "team1" as "team1" | "team2" },
+      { name: params.team2 || "", key: "team2" as "team1" | "team2" },
+    ];
+
+    return (
+      <View style={styles.container}>
+        <TopBar showBack={false} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {teams.map((team) => (
+          <Pressable
+            key={team.key}
+            onPress={() => setSelectedTeam(team.key)}
+            style={styles.selectionItem}
+          >
+            <LinearGradient
+              colors={["#0D0D0D", "#161616"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.selectionGradient}
+            >
+              <Image
+                source={getSoccerTeamLogo(team.name)}
+                style={styles.selectionLogo}
+                contentFit="contain"
+              />
+              <Text style={styles.selectionName}>{team.name}</Text>
+              <Image
+                source={require("../assets/images/icons/chevron.svg")}
+                style={styles.chevronIcon}
+                contentFit="contain"
+              />
+            </LinearGradient>
+          </Pressable>
+        ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // Render team stats
+  const renderTeamStats = () => {
+    if (!selectedTeam || !teamResult) return null;
+
+    const teamData = selectedTeam === "team1" ? teamResult.teamStats.team1 : teamResult.teamStats.team2;
+    const teamName = selectedTeam === "team1" ? params.team1 : params.team2;
+    const stats = teamData.stats;
 
     // Calculate win percentage
     const winRate = stats?.fixtures?.played?.total > 0 ?
       Math.round((stats.fixtures.wins.total / stats.fixtures.played.total) * 100) : 0;
 
-    // Parse form pattern (WLLWD)
-    const formPattern = stats?.form || "NNNNN";
-    const momentum = formPattern.length > 0 ? formPattern : "None";
+    // Parse momentum from form
+    const momentum = parseMomentumFromForm(stats?.form || "");
 
-    return (
-      <View key={teamKey}>
-        {/* Recent Form & Momentum Row - SAME STRUCTURE AS NFL */}
-        <View style={styles.formMomentumRow}>
-          {/* Recent Form Card - Soccer: Season Record */}
-          <View style={[styles.card, styles.formCard]}>
-            <Text style={styles.sectionLabel}>SEASON RECORD</Text>
-            <View style={styles.formContent}>
-              <Text style={styles.recordText}>
+    // Calculate clean sheet and failed to score percentages
+    const cleanSheetPercent = stats?.fixtures?.played?.total > 0 ?
+      Math.round((stats.clean_sheet.total / stats.fixtures.played.total) * 100) : 0;
+    const failedToScorePercent = stats?.fixtures?.played?.total > 0 ?
+      Math.round((stats.failed_to_score.total / stats.fixtures.played.total) * 100) : 0;
+
+    // Get goal difference
+    const goalDiff = stats?.goals?.for?.average?.total && stats?.goals?.against?.average?.total ?
+      (stats.goals.for.average.total - stats.goals.against.average.total).toFixed(1) : "0.0";
+
+  return (
+      <View style={styles.container}>
+        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+
+        {/* Top Card - Team Header */}
+        <Card style={styles.topCard}>
+          <View style={styles.teamHeader}>
+            <View style={styles.nameLogoRow}>
+              <Text style={styles.teamName}>{teamName}</Text>
+              <Image
+                source={getSoccerTeamLogo(String(teamName))}
+                style={styles.teamLogo}
+                contentFit="contain"
+              />
+            </View>
+          </View>
+        </Card>
+
+        {/* Stats Row - Recent Form and Momentum */}
+        <View style={styles.statsRow}>
+          {/* Season Record Card */}
+          <Card style={styles.statCard}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsSoccerSeasonRecord")}</Text>
+              <Text style={styles.statValue}>
                 {stats?.fixtures?.wins?.total || 0}-{stats?.fixtures?.draws?.total || 0}-{stats?.fixtures?.loses?.total || 0}
               </Text>
-              <Text style={styles.winRateText}>{winRate}% Win Rate</Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: `${winRate}%` }
-                ]} />
-              </View>
+              <Text style={styles.statDescription}>{winRate}% {i18n.t("teamStatsWinRate")}</Text>
+              <GradientProgressBar value={winRate} maxValue={100} />
             </View>
-          </View>
+          </Card>
 
-          {/* Momentum Card - Soccer: Form Pattern */}
-          <View style={[styles.card, styles.momentumCard]}>
-            <Text style={styles.sectionLabel}>MOMENTUM</Text>
+          {/* Momentum Card */}
+          <Card style={styles.statCard}>
             <View style={styles.momentumContent}>
-              <View style={styles.momentumGauge}>
-                <Text style={styles.momentumValue}>
-                  {momentum === "NNNNN" ? "None" : momentum.slice(-1)}
-                </Text>
-                <Text style={styles.momentumDescription}>
-                  {formPattern}
-                </Text>
-              </View>
+              <Text style={styles.momentumLabel}>{i18n.t("teamStatsMomentum")}</Text>
+              <GaugeProgressBar
+                value={momentum.value}
+                maxValue={momentum.maxValue}
+                primaryText={momentum.primaryText}
+                secondaryText={momentum.secondaryText}
+              />
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Core KPIs Card */}
-        <View style={[styles.card, styles.coreKpisCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Core KPIs 🦾</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+        <Card style={styles.coreKPIsCard}>
+          <View style={styles.coreKPIsContent}>
+            {/* Header */}
+            <View style={styles.coreKPIsHeader}>
+              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsSoccerCoreKPIs")}</Text>
+              <Pressable onPress={() => navigateToInfo("coreKPIs")}>
+                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
-          {/* First Row - Goals Scored, Goals Against */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {parseFloat(stats?.goals?.for?.average?.total || 0).toFixed(1)} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Goals Scored</Text>
+            {/* First Row of KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/meter.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{parseFloat(stats?.goals?.for?.average?.total || 0).toFixed(1)} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerGoalsScored")}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {parseFloat(stats?.goals?.against?.average?.total || 0).toFixed(1)} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Goals Against</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Second Row - Home Record, Away Record */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.fixtures?.wins?.home || 0}-{stats?.fixtures?.draws?.home || 0}-{stats?.fixtures?.loses?.home || 0}
-                </Text>
-                <Text style={styles.kpiLabel}>Home Record</Text>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/target.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{parseFloat(stats?.goals?.against?.average?.total || 0).toFixed(1)} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerGoalsAgainst")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.fixtures?.wins?.away || 0}-{stats?.fixtures?.draws?.away || 0}-{stats?.fixtures?.loses?.away || 0}
-                </Text>
-                <Text style={styles.kpiLabel}>Away Record</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Third Row - Home Goals, Away Goals */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {parseFloat(stats?.goals?.for?.average?.home || 0).toFixed(1)} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Home Goals</Text>
+            {/* Second Row of KPIs */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/shield.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>
+                    {stats?.fixtures?.wins?.home || 0}-{stats?.fixtures?.draws?.home || 0}-{stats?.fixtures?.loses?.home || 0}
+                  </Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerHomeRecord")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/bars.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>
+                    {stats?.fixtures?.wins?.away || 0}-{stats?.fixtures?.draws?.away || 0}-{stats?.fixtures?.loses?.away || 0}
+                  </Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerAwayRecord")}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {parseFloat(stats?.goals?.for?.average?.away || 0).toFixed(1)} pg
-                </Text>
-                <Text style={styles.kpiLabel}>Away Goals</Text>
+
+            {/* Third Row of KPIs */}
+            <View style={[styles.kpiRow, styles.kpiRowLast]}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/home.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{parseFloat(stats?.goals?.for?.average?.home || 0).toFixed(1)} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerHomeGoals")}</Text>
+                </View>
+              </View>
+
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/double-sided-arrow.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{parseFloat(stats?.goals?.for?.average?.away || 0).toFixed(1)} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerAwayGoals")}</Text>
+                </View>
               </View>
             </View>
           </View>
+        </Card>
+
+        {/* Stats Row - Clean Sheets and Failed to Score */}
+        <View style={styles.statsRow}>
+          {/* Clean Sheets Card */}
+          <Card style={styles.statCard}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsSoccerCleanSheets")}</Text>
+              <Text style={styles.statValue}>{cleanSheetPercent}%</Text>
+              <Text style={styles.statDescription}>{stats?.clean_sheet?.total || 0} {i18n.t("teamStatsSoccerOutOf")} {stats?.fixtures?.played?.total || 0} {i18n.t("teamStatsSoccerGames")}</Text>
+              <GradientProgressBar value={cleanSheetPercent} maxValue={100} />
+            </View>
+          </Card>
+
+          {/* Failed to Score Card */}
+          <Card style={styles.statCard}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsSoccerFailedToScore")}</Text>
+              <Text style={styles.statValue}>{failedToScorePercent}%</Text>
+              <Text style={styles.statDescription}>{stats?.failed_to_score?.total || 0} {i18n.t("teamStatsSoccerOutOf")} {stats?.fixtures?.played?.total || 0}</Text>
+              <GradientProgressBar value={failedToScorePercent} maxValue={100} />
+            </View>
+          </Card>
         </View>
 
-        {/* Efficiency Row - SAME STRUCTURE AS NFL 3rd/4th Down */}
-        <View style={styles.efficiencyRow}>
-          {/* Clean Sheets Card - Soccer equivalent of 3rd Down */}
-          <View style={[styles.card, styles.efficiencyCard]}>
-            <Text style={styles.sectionLabel}>CLEAN SHEETS</Text>
-            <View style={styles.efficiencyContent}>
-              <Text style={styles.percentageValue}>
-                {stats?.fixtures?.played?.total > 0 ?
-                  Math.round((stats.clean_sheet.total / stats.fixtures.played.total) * 100) : 0}%
-              </Text>
-              <Text style={styles.perGameText}>
-                {stats?.clean_sheet?.total || 0} out of {stats?.fixtures?.played?.total || 0} games
-              </Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: `${stats?.fixtures?.played?.total > 0 ?
-                    Math.round((stats.clean_sheet.total / stats.fixtures.played.total) * 100) : 0}%` }
-                ]} />
-              </View>
+        {/* Stats Row - Goal Timing and Most Used Form */}
+        <View style={styles.statsRow}>
+          {/* Goal Timing Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsSoccerGoalTiming")}</Text>
+              <Text style={styles.statValue}>31-45'</Text>
+              <Text style={styles.statDescription}>{i18n.t("teamStatsSoccerScoringWindow")}</Text>
+              <GradientProgressBar value={75} maxValue={100} />
             </View>
-          </View>
+          </Card>
 
-          {/* Failed to Score Card - Soccer equivalent of 4th Down */}
-          <View style={[styles.card, styles.efficiencyCard]}>
-            <Text style={styles.sectionLabel}>FAILED TO SCORE</Text>
-            <View style={styles.efficiencyContent}>
-              <Text style={styles.percentageValue}>
-                {stats?.fixtures?.played?.total > 0 ?
-                  Math.round((stats.failed_to_score.total / stats.fixtures.played.total) * 100) : 0}%
-              </Text>
-              <Text style={styles.perGameText}>
-                {stats?.failed_to_score?.total || 0} out of {stats?.fixtures?.played?.total || 0}
-              </Text>
-              {/* Progress Bar */}
-              <View style={styles.progressBarContainer}>
-                <LinearGradient
-                  colors={["#00ddff", "#0bff13"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.progressBar}
-                />
-                <View style={[
-                  styles.progressIndicator,
-                  { left: `${stats?.fixtures?.played?.total > 0 ?
-                    Math.round((stats.failed_to_score.total / stats.fixtures.played.total) * 100) : 0}%` }
-                ]} />
-              </View>
+          {/* Most Used Form Card */}
+          <Card style={styles.statCardSmall}>
+            <View style={styles.statContent}>
+              <Text style={styles.statLabel}>{i18n.t("teamStatsSoccerMostUsedForm")}</Text>
+              <Text style={styles.statValue}>{stats?.lineups?.[0]?.formation || "4-1-4-1"}</Text>
+              <Text style={styles.statDescription}>{stats?.lineups?.[0]?.played || 60}% {i18n.t("teamStatsSoccerOfTheirGames")}</Text>
+              <GradientProgressBar value={stats?.lineups?.[0]?.played || 60} maxValue={100} />
             </View>
-          </View>
+          </Card>
         </View>
 
-        {/* Home/Away Averages Row - SAME STRUCTURE AS NFL */}
-        <View style={styles.homeAwayRow}>
-          {/* Home Goals Card */}
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>HOME GOALS</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>
-                {parseFloat(stats?.goals?.for?.average?.home || 0).toFixed(1)}
-              </Text>
-              <Text style={styles.averageLabel}>Goals per Game</Text>
+        {/* Advanced Metrics Card */}
+        <Card style={styles.coreKPIsCard}>
+          <View style={styles.coreKPIsContent}>
+            {/* Header */}
+            <View style={styles.coreKPIsHeader}>
+              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsSoccerAdvancedMetrics")}</Text>
+              <Pressable onPress={() => navigateToInfo("advancedMetrics")}>
+                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+              </Pressable>
             </View>
-          </View>
 
-          {/* Away Goals Card */}
-          <View style={[styles.card, styles.homeAwayCard]}>
-            <Text style={styles.sectionLabel}>AWAY GOALS</Text>
-            <View style={styles.homeAwayContent}>
-              <Text style={styles.averageValue}>
-                {parseFloat(stats?.goals?.for?.average?.away || 0).toFixed(1)}
-              </Text>
-              <Text style={styles.averageLabel}>Goals per Game</Text>
-            </View>
-          </View>
-        </View>
+            {/* First Row of Advanced Metrics */}
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/cup.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.biggest?.wins?.away || "0-4 away"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerBiggestWin")}</Text>
+                </View>
+              </View>
 
-        {/* Performance Stats Card - SAME STRUCTURE AS NFL Defensive Stats */}
-        <View style={[styles.card, styles.performanceStatsCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Performance Stats ⚽</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/geo-tag.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.biggest?.loses?.home || "0-2 home"}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerBiggestLoss")}</Text>
+                </View>
+              </View>
+            </View>
 
-          {/* Performance Row - Clean Sheets, Failed to Score */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.fixtures?.played?.total > 0 ?
-                    Math.round((stats.clean_sheet.total / stats.fixtures.played.total) * 100) : 0}%
-                </Text>
-                <Text style={styles.kpiLabel}>Clean Sheets</Text>
+            {/* Second Row of Advanced Metrics */}
+            <View style={[styles.kpiRow, styles.kpiRowLast]}>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/card.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{stats?.cards?.yellow?.total || 0}-{stats?.cards?.red?.total || 0}</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerDisciplinary")}</Text>
+                </View>
               </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.fixtures?.played?.total > 0 ?
-                    Math.round((stats.failed_to_score.total / stats.fixtures.played.total) * 100) : 0}%
-                </Text>
-                <Text style={styles.kpiLabel}>Failed to Score</Text>
-              </View>
-            </View>
-          </View>
 
-          {/* Performance Row - Goal Timing, Formation */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>31-45'</Text>
-                <Text style={styles.kpiLabel}>Peak Scoring</Text>
-              </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.lineups?.[0]?.formation || "4-1-4-1"}
-                </Text>
-                <Text style={styles.kpiLabel}>Most Used Formation</Text>
+              <View style={styles.kpiItem}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={require("../assets/images/icons/flag.svg")}
+                    style={styles.kpiIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.kpiTextContainer}>
+                  <Text style={styles.kpiValue}>{parseFloat(goalDiff) > 0 ? "+" : ""}{goalDiff} pg</Text>
+                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSoccerGoalDifference")}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
-
-        {/* Advanced Metrics Card - SAME STRUCTURE AS NFL Advanced Metrics */}
-        <View style={[styles.card, styles.advancedMetricsCard]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Advanced Metrics 🚀</Text>
-            <Text style={styles.infoIcon}>ⓘ</Text>
-          </View>
-
-          {/* Advanced Row - Biggest Win, Biggest Loss */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.biggest?.wins?.away || "0-4 away"}
-                </Text>
-                <Text style={styles.kpiLabel}>Biggest Win</Text>
-              </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.biggest?.loses?.home || "0-2 home"}
-                </Text>
-                <Text style={styles.kpiLabel}>Biggest Loss</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Advanced Row - Disciplinary, Goal Difference */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.cards?.yellow?.total || 0} - {stats?.cards?.red?.total || 0}
-                </Text>
-                <Text style={styles.kpiLabel}>Disciplinary (Y-R)</Text>
-              </View>
-            </View>
-            <View style={styles.kpiItem}>
-              <View style={styles.kpiIcon} />
-              <View style={styles.kpiContent}>
-                <Text style={styles.kpiValue}>
-                  {stats?.goals?.for?.average?.total && stats?.goals?.against?.average?.total ?
-                    `${stats.goals.for.average.total - stats.goals.against.average.total > 0 ? '+' : ''}${(stats.goals.for.average.total - stats.goals.against.average.total).toFixed(1)}` :
-                    "+0.0"}
-                </Text>
-                <Text style={styles.kpiLabel}>Goal Difference</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        </Card>
+        </ScrollView>
       </View>
     );
   };
@@ -594,8 +620,8 @@ export default function SoccerTeamStatsScreen() {
     </View>
   );
 
-  // Main content rendering
-  const renderTeamContent = () => {
+  // Main render logic
+  const renderContent = () => {
     if (error) {
       return (
         <View style={styles.errorContainer}>
@@ -604,117 +630,54 @@ export default function SoccerTeamStatsScreen() {
       );
     }
 
-    return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.analysisContent}
-      >
-        {/* Team 1 Header Card */}
-        <View style={[styles.card, styles.headerCard]}>
-          <View style={styles.headerContent}>
-            <Text style={styles.teamName}>{params.team1 || "Manchester City"}</Text>
-            <Image
-              source={{ uri: `../assets/images/${params.team1?.replace(/\s+/g, '_')}.svg` }}
-              style={styles.teamLogo}
-            />
-          </View>
-        </View>
+    if (selectedTeam) {
+      return renderTeamStats();
+    }
 
-        {/* Team 1 Stats */}
-        {renderSoccerTeamStats(teamResult?.teamStats?.team1, params.team1, "team1")}
-
-        {/* Team 2 Header Card */}
-        <View style={[styles.card, styles.headerCard]}>
-          <View style={styles.headerContent}>
-            <Text style={styles.teamName}>{params.team2 || "Arsenal"}</Text>
-            <Image
-              source={{ uri: `../assets/images/${params.team2?.replace(/\s+/g, '_')}.svg` }}
-              style={styles.teamLogo}
-            />
-          </View>
-        </View>
-
-        {/* Team 2 Stats */}
-        {renderSoccerTeamStats(teamResult?.teamStats?.team2, params.team2, "team2")}
-
-        {/* Action Buttons */}
-        <View style={styles.actionContainer}>
-          <BorderButton
-            onPress={() => {
-              router.back();
-            }}
-            containerStyle={styles.floatingButton}
-            borderColor="#00C2E0"
-            backgroundColor="#00C2E020"
-            opacity={1}
-            borderWidth={1}
-          >
-            <Text style={styles.buttonText}>Back to Analysis</Text>
-          </BorderButton>
-
-          <GradientButton
-            onPress={getTeamStats}
-            style={{ marginTop: 16 }}
-          >
-            <Text style={styles.buttonText}>Refresh Stats ⚽</Text>
-          </GradientButton>
-        </View>
-      </ScrollView>
-    );
+    return renderTeamSelection();
   };
 
-  // Main render
   return (
-    <ScreenBackground hideBg>
-      <TopBar />
+    <ScreenBackground>
+      <Animated.View style={[styles.mainContainer, animatedStyle]}>
+        {isLoading ? renderShimmer() : renderContent()}
+      </Animated.View>
 
-      <View style={styles.container}>
-        <Animated.ScrollView
-          showsVerticalScrollIndicator={false}
-          style={[styles.scrollView, animatedStyle]}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.analysisContainer}>
-            {isLoading ? renderShimmer() : renderTeamContent()}
-          </View>
-        </Animated.ScrollView>
-
-        {/* Floating Bottom Navigation */}
-        <FloatingBottomNav
-          activeTab="teams"
-          analysisData={{
-            team1: params.team1,
-            team2: params.team2,
-            sport: params.sport,
-            team1Logo: params.team1Logo,
-            team2Logo: params.team2Logo,
-            analysisId: params.analysisId,
-          }}
-        />
-      </View>
+      {/* Floating Bottom Nav */}
+      <FloatingBottomNav
+        activeTab="teams"
+        analysisData={{
+          team1: params.team1,
+          team2: params.team2,
+          sport: params.sport,
+          team1Logo: params.team1Logo,
+          team2Logo: params.team2Logo,
+          analysisId: params.analysisId,
+        }}
+      />
     </ScreenBackground>
   );
 }
 
-// Styles - EXACTLY matching Soccer Figma dimensions
 const styles = StyleSheet.create({
+  mainContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    paddingBottom: 0,
   },
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
   },
-  scrollContent: {
-    paddingBottom: 120, // Extra padding for floating nav
-  },
-  analysisContainer: {
+  contentContainer: {
+    paddingHorizontal: 16,
     paddingTop: 20,
-    flex: 1,
+    paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   shimmerContainer: {
     width: "100%",
+    paddingHorizontal: 16,
+    paddingTop: 20,
   },
   shimmerGroup: {
     width: "100%",
@@ -736,290 +699,201 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     width: "100%",
   },
-  analysisContent: {
-    flex: 1,
-    paddingBottom: 40,
-  },
   errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   errorText: {
-    color: "#424242",
+    color: "#FF5252",
     fontSize: 16,
     textAlign: "center",
     fontFamily: "Aeonik-Regular",
   },
-
-  // Universal Card Styles
-  card: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 40,
-    borderWidth: 1,
-    borderColor: "#212121",
-    padding: 20,
-    marginBottom: 15,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "500",
+  selectionTitle: {
     fontFamily: "Aeonik-Medium",
+    fontSize: 28,
+    color: "#FFFFFF",
+    marginBottom: 24,
   },
-  infoIcon: {
-    fontSize: 18,
-    color: "#ffffff",
+  selectionItem: {
+    height: 85.87,
+    borderRadius: 14,
+    marginBottom: 16,
+    overflow: "hidden",
   },
-
-  // Header Card Styles
-  headerCard: {
-    backgroundColor: "#0c0c0c",
-    height: 80,
-    justifyContent: "center",
-    borderRadius: 40,
-  },
-  headerContent: {
+  selectionGradient: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 30,
+    paddingHorizontal: 22,
+    gap: 12,
+  },
+  selectionLogo: {
+    width: 58.11,
+    height: 38.28,
+  },
+  selectionName: {
+    flex: 1,
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20,
+    color: "#FFFFFF",
+  },
+  chevronIcon: {
+    width: 24,
+    height: 24,
+    tintColor: "#FFFFFF",
+  },
+  backButton: {
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16,
+    color: "#00C2E0",
+  },
+  topCard: {
+    height: 85.87,
+  },
+  teamHeader: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13.44,
+    paddingHorizontal: 22,
+    gap: 4,
+  },
+  nameLogoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   teamName: {
-    color: "#ffffff",
-    fontSize: 18,
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    flex: 1,
-    textAlign: "left",
+    fontSize: 20,
+    color: "#FFFFFF",
   },
   teamLogo: {
-    width: 45,
-    height: 45,
-    borderRadius: 22,
+    width: 58.11,
+    height: 38.28,
   },
-
-  // Form & Momentum Row
-  formMomentumRow: {
+  statsRow: {
     flexDirection: "row",
-    gap: 15,
-    marginBottom: 15,
+    gap: 16,
+    marginTop: 16,
   },
-  formCard: {
+  statCard: {
     flex: 1,
-    height: 160,
-    padding: 15,
+    height: 132.55,
   },
-  momentumCard: {
+  statCardSmall: {
     flex: 1,
-    height: 160,
-    padding: 15,
+    height: 117.1,
   },
-  sectionLabel: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    opacity: 0.6,
-    marginBottom: 15,
-  },
-  formContent: {
+  statContent: {
     flex: 1,
-    justifyContent: "space-between",
-  },
-  recordText: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-  },
-  winRateText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    marginBottom: 8,
-  },
-  progressBarContainer: {
-    height: 12,
-    borderRadius: 100,
-    position: "relative",
-    overflow: "hidden",
-    backgroundColor: "#333333",
-  },
-  progressBar: {
-    flex: 1,
-    height: "100%",
-  },
-  progressIndicator: {
-    position: "absolute",
-    top: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+    paddingVertical: 20.15,
+    paddingHorizontal: 21.83,
+    gap: 8,
   },
   momentumContent: {
     flex: 1,
-    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 21.83,
     alignItems: "center",
-  },
-  momentumGauge: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 2,
-    borderColor: "#00c2e0",
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 194, 224, 0.1)",
+    gap: 4,
   },
-  momentumValue: {
-    color: "#ffffff",
-    fontSize: 18,
+  statLabel: {
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 2,
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.6,
   },
-  momentumDescription: {
-    color: "#ffffff",
-    fontSize: 8,
+  momentumLabel: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 13.44,
+    color: "#FFFFFF",
+    opacity: 0.6,
+    alignSelf: "flex-start",
+  },
+  statValue: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 26.87,
+    color: "#FFFFFF",
+  },
+  statDescription: {
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    textAlign: "center",
+    fontSize: 11.42,
+    color: "#FFFFFF",
+    marginBottom: 4,
   },
-
-  // Core KPIs Card Styles
-  coreKpisCard: {
-    minHeight: 300,
-    padding: 15,
+  coreKPIsCard: {
+    marginTop: 16,
+  },
+  coreKPIsContent: {
+    paddingVertical: 22,
+    paddingHorizontal: 0,
+  },
+  coreKPIsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
+  },
+  coreKPIsTitle: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
+  },
+  coreKPIsInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
   },
   kpiRow: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
+    paddingHorizontal: 20.15,
+    gap: 20,
+    marginBottom: 16,
+  },
+  kpiRowLast: {
+    marginBottom: 0,
   },
   kpiItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(22, 22, 22, 0.95)",
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 60,
+    gap: 12,
+  },
+  kpiTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  iconContainer: {
+    width: 45.11,
+    height: 44.17,
+    borderRadius: 12.62,
+    backgroundColor: "#161616",
+    justifyContent: "center",
+    alignItems: "center",
   },
   kpiIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 12,
-    backgroundColor: "#161616",
-    marginRight: 10,
-  },
-  kpiContent: {
-    flex: 1,
+    width: 24,
+    height: 24,
   },
   kpiValue: {
-    color: "#ffffff",
-    fontSize: 16,
     fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 2,
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
   kpiLabel: {
-    color: "#ffffff",
-    fontSize: 10,
     fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    opacity: 0.8,
-  },
-
-  // Efficiency Row Styles - SAME AS NFL 3rd/4th Down
-  efficiencyRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 15,
-  },
-  efficiencyCard: {
-    flex: 1,
-    height: 160,
-    padding: 15,
-  },
-  efficiencyContent: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  percentageValue: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-  },
-  perGameText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-    marginBottom: 8,
-  },
-
-  // Home/Away Row Styles - SAME AS NFL
-  homeAwayRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 15,
-  },
-  homeAwayCard: {
-    flex: 1,
-    height: 140,
-    padding: 15,
-  },
-  homeAwayContent: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  averageValue: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  averageLabel: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontFamily: "Aeonik-Light",
-    fontWeight: "300",
-  },
-
-  // Performance Stats Card Styles - SAME AS NFL Defensive Stats
-  performanceStatsCard: {
-    minHeight: 280,
-    padding: 15,
-  },
-
-  // Advanced Metrics Card Styles - SAME AS NFL
-  advancedMetricsCard: {
-    minHeight: 280,
-    padding: 15,
-  },
-
-  // Action Buttons
-  actionContainer: {
-    marginBottom: 40,
-  },
-  buttonText: {
-    fontSize: 18,
+    fontSize: 11.42,
     color: "#FFFFFF",
-    fontFamily: "Aeonik-Medium",
-  },
-  floatingButton: {
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    padding: 10,
   },
 });
+

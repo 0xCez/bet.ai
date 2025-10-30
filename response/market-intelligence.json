@@ -1,0 +1,407 @@
+{
+    "sport": "nba",
+    "teams": {
+        "home": "Denver Nuggets",
+        "away": "Phoenix Suns",
+        "logos": {
+            "home": "",
+            "away": ""
+        }
+    },
+    "marketIntelligence": {
+        "bestLines": {
+            "consensusSpreadPoint": -13,
+            "consensusTotal": 234,
+            "consensusHomeML": 1.12,
+            "consensusAwayML": 6.69,
+            "bestLines": [
+                {
+                    "type": "spread",
+                    "label": "Best Favorite",
+                    "line": -13.5,
+                    "odds": 1.93,
+                    "bookmaker": "FanDuel",
+                    "team": "Denver Nuggets"
+                },
+                {
+                    "type": "spread",
+                    "label": "Best Underdog",
+                    "line": 13.5,
+                    "odds": 1.85,
+                    "bookmaker": "DraftKings",
+                    "team": "Phoenix Suns"
+                },
+                {
+                    "type": "moneyline",
+                    "label": "Best Home ML",
+                    "odds": 1.1,
+                    "bookmaker": "ESPN BET",
+                    "team": "Denver Nuggets"
+                },
+                {
+                    "type": "moneyline",
+                    "label": "Best Away ML",
+                    "odds": 5.9,
+                    "bookmaker": "FanDuel",
+                    "team": "Phoenix Suns"
+                }
+            ],
+            "rawData": {
+                "totalSpreads": 28,
+                "totalMoneylines": 28,
+                "totalTotals": 28
+            }
+        },
+        "sharpMeter": {
+            "line1": "No clear sharp lean",
+            "line2": "Market uncertainty",
+            "line3": "Sharp avg -13.0 vs public -13.1",
+            "gaugeValue": 52,
+            "gaugeLabel": "HIGH",
+            "pointGap": 0.1,
+            "avgSharpSpread": -13,
+            "avgPublicSpread": -13.1,
+            "avgSharpVig": 3.5,
+            "avgPublicVig": 4.7,
+            "vigGap": 1.3,
+            "confidenceLevel": "high",
+            "dataQuality": "excellent",
+            "sharpBookCount": 3,
+            "publicBookCount": 11
+        },
+        "vigAnalysis": {
+            "moneyline": {
+                "sharp": 3.4,
+                "market": 4.4
+            },
+            "spread": {
+                "sharp": 3.6272521178857042,
+                "market": 4.556352909761863
+            },
+            "total": {
+                "sharp": 3.9055284338303187,
+                "market": 4.658895321545931
+            }
+        },
+        "evOpportunities": {
+            "hasOpportunities": null,
+            "opportunities": [
+                {
+                    "type": "efficient",
+                    "title": "Market is efficiently priced",
+                    "description": "No +EV or Arb opportunities found",
+                    "icon": "x"
+                },
+                {
+                    "type": "lowvig",
+                    "title": "Lowest Vig at 2.7%",
+                    "description": "ML on Denver Nuggets 1.14 at Pinnacle",
+                    "icon": "pinnacle",
+                    "vig": 2.7,
+                    "bookmaker": "Pinnacle"
+                },
+                {
+                    "type": "lowvig",
+                    "title": "Lowest Vig Spread at 3.1%",
+                    "description": "Spread 1.94 at LowVig.ag",
+                    "icon": "generic",
+                    "vig": 3.1,
+                    "bookmaker": "LowVig.ag"
+                }
+            ],
+            "summary": "0 opportunities found"
+        },
+        "fairValue": {
+            "moneyline": {
+                "fair1": 1.16,
+                "fair2": 7.32
+            },
+            "spread": {
+                "fair1": 2,
+                "fair2": 2
+            },
+            "total": {
+                "fair1": 2.02,
+                "fair2": 1.98
+            }
+        },
+        "sharpConsensus": {
+            "moneyline": {
+                "home": 1.12,
+                "away": 7.076666666666667
+            },
+            "spread": {
+                "home": 1.9266666666666665,
+                "away": 1.9333333333333333,
+                "point": -13.5
+            },
+            "total": {
+                "over": 1.9433333333333334,
+                "under": 1.9066666666666665,
+                "point": 234.5
+            }
+        },
+        "marketTightness": {
+            "tightness": "Loose",
+            "pointRange": 1,
+            "priceRange": 0,
+            "comment": "Big disagreement, high value in line-shopping.",
+            "summary": "Loose • Spread market • point range 1.0 • price range 0¢",
+            "marketBreakdown": {
+                "spread": {
+                    "market": "Spread",
+                    "tightness": "Loose",
+                    "pointRange": 1,
+                    "priceRange": 0,
+                    "comment": "Big disagreement, high value in line-shopping.",
+                    "valid": true
+                },
+                "moneyline": {
+                    "market": "Moneyline",
+                    "tightness": "Tight",
+                    "pointRange": 0,
+                    "priceRange": 0,
+                    "comment": "Books agree, edges harder to find.",
+                    "valid": true
+                },
+                "total": {
+                    "market": "Total",
+                    "tightness": "Loose",
+                    "pointRange": 1,
+                    "priceRange": 0,
+                    "comment": "Big disagreement, high value in line-shopping.",
+                    "valid": true
+                }
+            }
+        },
+        "oddsTable": [
+            {
+                "bookmaker": "LowVig.ag",
+                "bookmakerKey": "lowvig",
+                "isSharp": true,
+                "odds": {
+                    "moneyline": {
+                        "home": 1.11,
+                        "away": 7.36
+                    },
+                    "spread": {
+                        "home": {
+                            "point": -13,
+                            "price": 1.94
+                        },
+                        "away": {
+                            "point": 13,
+                            "price": 1.94
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 234,
+                            "price": 1.93
+                        },
+                        "under": {
+                            "point": 234,
+                            "price": 1.93
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetOnline.ag",
+                "bookmakerKey": "betonlineag",
+                "isSharp": true,
+                "odds": {
+                    "moneyline": {
+                        "home": 1.11,
+                        "away": 7.18
+                    },
+                    "spread": {
+                        "home": {
+                            "point": -13,
+                            "price": 1.91
+                        },
+                        "away": {
+                            "point": 13,
+                            "price": 1.91
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 234,
+                            "price": 1.91
+                        },
+                        "under": {
+                            "point": 234,
+                            "price": 1.91
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "DraftKings",
+                "bookmakerKey": "draftkings",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 1.11,
+                        "away": 7
+                    },
+                    "spread": {
+                        "home": {
+                            "point": -13.5,
+                            "price": 1.98
+                        },
+                        "away": {
+                            "point": 13.5,
+                            "price": 1.85
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 234.5,
+                            "price": 1.95
+                        },
+                        "under": {
+                            "point": 234.5,
+                            "price": 1.87
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetUS",
+                "bookmakerKey": "betus",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 1.11,
+                        "away": 7
+                    },
+                    "spread": {
+                        "home": {
+                            "point": -13,
+                            "price": 1.91
+                        },
+                        "away": {
+                            "point": 13,
+                            "price": 1.91
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 234,
+                            "price": 1.91
+                        },
+                        "under": {
+                            "point": 234,
+                            "price": 1.91
+                        }
+                    }
+                }
+            },
+            {
+                "bookmaker": "BetMGM",
+                "bookmakerKey": "betmgm",
+                "isSharp": false,
+                "odds": {
+                    "moneyline": {
+                        "home": 1.11,
+                        "away": 7
+                    },
+                    "spread": {
+                        "home": {
+                            "point": -13.5,
+                            "price": 1.95
+                        },
+                        "away": {
+                            "point": 13.5,
+                            "price": 1.87
+                        }
+                    },
+                    "total": {
+                        "over": {
+                            "point": 234.5,
+                            "price": 1.95
+                        },
+                        "under": {
+                            "point": 234.5,
+                            "price": 1.87
+                        }
+                    }
+                }
+            }
+        ]
+    },
+    "teamStats": {
+        "team1": {
+            "teamId": 9,
+            "stats": null,
+            "error": "{\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        },
+        "team2": {
+            "teamId": 28,
+            "stats": null,
+            "error": "{\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        }
+    },
+    "playerStats": {
+        "team1": {
+            "teamId": 9,
+            "allPlayers": [],
+            "topPlayers": [],
+            "playerCount": 0,
+            "error": "{\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        },
+        "team2": {
+            "teamId": 28,
+            "allPlayers": [],
+            "topPlayers": [],
+            "playerCount": 0,
+            "error": "{\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        }
+    },
+    "gameData": {
+        "team1_last10games": {
+            "last10Games": [],
+            "winLossRecord": {
+                "record": "0-0",
+                "pattern": "Error"
+            },
+            "upcomingGame": null,
+            "error": "API Error (Season 2025): {\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        },
+        "team2_last10games": {
+            "last10Games": [],
+            "winLossRecord": {
+                "record": "0-0",
+                "pattern": "Error"
+            },
+            "upcomingGame": null,
+            "error": "API Error (Season 2025): {\"plan\":\"Free plans do not have access to this season, try from 2021 to 2023.\"}"
+        },
+        "h2h_games": {
+            "h2hGames": [],
+            "h2hRecord": {
+                "record": "0-0",
+                "pattern": "Error"
+            },
+            "error": "API Error (H2H): {\"requests\":\"You have reached the request limit for the day, Go to https://dashboard.api-football.com to upgrade your plan.\"}"
+        },
+        "team1_injuries": {
+            "team": {
+                "report": []
+            }
+        },
+        "team2_injuries": {
+            "team": {
+                "report": []
+            }
+        },
+        "upcomingGame": null
+    },
+    "timestamp": "2025-10-25T09:10:16.663Z",
+    "teamIds": {
+        "team1Id": 9,
+        "team2Id": 28
+    }
+}

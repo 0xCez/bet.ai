@@ -45,7 +45,7 @@ if (Platform.OS === "android") {
   GoogleSignin.configure({
     // Uses the client ID with certificate_hash from google-services.json
     webClientId:
-      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
+      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
     offlineAccess: true,
     forceCodeForRefreshToken: true,
   });
@@ -86,13 +86,12 @@ export default function LoginScreen() {
 
   // Use Expo Google auth for iOS only
   const [request, response, promptAsync] = Google.useAuthRequest({
-    // androidClientId: "133991312998-7ha5g8jdfvm4cgcvabhhhmiqhd5t98i5.apps.googleusercontent.com",
     androidClientId:
-      "133991312998-qeusullp88no21g2189pp73k1vrmskhg.apps.googleusercontent.com",
+      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
     iosClientId:
-      "133991312998-nsjaob5e5do67f55pd1pf3at8t1en12b.apps.googleusercontent.com",
+      "878948709969-3bk4r38njtiosh4gi22imdmbhn6km3p1.apps.googleusercontent.com",
     webClientId:
-      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
+      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
   });
 
   const handleAuthSuccess = async (firebaseUser: any) => {

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import {
   View,
-  Image,
   StyleSheet,
   ScrollView,
   Text,
   Pressable,
   ViewStyle,
 } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
 import type { ParamListBase } from "@react-navigation/native";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -24,6 +24,8 @@ import {
 import { GradientButton } from "../components/ui/GradientButton";
 import { BorderButton } from "@/components/ui/BorderButton";
 import { TopBar } from "../components/ui/TopBar";
+import { Card } from "@/components/ui/Card";
+import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import {
   doc,
   setDoc,
@@ -109,13 +111,22 @@ interface AnalysisResult {
     };
   };
   keyInsights: {
-    confidence: string;
-    marketActivity: string;
-    lineShift: string;
-    publicVsSharps: {
-      public: number;
-      sharps: number;
-    };
+    marketConsensus: {
+      display: string;
+      label: string;
+    } | null;
+    bestValue: {
+      display: string;
+      label: string;
+    } | null;
+    offensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
+    defensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
   };
   matchSnapshot: {
     recentPerformance: {
@@ -232,6 +243,9 @@ export default function AnalysisScreen() {
     isSameAnalysis && cachedDisplayImageUrl ? cachedDisplayImageUrl : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(
+    analysisId || null
+  );
   const [expandedCards, setExpandedCards] = useState(
     isSameAnalysis
       ? cachedExpandedCards
@@ -254,6 +268,22 @@ export default function AnalysisScreen() {
       cachedExpandedCards = newExpandedCards; // Update cached state
     } catch (error) {
       console.error(`Error toggling card ${cardName}:`, error);
+    }
+  };
+
+  const getTeamLogo = (teamName: string, sport?: string) => {
+    if (!sport) return require("../assets/images/logo.png");
+
+    switch (sport.toLowerCase()) {
+      case "nba":
+        return getNBATeamLogo(teamName);
+      case "nfl":
+        return getNFLTeamLogo(teamName);
+      case "soccer":
+      case "soccer_epl":
+        return getSoccerTeamLogo(teamName);
+      default:
+        return require("../assets/images/logo.png");
     }
   };
 
@@ -386,6 +416,7 @@ export default function AnalysisScreen() {
 
           setAnalysisResult(analysisData);
           cachedAnalysisResult = analysisData; // Cache the result
+          setCurrentAnalysisId(docId); // Set the current analysis ID
           console.log("Set analysis result from history:", analysisData);
           console.log("SPORT FROM HISTORY:", analysisData.sport);
           // Set the display image URL from the fetched data
@@ -453,6 +484,15 @@ export default function AnalysisScreen() {
       console.log("Parsed Response:", parsedResponse);
 
       // Now use the parsed response
+      console.log("=== KEY INSIGHTS DEBUG ===");
+      console.log("Full parsedResponse:", JSON.stringify(parsedResponse, null, 2));
+      console.log("keyInsightsNew:", parsedResponse?.keyInsightsNew);
+      console.log("marketConsensus:", parsedResponse?.keyInsightsNew?.marketConsensus);
+      console.log("bestValue:", parsedResponse?.keyInsightsNew?.bestValue);
+      console.log("offensiveEdge:", parsedResponse?.keyInsightsNew?.offensiveEdge);
+      console.log("defensiveEdge:", parsedResponse?.keyInsightsNew?.defensiveEdge);
+      console.log("========================");
+
       const analysisData: AnalysisResult = {
         sport: parsedResponse?.sport || "", // ✅ CRITICAL FIX: Extract sport from API response
         teams: {
@@ -464,13 +504,10 @@ export default function AnalysisScreen() {
           },
         },
         keyInsights: {
-          confidence: parsedResponse?.keyInsights?.confidence || "",
-          marketActivity: parsedResponse?.keyInsights?.marketActivity || "",
-          lineShift: parsedResponse?.keyInsights?.lineShift || "",
-          publicVsSharps: {
-            public: parsedResponse?.keyInsights?.publicVsSharps?.public || 50,
-            sharps: parsedResponse?.keyInsights?.publicVsSharps?.sharps || 50,
-          },
+          marketConsensus: parsedResponse?.keyInsightsNew?.marketConsensus || null,
+          bestValue: parsedResponse?.keyInsightsNew?.bestValue || null,
+          offensiveEdge: parsedResponse?.keyInsightsNew?.offensiveEdge || null,
+          defensiveEdge: parsedResponse?.keyInsightsNew?.defensiveEdge || null,
         },
         matchSnapshot: {
           recentPerformance: {
@@ -493,6 +530,10 @@ export default function AnalysisScreen() {
         marketIntelligence: parsedResponse?.marketIntelligence,
         teamStats: parsedResponse?.teamStats,
       };
+
+      console.log("=== ANALYSIS DATA CREATED ===");
+      console.log("analysisData.keyInsights:", JSON.stringify(analysisData.keyInsights, null, 2));
+      console.log("============================");
 
       setAnalysisResult(analysisData);
       cachedAnalysisResult = analysisData; // Cache the analysis data
@@ -520,6 +561,7 @@ export default function AnalysisScreen() {
 
           await setDoc(newAnalysisRef, analysisDataToSave);
           hasAnalysisSaved.current = true; // Mark as saved
+          setCurrentAnalysisId(newAnalysisRef.id); // Save the analysis ID to state
           console.log(
             "Analysis saved successfully to Firestore with ID:",
             newAnalysisRef.id
@@ -575,7 +617,7 @@ export default function AnalysisScreen() {
       </View>
 
       {/* Content Shimmer Groups */}
-      <View style={styles.shimmerGroup}>
+      <View style={[styles.shimmerGroup, styles.firstShimmerGroup]}>
         <LinearGradient
           colors={["#1A1A1A", "#363636"]}
           start={{ x: 0, y: 0 }}
@@ -719,299 +761,210 @@ export default function AnalysisScreen() {
         </Text> */}
 
         {/* Key Insights Card */}
-        <View style={[styles.card, styles.keyInsightsCard]}>
-          <Text style={styles.keyInsightsTitle}>
-            {i18n.t("analysisKeyInsights")}
-          </Text>
+        <Card style={styles.keyInsightsCard}>
+          <Text style={styles.keyInsightsTitle}>Key Insights 💸</Text>
+
           <View style={styles.gridContainer}>
-            {/* Confidence Box */}
+            {/* Market Consensus */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
-                  <Image
-                    source={require("../assets/images/ki1.png")}
-                    style={[styles.kIcon, { width: 32, height: 32 }]}
-                    resizeMode="contain"
-                  />
-                </View>
+                <Image
+                  source={require("../assets/images/Fanduel.png")}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisConfidence")}
-                  </Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.confidence}
+                    {analysisResult?.keyInsights?.marketConsensus?.display || "No consensus"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.marketConsensus?.label || "Market Consensus"}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Market Activity Box */}
+            {/* Best Value */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
-                  <Image
-                    source={require("../assets/images/ki2.png")}
-                    style={styles.kIcon}
-                    resizeMode="contain"
-                  />
-                </View>
+                <Image
+                  source={require("../assets/images/Draftkings.png")}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisMarketActivity")}
-                  </Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.marketActivity}
+                    {analysisResult?.keyInsights?.bestValue?.display || "N/A"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.bestValue?.label || "Best Value"}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Line Shift Progress */}
+            {/* Offensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisLineShift")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <Text style={styles.progressValue}>
-                    {analysisResult?.keyInsights.lineShift}
+              <View style={styles.metricContent}>
+                <Image
+                  source={getTeamLogo(analysisResult.teams.home, analysisResult?.sport)}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
                   </Text>
-                  <View style={styles.progressBarContainer}>
-                    <Progress.Bar
-                      progress={
-                        analysisResult?.keyInsights.marketActivity === "High"
-                          ? 0.9
-                          : analysisResult?.keyInsights.marketActivity ===
-                            "Moderate"
-                          ? 0.66
-                          : 0.33
-                      }
-                      color="#FF55D4"
-                      unfilledColor="#FF55D440"
-                      borderWidth={0}
-                      style={[styles.progressBar, styles.lineShiftBar]}
-                    />
-                  </View>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.offensiveEdge?.label || "Offensive Edge"}
+                  </Text>
                 </View>
               </View>
             </View>
 
-            {/* Public vs Sharps Progress */}
+            {/* Defensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisPublicVsSharps")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <View style={styles.percentageContainer}>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.public}%
-                    </Text>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.sharps}%
-                    </Text>
-                  </View>
-                  <View style={styles.progressBarContainer}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.publicBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.public ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.sharpsBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.sharps ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                  </View>
+              <View style={styles.metricContent}>
+                <Image
+                  source={getTeamLogo(analysisResult.teams.away, analysisResult?.sport)}
+                  style={styles.kIcon}
+                  contentFit="contain"
+                />
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    {analysisResult?.keyInsights?.defensiveEdge?.label || "Defensive Edge"}
+                  </Text>
                 </View>
               </View>
             </View>
           </View>
-        </View>
+        </Card>
 
-        {/* Match Snapshot Card */}
-        <View style={[styles.card, styles.snapshotCard]}>
-          <Pressable
-            onPress={() => toggleCard("snapshot")}
-            style={[
-              styles.snapshotHeader,
-              !expandedCards.snapshot && styles.collapsedHeader,
-            ]}
-          >
-            <Text style={styles.snapshotTitle}>
-              {i18n.t("analysisMatchSnapshot")}
-            </Text>
-            <Feather
-              name={expandedCards.snapshot ? "chevron-up" : "chevron-down"}
-              size={30}
-              color="#FFFFFF"
-            />
-          </Pressable>
-          {expandedCards.snapshot && (
-            <View style={styles.snapshotContent}>
-              {/* Recent Performances */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
+        {/* Match Snapshot Section */}
+        <View style={styles.matchSnapshotRow}>
+          {/* Home Team Card */}
+          <Card style={styles.teamSnapshotCard}>
+            <View style={styles.teamHeader}>
                   <Image
-                    source={require("../assets/images/ms1.png")}
-                    style={styles.snapshotIcon}
+                    source={getTeamLogo(analysisResult?.teams.home || "", analysisResult?.sport)}
+                    style={styles.teamLogo}
+                    contentFit="contain"
                   />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisRecentPerformances")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-1" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.recentPerformance.home}
-                    </BlurText>
-
-                    <BlurText
-                      card="ms-2"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.recentPerformance.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
-
-              {/* Head-to-Head Record */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms2.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisHeadToHead")}
-                  </Text>
-                  <BlurText card="ms-2" blur={!auth.currentUser}>
-                    {analysisResult?.matchSnapshot.headToHead}
-                  </BlurText>
-                </View>
-              </View>
-
-              {/* Momentum Indicator */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms3.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisMomentumIndicator")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-3" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.momentum.home}
-                    </BlurText>
-                    <BlurText
-                      card="ms-3"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.momentum.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
+              <Text style={styles.teamName}>{analysisResult?.teams.home}</Text>
             </View>
-          )}
+            <View style={styles.teamContent}>
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisRecentPerformances")}
+              </Text>
+              <BlurText card="ms-1" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.recentPerformance.home}
+              </BlurText>
+
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisMomentumIndicator")}
+              </Text>
+              <BlurText card="ms-3" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.momentum.home}
+              </BlurText>
+            </View>
+          </Card>
+
+          {/* Away Team Card */}
+          <Card style={styles.teamSnapshotCard}>
+            <View style={styles.teamHeader}>
+                  <Image
+                    source={getTeamLogo(analysisResult?.teams.away || "", analysisResult?.sport)}
+                    style={styles.teamLogo}
+                    contentFit="contain"
+                  />
+              <Text style={styles.teamName}>{analysisResult?.teams.away}</Text>
+            </View>
+            <View style={styles.teamContent}>
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisRecentPerformances")}
+              </Text>
+              <BlurText card="ms-2" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.recentPerformance.away}
+              </BlurText>
+
+              <Text style={styles.teamSectionLabel}>
+                {i18n.t("analysisMomentumIndicator")}
+              </Text>
+              <BlurText card="ms-3" blur={!auth.currentUser}>
+                {analysisResult?.matchSnapshot.momentum.away}
+              </BlurText>
+            </View>
+          </Card>
         </View>
 
         {/* X-Factors Card */}
-        <View style={[styles.card, styles.xFactorsCard]}>
-          <Pressable
-            onPress={() => toggleCard("xFactors")}
-            style={[
-              styles.xFactorsHeader,
-              !expandedCards.xFactors && styles.collapsedHeader,
-            ]}
-          >
-            <Text style={styles.xFactorsTitle}>
-              {i18n.t("analysisXFactors")}
-            </Text>
-            <Feather
-              name={expandedCards.xFactors ? "chevron-up" : "chevron-down"}
-              size={30}
-              color="#FFFFFF"
-            />
-          </Pressable>
-          {expandedCards.xFactors && (
-            <View style={styles.xFactorsContent}>
-              {analysisResult?.xFactors.map((xFactor, index) => (
-                <View key={index} style={styles.xFactorRow}>
-                  <View style={styles.xFactorIconBox}>
-                    <Image
-                      source={
-                        xFactor.type === 1
-                          ? require("../assets/images/xf1.png") // Health & Availability
-                          : xFactor.type === 2
-                          ? require("../assets/images/xf2.png") // Location & Weather
-                          : xFactor.type === 3
-                          ? require("../assets/images/xf3.png") // Officiating & Rules
-                          : xFactor.type === 4
-                          ? require("../assets/images/xf4.png") // Travel & Fatigue
-                          : require("../assets/images/xf4.png") // Default
-                      }
-                      style={styles.snapshotIcon}
-                    />
-                  </View>
-                  <View style={styles.xFactorTextContainer}>
-                    <Text style={styles.xFactorLabel}>
-                      {xFactor.type === 1
-                        ? i18n.t("analysisHealthAvailability")
-                        : xFactor.type === 2
-                        ? i18n.t("analysisLocationWeather")
-                        : xFactor.type === 3
-                        ? i18n.t("analysisOfficiatingRules")
-                        : xFactor.type === 4
-                        ? i18n.t("analysisTravelFatigue")
-                        : xFactor.title}
-                    </Text>
-                    <BlurText
-                      card={
-                        xFactor.type === 1
-                          ? "xf-1"
-                          : xFactor.type === 2
-                          ? "xf-2"
-                          : xFactor.type === 3
-                          ? "xf-3"
-                          : xFactor.type === 4
-                          ? "xf-4"
-                          : "xf-1"
-                      }
-                      blur={!auth.currentUser}
-                    >
-                      {xFactor.detail}
-                    </BlurText>
-                  </View>
-                </View>
-              ))}
+        <Card style={styles.xFactorsCard}>
+          <View style={styles.xFactorsContent}>
+            {/* Header */}
+            <View style={styles.xFactorsHeader}>
+              <Text style={styles.xFactorsTitle}>{i18n.t("analysisXFactors")}</Text>
+              <Text style={styles.xFactorsInfo}>ⓘ</Text>
             </View>
-          )}
-        </View>
+
+            {/* X-Factors List */}
+            {analysisResult?.xFactors.map((xFactor, index) => (
+              <View key={index} style={[styles.xFactorItem, index === (analysisResult.xFactors.length - 1) && styles.xFactorItemLast]}>
+                <View style={styles.iconContainer}>
+                  <Image
+                    source={
+                      xFactor.type === 1
+                        ? require("../assets/images/icons/shield.svg") // Health & Availability
+                        : xFactor.type === 2
+                        ? require("../assets/images/icons/geo-tag.svg") // Location & Weather
+                        : xFactor.type === 3
+                        ? require("../assets/images/icons/whistle.svg") // Officiating & Rules
+                        : xFactor.type === 4
+                        ? require("../assets/images/icons/plane.svg") // Travel & Fatigue
+                        : require("../assets/images/icons/shield.svg") // Default
+                    }
+                    style={styles.xFactorIcon}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.xFactorTextContainer}>
+                  <Text style={styles.xFactorLabel}>
+                    {xFactor.type === 1
+                      ? "Health & Availability"
+                      : xFactor.type === 2
+                      ? "Location & Weather"
+                      : xFactor.type === 3
+                      ? "Officiating & Rules"
+                      : xFactor.type === 4
+                      ? "Travel & Fatigue"
+                      : xFactor.title}
+                  </Text>
+                  <BlurText
+                    card={
+                      xFactor.type === 1
+                        ? "xf-1"
+                        : xFactor.type === 2
+                        ? "xf-2"
+                        : xFactor.type === 3
+                        ? "xf-3"
+                        : xFactor.type === 4
+                        ? "xf-4"
+                        : "xf-1"
+                    }
+                    blur={!auth.currentUser}
+                  >
+                    {xFactor.detail}
+                  </BlurText>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Card>
 
         {/* AI Analysis Card */}
-        <View style={[styles.card, styles.aiAnalysisCard]}>
+        <Card style={styles.aiAnalysisCard}>
           <Pressable
             onPress={() => toggleCard("aiAnalysis")}
             style={[
@@ -1037,6 +990,7 @@ export default function AnalysisScreen() {
                     <Image
                       source={require("../assets/images/aa1.png")}
                       style={styles.snapshotIcon}
+                      contentFit="contain"
                     />
                   </View>
                   <View>
@@ -1072,7 +1026,8 @@ export default function AnalysisScreen() {
                     <Image
                       source={require("../assets/images/aa2.png")}
                       style={styles.snapshotIcon}
-                    />{" "}
+                      contentFit="contain"
+                    />
                   </View>
                   <View>
                     <Text style={styles.aiMetricLabel}>
@@ -1127,123 +1082,9 @@ export default function AnalysisScreen() {
               </View>
             </View>
           )}
-        </View>
+        </Card>
 
 
-        <View style={styles.debateContainer}>
-          {!isDemo && (
-            <>
-              <BorderButton
-                onPress={() => {
-                  // Pass full analysis data to chat screen
-                  router.push({
-                    pathname: "/chat",
-                    params: { analysisData: JSON.stringify(analysisResult) },
-                  });
-                }}
-                containerStyle={styles.floatingButton}
-                borderColor="#00C2E0"
-                backgroundColor="#00C2E020"
-                opacity={1}
-                borderWidth={1}
-              >
-                <Text style={styles.buttonText}>
-                  {i18n.t("analysisDebateWithAI")}
-                </Text>
-              </BorderButton>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to market intel with game data
-                    router.push({
-                      pathname: "/market-intel",
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nba", // Use actual sport from analysis
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || ""
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#FFD700"
-                  backgroundColor="#FFD70020"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Market Intelligence 📊
-                  </Text>
-                </BorderButton>
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to sport-specific team stats page
-                    const sportLower = (analysisResult?.sport || "").toLowerCase();
-                    const isSoccer = sportLower.startsWith("soccer");
-                    const teamStatsPath = isSoccer ? "/team-stats-soccer" : "/team-stats-nfl";
-
-                    router.push({
-                      pathname: teamStatsPath as any,
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nfl",
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || "",
-                        selectedTeam: "team1"
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#00FF41"
-                  backgroundColor="#00FF4120"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Team Stats 🏈
-                  </Text>
-                </BorderButton>
-              </View>
-
-              <View style={{ marginTop: 16 }}>
-                <BorderButton
-                  onPress={() => {
-                    // Navigate to sport-specific player stats page
-                    const sportLower = (analysisResult?.sport || "").toLowerCase();
-                    const isSoccer = sportLower.startsWith("soccer");
-                    const playerStatsPath = isSoccer ? "/player-stats-soccer" : "/player-stats-nfl";
-
-                    router.push({
-                      pathname: playerStatsPath as any,
-                      params: {
-                        team1: analysisResult?.teams?.home || "",
-                        team2: analysisResult?.teams?.away || "",
-                        sport: analysisResult?.sport || "nfl",
-                        team1Logo: analysisResult?.teams?.logos?.home || "",
-                        team2Logo: analysisResult?.teams?.logos?.away || ""
-                      }
-                    });
-                  }}
-                  containerStyle={styles.floatingButton}
-                  borderColor="#00D4FF"
-                  backgroundColor="#00D4FF20"
-                  opacity={1}
-                  borderWidth={1}
-                >
-                  <Text style={styles.buttonText}>
-                    Player Stats 👤
-                  </Text>
-                </BorderButton>
-              </View>
-            </>
-          )}
-        </View>
         {isDemo && (
           <View style={styles.demoDebateContainer}>
             <BorderButton
@@ -1271,7 +1112,7 @@ export default function AnalysisScreen() {
 
   return (
     <ScreenBackground hideBg>
-      <TopBar />
+      <TopBar onBackPress={() => router.replace("/")} />
 
       <View style={styles.container}>
         <ScrollView
@@ -1295,6 +1136,7 @@ export default function AnalysisScreen() {
               sport: analysisResult?.sport,
               team1Logo: analysisResult?.teams?.logos?.home,
               team2Logo: analysisResult?.teams?.logos?.away,
+              analysisId: currentAnalysisId || undefined,
             }}
           />
         )}
@@ -1361,7 +1203,7 @@ const styles = StyleSheet.create({
     height: 300,
     aspectRatio: 1,
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: 0,
     borderRadius: 35,
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -1399,6 +1241,9 @@ const styles = StyleSheet.create({
     borderWidth: 0.3,
     borderColor: "#888888",
     overflow: "hidden",
+  },
+  firstShimmerGroup: {
+    marginTop: 18,
   },
   gradientContainer: {
     width: "100%",
@@ -1551,57 +1396,62 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Regular",
   },
   xFactorsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    marginTop: 16,
+  },
+  xFactorsContent: {
+    paddingVertical: 22,
+    paddingHorizontal: 0,
   },
   xFactorsHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 31.91,
+    marginBottom: 20,
   },
   xFactorsTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
     fontFamily: "Aeonik-Medium",
+    fontSize: 20.15,
+    color: "#FFFFFF",
   },
-  xFactorsContent: {
-    gap: 20,
-    marginTop: 20,
+  xFactorsInfo: {
+    fontFamily: "Aeonik-Medium",
+    fontSize: 16.79,
+    color: "#00C2E0",
   },
-  xFactorRow: {
+  xFactorItem: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20.15,
+    marginBottom: 16,
   },
-  xFactorIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 12,
+  xFactorItemLast: {
+    marginBottom: 0,
+  },
+  iconContainer: {
+    width: 45.11,
+    height: 44.17,
+    borderRadius: 12.62,
+    backgroundColor: "#161616",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+  },
+  xFactorIcon: {
+    width: 24,
+    height: 24,
   },
   xFactorTextContainer: {
     flex: 1,
+    gap: 4,
   },
   xFactorLabel: {
-    color: "rgba(255, 255, 255, 0.8)",
-
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 8,
-  },
-  xFactorValue: {
+    fontFamily: "Aeonik-Light",
+    fontSize: 11.42,
     color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    lineHeight: 22,
   },
   aiAnalysisCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
+    marginTop: 16,
     padding: 20,
   },
   aiAnalysisHeader: {
@@ -1676,11 +1526,9 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   keyInsightsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
     padding: 20,
     paddingVertical: 25,
-    marginTop: 20,
+    marginTop: 16,
   },
   keyInsightsTitle: {
     color: "#FFFFFF",
@@ -1689,6 +1537,42 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 14,
     fontFamily: "Aeonik-Medium",
+  },
+  matchSnapshotRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginTop: 16,
+    marginBottom: 0,
+  },
+  teamSnapshotCard: {
+    flex: 1,
+    minHeight: 180,
+    padding: 16,
+  },
+  teamHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  teamLogo: {
+    width: 36,
+    height: 36,
+  },
+  teamName: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Aeonik-Medium",
+  },
+  teamContent: {
+    gap: 8,
+  },
+  teamSectionLabel: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 12,
+    fontFamily: "Aeonik-Regular",
+    marginBottom: 2,
   },
 
   metricBox: {
@@ -1844,8 +1728,8 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   kIcon: {
-    width: 26,
-    height: 26,
+    width: 36,
+    height: 36,
     resizeMode: "contain",
   },
   unlockText: {

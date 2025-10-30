@@ -46,7 +46,11 @@ export default function RootLayout() {
   return (
     <PostHogProvider
       apiKey="phc_poDQ9VIIhfP0rbYLiovSrktgSKjtMN6Z2GxSNX0Pj1o"
-      autocapture
+      autocapture={{
+        captureLifecycleEvents: true,
+        captureTouches: false,
+        captureScreens: false,
+      }}
       options={{
         host: "https://eu.i.posthog.com",
         sendFeatureFlagEvent: true,
