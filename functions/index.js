@@ -444,16 +444,17 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
 
             // Add lightweight data for chatbot context (~4k chars total)
             jsonResponse.marketIntelligence = marketIntelligence;  // ~2 chars (null) or small
-            jsonResponse.teamStats = teamStats;  // ~2k chars - reasonable
 
             // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
             // First enhance teamStats with game data to add pointsPerGame fields
             const enhancedTeamStats = enhanceTeamStatsWithGameData(teamStats, gameData);
+            jsonResponse.teamStats = enhancedTeamStats;  // Use ENHANCED version with pointsPerGame/opponentPointsPerGame
             jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
               marketIntelligence,
               enhancedTeamStats,
               jsonResponse.teams?.home || team1,
-              jsonResponse.teams?.away || team2
+              jsonResponse.teams?.away || team2,
+              sport
             );
 
             // NOTE: We do NOT include playerStats here because it's massive (55k+ chars).
@@ -3096,7 +3097,8 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
         },
         enhanceTeamStatsWithGameData(teamStats, gameData),
         team1,
-        team2
+        team2,
+        sport
       ),
       // Metadata (same as analyzeImage)
       timestamp: new Date().toISOString(),
@@ -5489,7 +5491,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
         sharpConsensus: { moneyline: { home: null, away: null, draw: null } },
         fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
         vigAnalysis: {
-          moneyline: { sharp: null, market: null },
+          moneyline: { sharp: null, market: null, sharpHome: null, sharpDraw: null, sharpAway: null, marketHome: null, marketDraw: null, marketAway: null },
           spread: { sharp: null, market: null },
           total: { sharp: null, market: null }
         },
@@ -5555,7 +5557,26 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
     const allDrawOdds = drawOdds.map(o => o.odds);
     const allAwayOdds = awayOdds.map(o => o.odds);
 
-    // Market vig (average across all books)
+    // Calculate individual vig per outcome (comparing average book odds to fair value)
+    const avgHomeOdds = allHomeOdds.length > 0 ? allHomeOdds.reduce((a, b) => a + b, 0) / allHomeOdds.length : null;
+    const avgDrawOdds = allDrawOdds.length > 0 ? allDrawOdds.reduce((a, b) => a + b, 0) / allDrawOdds.length : null;
+    const avgAwayOdds = allAwayOdds.length > 0 ? allAwayOdds.reduce((a, b) => a + b, 0) / allAwayOdds.length : null;
+
+    // Calculate vig for each outcome (Market books)
+    const marketVigHome = fairHome && avgHomeOdds ? validateVig(((1 / avgHomeOdds) - (1 / fairHome)) / (1 / fairHome) * 100) : null;
+    const marketVigDraw = fairDraw && avgDrawOdds ? validateVig(((1 / avgDrawOdds) - (1 / fairDraw)) / (1 / fairDraw) * 100) : null;
+    const marketVigAway = fairAway && avgAwayOdds ? validateVig(((1 / avgAwayOdds) - (1 / fairAway)) / (1 / fairAway) * 100) : null;
+
+    // Calculate vig for each outcome (Sharp books)
+    const sharpAvgHome = sharpHomeOdds.length > 0 ? sharpHomeOdds.reduce((a, b) => a + b, 0) / sharpHomeOdds.length : null;
+    const sharpAvgDraw = sharpDrawOdds.length > 0 ? sharpDrawOdds.reduce((a, b) => a + b, 0) / sharpDrawOdds.length : null;
+    const sharpAvgAway = sharpAwayOdds.length > 0 ? sharpAwayOdds.reduce((a, b) => a + b, 0) / sharpAwayOdds.length : null;
+
+    const sharpVigHome = fairHome && sharpAvgHome ? validateVig(((1 / sharpAvgHome) - (1 / fairHome)) / (1 / fairHome) * 100) : null;
+    const sharpVigDraw = fairDraw && sharpAvgDraw ? validateVig(((1 / sharpAvgDraw) - (1 / fairDraw)) / (1 / fairDraw) * 100) : null;
+    const sharpVigAway = fairAway && sharpAvgAway ? validateVig(((1 / sharpAvgAway) - (1 / fairAway)) / (1 / fairAway) * 100) : null;
+
+    // Overall market vig (for backwards compatibility)
     let marketVig = null;
     if (allHomeOdds.length > 0) {
       const avgVigs = [];
@@ -5568,7 +5589,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       marketVig = avgVigs.length > 0 ? parseFloat((avgVigs.reduce((a, b) => a + b, 0) / avgVigs.length).toFixed(1)) : null;
     }
 
-    // Sharp vig (from sharp books only)
+    // Overall sharp vig (for backwards compatibility)
     let sharpVig = null;
     if (sharpConsensusHome && sharpConsensusDraw && sharpConsensusAway) {
       sharpVig = parseFloat(calculateMarketVig(sharpConsensusHome, sharpConsensusAway, sharpConsensusDraw).toFixed(1));
@@ -5759,7 +5780,14 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       vigAnalysis: {
         moneyline: {
           sharp: validateVig(sharpVig),
-          market: validateVig(marketVig)
+          market: validateVig(marketVig),
+          // Individual vig per outcome for UI display
+          sharpHome: sharpVigHome,
+          sharpDraw: sharpVigDraw,
+          sharpAway: sharpVigAway,
+          marketHome: marketVigHome,
+          marketDraw: marketVigDraw,
+          marketAway: marketVigAway
         },
         spread: { sharp: null, market: null },
         total: { sharp: null, market: null }
@@ -5776,7 +5804,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       sharpConsensus: { moneyline: { home: null, draw: null, away: null } },
       fairValue: { moneyline: { fairHome: null, fairDraw: null, fairAway: null, fairHomeFractional: null, fairDrawFractional: null, fairAwayFractional: null } },
       vigAnalysis: {
-        moneyline: { sharp: null, market: null },
+        moneyline: { sharp: null, market: null, sharpHome: null, sharpDraw: null, sharpAway: null, marketHome: null, marketDraw: null, marketAway: null },
         spread: { sharp: null, market: null },
         total: { sharp: null, market: null }
       },
@@ -5976,12 +6004,13 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
     console.log(`Market Favorite: ${favoriteTeam} (${favoriteIsHome ? 'Home' : 'Away'})`);
 
-    // Find best ML line for the favorite
-    const mlLines = Array.isArray(bestLinesArray) ?
-      bestLinesArray.filter(line => line?.type === "moneyline") : [];
 
-    console.log(`Found ${mlLines.length} ML lines in bestLines`);
-    console.log('ML lines:', JSON.stringify(mlLines, null, 2));
+    // Find best ML line for the favorite (support both moneyline and soccer_win types)
+    const mlLines = Array.isArray(bestLinesArray) ?
+      bestLinesArray.filter(line => line?.type === "moneyline" || line?.type === "soccer_win") : [];
+
+    console.log(`Found ${mlLines.length} ML/Win lines in bestLines`);
+    console.log('ML/Win lines:', JSON.stringify(mlLines, null, 2));
 
     if (mlLines.length > 0) {
       // Find the line for the market favorite
@@ -5996,8 +6025,11 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
         const bookmakerShort = getBookmakerShortName(favoriteLine.bookmaker);
         const teamLabel = favoriteIsHome ? "Home" : "Away";
 
+        // For soccer, show fractional odds; for other sports show ML
+        const oddsDisplay = favoriteLine.fractionalOdds ? favoriteLine.fractionalOdds : "";
+
         return {
-          display: `${teamLabel} ML at ${bookmakerShort}`,
+          display: favoriteLine.type === "soccer_win" ? `${oddsDisplay} at ${bookmakerShort}` : `${teamLabel} ML at ${bookmakerShort}`,
           label: "Best Value"
         };
       }
@@ -6041,24 +6073,20 @@ function getBookmakerShortName(bookmaker) {
 
 // Calculate Offensive Edge - Scoring power differential
 // Output format: "+7.2 PPG" for UI display (positive = team1 advantage)
-function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
+// For soccer: "+1.2 GPG" (Goals Per Game)
+function calculateOffensiveEdge(teamStats, homeTeam, awayTeam, sport = 'nfl') {
   try {
     console.log('=== OFFENSIVE EDGE DEBUG ===');
-    console.log('teamStats structure:', JSON.stringify({
-      team1: {
-        hasStats: !!teamStats?.team1?.stats,
-        hasCalculated: !!teamStats?.team1?.stats?.calculated,
-        ppg: teamStats?.team1?.stats?.calculated?.pointsPerGame
-      },
-      team2: {
-        hasStats: !!teamStats?.team2?.stats,
-        hasCalculated: !!teamStats?.team2?.stats?.calculated,
-        ppg: teamStats?.team2?.stats?.calculated?.pointsPerGame
-      }
-    }, null, 2));
+    console.log('Sport:', sport);
+    console.log('teamStats.team1.stats keys:', teamStats?.team1?.stats ? Object.keys(teamStats.team1.stats) : 'no stats');
+    console.log('teamStats.team1.stats.goals:', JSON.stringify(teamStats?.team1?.stats?.goals, null, 2));
+    console.log('teamStats.team1.stats.calculated:', JSON.stringify(teamStats?.team1?.stats?.calculated, null, 2));
 
-    const team1PPG = teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
-    const team2PPG = teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
+    // For soccer, check goals.for.average.total first, then fallback to calculated.pointsPerGame (NFL/NBA)
+    const team1PPG = teamStats?.team1?.stats?.goals?.for?.average?.total ||
+                     teamStats?.team1?.stats?.calculated?.pointsPerGame || 0;
+    const team2PPG = teamStats?.team2?.stats?.goals?.for?.average?.total ||
+                     teamStats?.team2?.stats?.calculated?.pointsPerGame || 0;
 
     console.log(`Team1 PPG: ${team1PPG}, Team2 PPG: ${team2PPG}`);
 
@@ -6068,8 +6096,11 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
+    // Use GPG for soccer, PPG for other sports
+    const unit = sport?.includes('soccer') ? 'GPG' : 'PPG';
+
     const result = {
-      display: `${sign}${roundedDiff} PPG`,
+      display: `${sign}${roundedDiff} ${unit}`,
       label: "Offensive Edge"
     };
 
@@ -6085,24 +6116,32 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam) {
 
 // Calculate Defensive Edge - Points allowed differential
 // Output format: "-3.7 PPG" for UI display (negative = team1 has better defense)
-function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
+// For soccer: "-0.8 GPG" (Goals Per Game allowed)
+function calculateDefensiveEdge(teamStats, homeTeam, awayTeam, sport = 'nfl') {
   try {
     console.log('=== DEFENSIVE EDGE DEBUG ===');
-    const team1OppPPG = teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
-    const team2OppPPG = teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
+    console.log('Sport:', sport);
+    // For soccer, check goals.against.average.total first, then fallback to calculated.opponentPointsPerGame (NFL/NBA)
+    const team1OppPPG = teamStats?.team1?.stats?.goals?.against?.average?.total ||
+                        teamStats?.team1?.stats?.calculated?.opponentPointsPerGame || 0;
+    const team2OppPPG = teamStats?.team2?.stats?.goals?.against?.average?.total ||
+                        teamStats?.team2?.stats?.calculated?.opponentPointsPerGame || 0;
 
     console.log(`Team1 Opp PPG: ${team1OppPPG}, Team2 Opp PPG: ${team2OppPPG}`);
 
-    // Lower is better for defense, so reverse the logic
-    // Positive differential = team1 has better defense (allows fewer points)
-    const differential = team2OppPPG - team1OppPPG;
+    // Lower is better for defense, so flip to show "fewer goals/points allowed"
+    // Negative value = team1 allows fewer = better defense
+    const differential = team1OppPPG - team2OppPPG;
     const roundedDiff = Math.round(differential * 10) / 10;
 
     // Format with + or - sign
     const sign = roundedDiff > 0 ? "+" : "";
 
+    // Use "GA" (Goals Against) for soccer, "PA" (Points Against) for other sports
+    const unit = sport?.includes('soccer') ? 'GA' : 'PA';
+
     const result = {
-      display: `${sign}${roundedDiff} PPG`,
+      display: `${sign}${roundedDiff} ${unit}`,
       label: "Defensive Edge"
     };
 
@@ -6117,8 +6156,9 @@ function calculateDefensiveEdge(teamStats, homeTeam, awayTeam) {
 }
 
 // Master function to calculate all new Key Insights
-function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam) {
+function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTeam, sport = 'nfl') {
   console.log('=== CALCULATE KEY INSIGHTS NEW ===');
+  console.log('Sport:', sport);
   console.log('Home Team:', homeTeam);
   console.log('Away Team:', awayTeam);
   console.log('Has teamStats:', !!teamStats);
@@ -6127,8 +6167,8 @@ function calculateKeyInsightsNew(marketIntelligence, teamStats, homeTeam, awayTe
   const result = {
     marketConsensus: calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam),
     bestValue: findBestValue(marketIntelligence, homeTeam, awayTeam),
-    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam),
-    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam)
+    offensiveEdge: calculateOffensiveEdge(teamStats, homeTeam, awayTeam, sport),
+    defensiveEdge: calculateDefensiveEdge(teamStats, homeTeam, awayTeam, sport)
   };
 
   console.log('Final Key Insights Result:', JSON.stringify(result, null, 2));
@@ -6157,8 +6197,13 @@ function enhanceTeamStatsWithGameData(teamStats, gameData) {
       if (game.teams?.home?.id === parseInt(teamId)) {
         // Team is home
         isHome = true;
-        // NFL/Soccer structure: scores.home.total / scores.away.total
-        if (game.scores?.home?.total !== undefined) {
+        // Soccer structure: score.fulltime.home / score.fulltime.away
+        if (game.score?.fulltime?.home !== undefined) {
+          teamScore = game.score.fulltime.home || 0;
+          oppScore = game.score.fulltime.away || 0;
+        }
+        // NFL structure: scores.home.total / scores.away.total
+        else if (game.scores?.home?.total !== undefined) {
           teamScore = game.scores.home.total || 0;
           oppScore = game.scores.away.total || 0;
         }
@@ -6170,8 +6215,13 @@ function enhanceTeamStatsWithGameData(teamStats, gameData) {
       } else if (game.teams?.away?.id === parseInt(teamId) || game.teams?.visitors?.id === parseInt(teamId)) {
         // Team is away/visitor
         isHome = false;
-        // NFL/Soccer structure
-        if (game.scores?.away?.total !== undefined) {
+        // Soccer structure: score.fulltime.away / score.fulltime.home
+        if (game.score?.fulltime?.away !== undefined) {
+          teamScore = game.score.fulltime.away || 0;
+          oppScore = game.score.fulltime.home || 0;
+        }
+        // NFL structure
+        else if (game.scores?.away?.total !== undefined) {
           teamScore = game.scores.away.total || 0;
           oppScore = game.scores.home.total || 0;
         }

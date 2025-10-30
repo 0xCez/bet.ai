@@ -884,89 +884,177 @@ export default function MarketIntelNew() {
             </View>
 
             {marketResult?.marketIntelligence?.vigAnalysis ? (
-              <View style={styles.consensusTable}>
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                  <View style={styles.teamColumn} />
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+              params.sport?.includes('soccer') ? (
+                // SOCCER: Home Win / Draw / Away Win columns
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Draw</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                    </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
-                  </View>
-                </View>
 
-                {/* Sharp Books Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Text style={styles.teamName}>{i18n.t("marketIntelSharpBooks")} 🎯</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.spread?.sharp ?
-                          `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` :
-                          "3.1%"}
-                      </Text>
+                  {/* Sharp Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelSharpBooks")} 🎯</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpHome ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpHome.toFixed(1)}%` :
+                            "5.2%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpDraw ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpDraw.toFixed(1)}%` :
+                            "5.8%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharpAway ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharpAway.toFixed(1)}%` :
+                            "5.5%"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharp ?
-                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` :
-                          "3.1%"}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.total?.sharp ?
-                          `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` :
-                          "3.7%"}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
 
-                {/* All books Row */}
-                <View style={styles.tableRow}>
-                  <View style={styles.teamColumn}>
-                    <Text style={styles.teamName}>{i18n.t("marketIntelAllBooks")} 👥</Text>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.spread?.market ?
-                          `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` :
-                          "4.5%"}
-                      </Text>
+                  {/* All Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelAllBooks")} 👥</Text>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.moneyline?.market ?
-                          `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` :
-                          "4.1%"}
-                      </Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketHome ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketHome.toFixed(1)}%` :
+                            "6.4%"}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.dataColumn}>
-                    <View style={styles.dataCell}>
-                      <Text style={styles.dataValue}>
-                        {marketResult.marketIntelligence.vigAnalysis.total?.market ?
-                          `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` :
-                          "4.6%"}
-                      </Text>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketDraw ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketDraw.toFixed(1)}%` :
+                            "7.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.marketAway ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.marketAway.toFixed(1)}%` :
+                            "6.8%"}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
-              </View>
+              ) : (
+                // NFL/NBA: Spread / Moneyline / Total columns
+                <View style={styles.consensusTable}>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <View style={styles.teamColumn} />
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelSpread")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelMoneyline")}</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelTotal")}</Text>
+                    </View>
+                  </View>
+
+                  {/* Sharp Books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelSharpBooks")} 🎯</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.spread?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.spread.sharp.toFixed(1)}%` :
+                            "3.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.sharp.toFixed(1)}%` :
+                            "3.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.total?.sharp ?
+                            `${marketResult.marketIntelligence.vigAnalysis.total.sharp.toFixed(1)}%` :
+                            "3.7%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* All books Row */}
+                  <View style={styles.tableRow}>
+                    <View style={styles.teamColumn}>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelAllBooks")} 👥</Text>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.spread?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.spread.market.toFixed(1)}%` :
+                            "4.5%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.moneyline?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.moneyline.market.toFixed(1)}%` :
+                            "4.1%"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.dataColumn}>
+                      <View style={styles.dataCell}>
+                        <Text style={styles.dataValue}>
+                          {marketResult.marketIntelligence.vigAnalysis.total?.market ?
+                            `${marketResult.marketIntelligence.vigAnalysis.total.market.toFixed(1)}%` :
+                            "4.6%"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateText}>No vig analysis data available</Text>
@@ -1183,7 +1271,7 @@ export default function MarketIntelNew() {
               <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
             </Pressable>
           </Animated.View>
-          
+
           {/* Cooldown Message */}
           {cooldownMessage && (
             <Text style={styles.cooldownMessage}>{cooldownMessage}</Text>
