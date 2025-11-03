@@ -248,11 +248,11 @@ export default function AnalysisScreen() {
   );
   const [expandedCards, setExpandedCards] = useState(
     isSameAnalysis
-      ? cachedExpandedCards
+      ? { ...cachedExpandedCards, xFactors: true } // Ensure xFactors is always true initially
       : {
-          snapshot: isDemo ? false : false,
-          xFactors: isDemo ? false : false,
-          aiAnalysis: isDemo ? false : false,
+          snapshot: false,
+          xFactors: true,
+          aiAnalysis: false,
         }
   );
 
@@ -586,114 +586,167 @@ export default function AnalysisScreen() {
 
   const renderShimmer = () => (
     <View style={styles.shimmerContainer}>
+      {/* Image Container */}
       <View style={styles.imageContainer}>
-        {isDemo ? (
-          <Image
-            source={
-              i18n.locale.startsWith("fr")
-                ? require("../assets/images/demo_fr.png")
-                : i18n.locale.startsWith("es")
-                  ? require("../assets/images/demo_es.png")
-                  : require("../assets/images/demo_en.png")
-            }
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : displayImageUrl ? (
-          <Image
-            source={{ uri: displayImageUrl }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={styles.placeholderImage} />
-        )}
+        <ShimmerPlaceholder
+          style={styles.image}
+          shimmerColors={["#919191", "#767676", "#919191"]}
+        />
       </View>
 
-      {/* Content Shimmer Groups */}
-      <View style={[styles.shimmerGroup, styles.firstShimmerGroup]}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
+      {/* Key Insights Card Skeleton */}
+      <Card style={styles.keyInsightsCard}>
+        <ShimmerPlaceholder
+          style={styles.keyInsightsTitleShimmer}
+          shimmerColors={["#919191", "#767676", "#919191"]}
+        />
+
+        <View style={styles.gridContainer}>
+          {/* 4 Metric Items */}
+          {[1, 2, 3, 4].map((index) => (
+            <View key={index} style={styles.gridItem}>
+              <View style={styles.metricContent}>
+                <ShimmerPlaceholder
+                  style={styles.kIcon}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+                <View style={styles.metricTextContainer}>
+                  <ShimmerPlaceholder
+                    style={styles.metricValueShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                  <ShimmerPlaceholder
+                    style={styles.metricLabelShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* Match Snapshot Row Skeleton */}
+      <View style={styles.matchSnapshotRow}>
+        {/* Home Team Card */}
+        <Card style={styles.teamSnapshotCard}>
+          <View style={styles.teamHeader}>
+            <ShimmerPlaceholder
+              style={styles.teamLogo}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamNameShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+          <View style={styles.teamContent}>
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+        </Card>
+
+        {/* Away Team Card */}
+        <Card style={styles.teamSnapshotCard}>
+          <View style={styles.teamHeader}>
+            <ShimmerPlaceholder
+              style={styles.teamLogo}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamNameShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+          <View style={styles.teamContent}>
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+        </Card>
       </View>
 
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
+      {/* X-Factors Card Skeleton */}
+      <Card style={styles.xFactorsCard}>
+        <View style={styles.xFactorsContent}>
+          {/* Header */}
+          <View style={styles.xFactorsHeader}>
+            <ShimmerPlaceholder
+              style={styles.xFactorsTitleShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.xFactorsInfoShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
 
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
+          {/* X-Factors List */}
+          {[1, 2, 3].map((index) => (
+            <View key={index} style={[styles.xFactorItem, index === 3 && styles.xFactorItemLast]}>
+              <View style={styles.iconContainer}>
+                <ShimmerPlaceholder
+                  style={styles.xFactorIcon}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+              </View>
+              <View style={styles.xFactorTextContainer}>
+                <ShimmerPlaceholder
+                  style={styles.xFactorLabelShimmer}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+                <ShimmerPlaceholder
+                  style={styles.xFactorDetailShimmer}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* AI Analysis Card Skeleton */}
+      <Card style={styles.aiAnalysisCard}>
+        <View style={[styles.aiAnalysisHeader, styles.collapsedHeader]}>
           <ShimmerPlaceholder
-            style={styles.shimmerLine}
+            style={styles.aiAnalysisTitleShimmer}
             shimmerColors={["#919191", "#767676", "#919191"]}
           />
           <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
+            style={styles.aiChevronShimmer}
             shimmerColors={["#919191", "#767676", "#919191"]}
           />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
+        </View>
+      </Card>
     </View>
   );
 
@@ -807,7 +860,7 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={getTeamLogo(analysisResult.teams.home, analysisResult?.sport)}
+                  source={getTeamLogo(analysisResult?.teams?.home || "", analysisResult?.sport)}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
@@ -826,7 +879,7 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={getTeamLogo(analysisResult.teams.away, analysisResult?.sport)}
+                  source={getTeamLogo(analysisResult?.teams?.away || "", analysisResult?.sport)}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
@@ -859,14 +912,14 @@ export default function AnalysisScreen() {
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisRecentPerformances")}
               </Text>
-              <BlurText card="ms-1" blur={!auth.currentUser}>
+              <BlurText card="ms-1" blur={!auth.currentUser} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.recentPerformance.home}
               </BlurText>
 
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisMomentumIndicator")}
               </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser}>
+              <BlurText card="ms-3" blur={!auth.currentUser} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.momentum.home}
               </BlurText>
             </View>
@@ -886,14 +939,14 @@ export default function AnalysisScreen() {
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisRecentPerformances")}
               </Text>
-              <BlurText card="ms-2" blur={!auth.currentUser}>
+              <BlurText card="ms-2" blur={!auth.currentUser} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.recentPerformance.away}
               </BlurText>
 
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisMomentumIndicator")}
               </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser}>
+              <BlurText card="ms-3" blur={!auth.currentUser} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.momentum.away}
               </BlurText>
             </View>
@@ -902,65 +955,75 @@ export default function AnalysisScreen() {
 
         {/* X-Factors Card */}
         <Card style={styles.xFactorsCard}>
-          <View style={styles.xFactorsContent}>
-            {/* Header */}
-            <View style={styles.xFactorsHeader}>
-              <Text style={styles.xFactorsTitle}>{i18n.t("analysisXFactors")}</Text>
-              <Text style={styles.xFactorsInfo}>ⓘ</Text>
+          <Pressable
+            onPress={() => toggleCard("xFactors")}
+            style={[
+              styles.xFactorsHeader,
+              !expandedCards.xFactors && styles.collapsedHeader,
+            ]}
+          >
+            <Text style={styles.xFactorsTitle}>{i18n.t("analysisXFactors")}</Text>
+            <Feather
+              name={expandedCards.xFactors ? "chevron-up" : "chevron-down"}
+              size={30}
+              color="#FFFFFF"
+            />
+          </Pressable>
+          {expandedCards.xFactors && (
+            <View style={styles.xFactorsContent}>
+              {/* X-Factors List */}
+              {analysisResult?.xFactors.map((xFactor, index) => (
+                <View key={index} style={[styles.xFactorItem, index === (analysisResult.xFactors.length - 1) && styles.xFactorItemLast]}>
+                  <View style={styles.iconContainer}>
+                    <Image
+                      source={
+                        xFactor.type === 1
+                          ? require("../assets/images/icons/shield.svg") // Health & Availability
+                          : xFactor.type === 2
+                          ? require("../assets/images/icons/geo-tag.svg") // Location & Weather
+                          : xFactor.type === 3
+                          ? require("../assets/images/icons/whistle.svg") // Officiating & Rules
+                          : xFactor.type === 4
+                          ? require("../assets/images/icons/plane.svg") // Travel & Fatigue
+                          : require("../assets/images/icons/shield.svg") // Default
+                      }
+                      style={styles.xFactorIcon}
+                      contentFit="contain"
+                    />
+                  </View>
+                  <View style={styles.xFactorTextContainer}>
+                    <Text style={styles.xFactorLabel}>
+                      {xFactor.type === 1
+                        ? "Health & Availability"
+                        : xFactor.type === 2
+                        ? "Location & Weather"
+                        : xFactor.type === 3
+                        ? "Officiating & Rules"
+                        : xFactor.type === 4
+                        ? "Travel & Fatigue"
+                        : xFactor.title}
+                    </Text>
+                    <BlurText
+                      card={
+                        xFactor.type === 1
+                          ? "xf-1"
+                          : xFactor.type === 2
+                          ? "xf-2"
+                          : xFactor.type === 3
+                          ? "xf-3"
+                          : xFactor.type === 4
+                          ? "xf-4"
+                          : "xf-1"
+                      }
+                      blur={!auth.currentUser}
+                    >
+                      {xFactor.detail}
+                    </BlurText>
+                  </View>
+                </View>
+              ))}
             </View>
-
-            {/* X-Factors List */}
-            {analysisResult?.xFactors.map((xFactor, index) => (
-              <View key={index} style={[styles.xFactorItem, index === (analysisResult.xFactors.length - 1) && styles.xFactorItemLast]}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={
-                      xFactor.type === 1
-                        ? require("../assets/images/icons/shield.svg") // Health & Availability
-                        : xFactor.type === 2
-                        ? require("../assets/images/icons/geo-tag.svg") // Location & Weather
-                        : xFactor.type === 3
-                        ? require("../assets/images/icons/whistle.svg") // Officiating & Rules
-                        : xFactor.type === 4
-                        ? require("../assets/images/icons/plane.svg") // Travel & Fatigue
-                        : require("../assets/images/icons/shield.svg") // Default
-                    }
-                    style={styles.xFactorIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.xFactorTextContainer}>
-                  <Text style={styles.xFactorLabel}>
-                    {xFactor.type === 1
-                      ? "Health & Availability"
-                      : xFactor.type === 2
-                      ? "Location & Weather"
-                      : xFactor.type === 3
-                      ? "Officiating & Rules"
-                      : xFactor.type === 4
-                      ? "Travel & Fatigue"
-                      : xFactor.title}
-                  </Text>
-                  <BlurText
-                    card={
-                      xFactor.type === 1
-                        ? "xf-1"
-                        : xFactor.type === 2
-                        ? "xf-2"
-                        : xFactor.type === 3
-                        ? "xf-3"
-                        : xFactor.type === 4
-                        ? "xf-4"
-                        : "xf-1"
-                    }
-                    blur={!auth.currentUser}
-                  >
-                    {xFactor.detail}
-                  </BlurText>
-                </View>
-              </View>
-            ))}
-          </View>
+          )}
         </Card>
 
         {/* AI Analysis Card */}
@@ -1397,16 +1460,16 @@ const styles = StyleSheet.create({
   },
   xFactorsCard: {
     marginTop: 16,
+    padding: 20,
   },
   xFactorsContent: {
-    paddingVertical: 22,
+    paddingVertical: 2,
     paddingHorizontal: 0,
   },
   xFactorsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
     marginBottom: 20,
   },
   xFactorsTitle: {
@@ -1423,7 +1486,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 20.15,
     marginBottom: 16,
   },
   xFactorItemLast: {
@@ -1573,6 +1635,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Aeonik-Regular",
     marginBottom: 2,
+  },
+  teamSectionValue: {
+    color: "#FFFFFF",
+    fontSize: 11.2, // Reduced by 20% from 14px
+    fontFamily: "Aeonik-Regular",
+    lineHeight: 18.48, // Reduced by 20% from 23.1px (14 * 1.65)
   },
 
   metricBox: {
@@ -1752,5 +1820,73 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     minHeight: 80,
     justifyContent: "center",
+  },
+  // Shimmer Styles
+  keyInsightsTitleShimmer: {
+    height: 22,
+    borderRadius: 8,
+    marginBottom: 14,
+    width: "60%",
+    alignSelf: "center",
+  },
+  metricValueShimmer: {
+    height: 16,
+    borderRadius: 6,
+    width: "80%",
+    marginTop: 8,
+  },
+  metricLabelShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "70%",
+    marginTop: 4,
+  },
+  teamNameShimmer: {
+    height: 16,
+    borderRadius: 6,
+    width: "60%",
+    marginLeft: 12,
+  },
+  teamSectionLabelShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "70%",
+    marginBottom: 2,
+  },
+  teamSectionValueShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "90%",
+  },
+  xFactorsTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "50%",
+  },
+  xFactorsInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  xFactorLabelShimmer: {
+    height: 11,
+    borderRadius: 4,
+    width: "60%",
+  },
+  xFactorDetailShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "85%",
+    marginTop: 4,
+  },
+  aiAnalysisTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "40%",
+  },
+  aiChevronShimmer: {
+    height: 30,
+    width: 30,
+    borderRadius: 15,
   },
 });
