@@ -3,6 +3,7 @@ export const getNBATeamLogo = (teamName: string) => {
   const logoMap: { [key: string]: any } = {
     "Atlanta Hawks": require("../assets/images/team-logos/nba/atlanta_hawks.png"),
     "Boston Celtics": require("../assets/images/team-logos/nba/boston_celtics.png"),
+    "Brisbane Bullets": require("../assets/images/team-logos/nba/brisbane_bullets.png"),
     "Brooklyn Nets": require("../assets/images/team-logos/nba/brooklyn_nets.png"),
     "Charlotte Hornets": require("../assets/images/team-logos/nba/charlotte_hornets.png"),
     "Chicago Bulls": require("../assets/images/team-logos/nba/chicago_bulls.png"),
@@ -11,6 +12,7 @@ export const getNBATeamLogo = (teamName: string) => {
     "Denver Nuggets": require("../assets/images/team-logos/nba/denver_nuggets.png"),
     "Detroit Pistons": require("../assets/images/team-logos/nba/detroit_pistons.png"),
     "Golden State Warriors": require("../assets/images/team-logos/nba/golden_state_warriors.png"),
+    "Guangzhou Long-Lions": require("../assets/images/team-logos/nba/guangzhou_long_lions.png"),
     "Houston Rockets": require("../assets/images/team-logos/nba/houston_rockets.png"),
     "Indiana Pacers": require("../assets/images/team-logos/nba/indiana_pacers.png"),
     "LA Clippers": require("../assets/images/team-logos/nba/los_angeles_clippers.png"),

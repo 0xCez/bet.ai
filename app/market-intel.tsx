@@ -166,8 +166,9 @@ const formatOdds = (decimalOdds?: number): string => {
 const getTeamDisplayName = (teamName?: string): string => {
   if (!teamName) return "TEAM";
 
-  // Default: return last word (team nickname), capitalized
-  return (teamName.split(' ').pop() || teamName).toUpperCase();
+  // Default: return last word (team nickname), with first letter capitalized
+  const nickname = teamName.split(' ').pop() || teamName;
+  return nickname.charAt(0).toUpperCase() + nickname.slice(1).toLowerCase();
 };
 
 // Helper function to get team logo based on sport
@@ -369,26 +370,271 @@ export default function MarketIntelNew() {
 
   // Shimmer rendering
   const renderShimmer = () => (
-    <View style={styles.shimmerContainer}>
-      {[1, 2, 3, 4].map((_, index) => (
-        <View key={index} style={styles.shimmerGroup}>
-          <LinearGradient
-            colors={["#1A1A1A", "#363636"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradientContainer}
-          >
-            <ShimmerPlaceholder
-              style={styles.shimmerLine}
-              shimmerColors={["#919191", "#767676", "#919191"]}
-            />
-            <ShimmerPlaceholder
-              style={[styles.shimmerLine, { width: "100%" }]}
-              shimmerColors={["#919191", "#767676", "#919191"]}
-            />
-          </LinearGradient>
+    <View style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* Top Card - Market Intelligence Header */}
+      <Card style={styles.topCard}>
+        <View style={styles.marketHeader}>
+          <ShimmerPlaceholder
+            style={styles.marketTitleShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
         </View>
-      ))}
+      </Card>
+
+      {/* Best Lines Section */}
+      <Card style={styles.bestLinesCard}>
+        <View style={styles.bestLinesContent}>
+          {/* Header */}
+          <View style={styles.bestLinesHeader}>
+            <ShimmerPlaceholder
+              style={styles.bestLinesTitleShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.bestLinesInfoShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+
+          {/* Best Lines Items */}
+          <View style={styles.linesList}>
+            {[1, 2, 3, 4, 5, 6].map((index) => (
+              <View key={index} style={styles.lineItem}>
+                <ShimmerPlaceholder
+                  style={styles.bookmakerLogo}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+                <View style={styles.lineTextContainer}>
+                  <ShimmerPlaceholder
+                    style={styles.lineBigTextShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                  <ShimmerPlaceholder
+                    style={styles.lineSmallTextShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Card>
+
+      {/* Consensus Lines Section */}
+      <Card style={styles.consensusLinesCard}>
+        <View style={styles.consensusLinesContent}>
+          {/* Header */}
+          <View style={styles.consensusLinesHeader}>
+            <ShimmerPlaceholder
+              style={styles.consensusLinesTitleShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <ShimmerPlaceholder
+              style={styles.consensusLinesInfoShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+
+          {/* Consensus Table */}
+          <View style={styles.consensusTable}>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <View style={styles.teamColumn} />
+              {[1, 2, 3].map((index) => (
+                <View key={index} style={styles.dataColumn}>
+                  <ShimmerPlaceholder
+                    style={styles.columnHeaderTextShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                </View>
+              ))}
+            </View>
+
+            {/* Team Rows */}
+            {[1, 2].map((teamIndex) => (
+              <View key={teamIndex} style={styles.tableRow}>
+                <View style={styles.teamColumn}>
+                  <ShimmerPlaceholder
+                    style={styles.teamLogo}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                  <ShimmerPlaceholder
+                    style={styles.teamNameShimmer}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                </View>
+                {[1, 2, 3].map((colIndex) => (
+                  <View key={colIndex} style={styles.dataColumn}>
+                    <View style={styles.dataCell}>
+                      <ShimmerPlaceholder
+                        style={styles.dataValueShimmer}
+                        shimmerColors={["#919191", "#767676", "#919191"]}
+                      />
+                      {colIndex !== 3 && (
+                        <ShimmerPlaceholder
+                          style={styles.dataSecondaryShimmer}
+                          shimmerColors={["#919191", "#767676", "#919191"]}
+                        />
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        </View>
+      </Card>
+
+      {/* Public vs Sharp Meter Card */}
+      <Card style={styles.publicSharpCard}>
+        {/* Header */}
+        <View style={styles.publicSharpHeader}>
+          <ShimmerPlaceholder
+            style={styles.publicSharpTitleShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+          <ShimmerPlaceholder
+            style={styles.publicSharpInfoShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+        </View>
+
+        <View style={styles.publicSharpContent}>
+          {/* Left Side - Text Content */}
+          <View style={styles.publicSharpLeft}>
+            {[1, 2, 3].map((index) => (
+              <View key={index} style={[styles.publicSharpRow, index === 2 && styles.publicSharpRowBordered]}>
+                <ShimmerPlaceholder
+                  style={styles.publicSharpTextShimmer}
+                  shimmerColors={["#919191", "#767676", "#919191"]}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* Right Side - Gauge */}
+          <View style={styles.publicSharpRight}>
+            <ShimmerPlaceholder
+              style={styles.gaugeShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+          </View>
+        </View>
+      </Card>
+
+      {/* Market Efficiency Card */}
+      <Card style={styles.marketEfficiencyCard}>
+        {/* Header */}
+        <View style={styles.marketEfficiencyHeader}>
+          <ShimmerPlaceholder
+            style={styles.marketEfficiencyTitleShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+          <ShimmerPlaceholder
+            style={styles.marketEfficiencyInfoShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+        </View>
+
+        <View style={styles.marketEfficiencyContent}>
+          {/* Progress Bar */}
+          <View style={styles.progressBarContainer}>
+            <ShimmerPlaceholder
+              style={styles.progressBarShimmer}
+              shimmerColors={["#919191", "#767676", "#919191"]}
+            />
+            <View style={styles.progressBarLabels}>
+              <ShimmerPlaceholder
+                style={styles.progressBarLabelShimmer}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+              <ShimmerPlaceholder
+                style={styles.progressBarLabelShimmer}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+            </View>
+          </View>
+
+          {/* Description */}
+          <ShimmerPlaceholder
+            style={styles.marketEfficiencyDescriptionShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+        </View>
+      </Card>
+
+      {/* Odds Table Card */}
+      <Card style={styles.oddsTableCard}>
+        {/* Header */}
+        <View style={styles.oddsTableHeader}>
+          <ShimmerPlaceholder
+            style={styles.oddsTableTitleShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+          <ShimmerPlaceholder
+            style={styles.oddsTableInfoShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+        </View>
+
+        <View style={styles.oddsTableContainer}>
+          {/* Column Headers */}
+          <View style={styles.oddsTableHeaderRow}>
+            {[1, 2, 3].map((index) => (
+              <ShimmerPlaceholder
+                key={index}
+                style={[styles.oddsTableColumnHeaderShimmer, index === 3 && styles.oddsTableColumnHeaderCellLast]}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+            ))}
+          </View>
+
+          {/* Team Name */}
+          <ShimmerPlaceholder
+            style={styles.oddsTableTeamNameShimmer}
+            shimmerColors={["#919191", "#767676", "#919191"]}
+          />
+
+          {/* Bookmaker Rows */}
+          {[1, 2, 3].map((rowIndex) => (
+            <View key={rowIndex} style={styles.oddsTableRow}>
+              {[1, 2, 3].map((colIndex) => (
+                <View key={colIndex} style={[styles.oddsTableCell, colIndex === 3 && styles.oddsTableCellLast]}>
+                  <ShimmerPlaceholder
+                    style={styles.oddsTableLogo}
+                    shimmerColors={["#919191", "#767676", "#919191"]}
+                  />
+                  {colIndex === 1 ? (
+                    <ShimmerPlaceholder
+                      style={styles.oddsTableValueShimmer}
+                      shimmerColors={["#919191", "#767676", "#919191"]}
+                    />
+                  ) : (
+                    <View style={styles.oddsTableMultiValue}>
+                      <ShimmerPlaceholder
+                        style={styles.oddsTableValueShimmer}
+                        shimmerColors={["#919191", "#767676", "#919191"]}
+                      />
+                      <ShimmerPlaceholder
+                        style={styles.oddsTableValueShimmer}
+                        shimmerColors={["#919191", "#767676", "#919191"]}
+                      />
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* Get Fresh Odds Button */}
+      <View style={styles.buttonContainer}>
+        <ShimmerPlaceholder
+          style={styles.freshOddsButtonShimmer}
+          shimmerColors={["#919191", "#767676", "#919191"]}
+        />
+      </View>
     </View>
   );
 
@@ -1147,7 +1393,7 @@ export default function MarketIntelNew() {
                 {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
                   <View key={index} style={styles.lineItem}>
                     <Image
-                      source={getBookmakerLogo(opportunity.bookmaker)}
+                      source={opportunity.icon === "x" ? require("../assets/images/noevopps.png") : getBookmakerLogo(opportunity.bookmaker)}
                       style={styles.bookmakerLogo}
                       contentFit="contain"
                     />
@@ -1195,7 +1441,7 @@ export default function MarketIntelNew() {
 
   // Main render
   return (
-    <ScreenBackground>
+    <ScreenBackground hideBg>
       <TopBar showBack={false} />
       <Animated.View style={[styles.mainContainer, animatedStyle]}>
         {isLoading ? renderShimmer() : renderMarketContent()}
@@ -1317,7 +1563,7 @@ const styles = StyleSheet.create({
     color: "#00C2E0",
   },
   linesList: {
-    gap: 16,
+    gap: 36,
   },
   lineItem: {
     flexDirection: "row",
@@ -1658,5 +1904,147 @@ const styles = StyleSheet.create({
     color: "#888888",
     marginTop: 8,
     textAlign: "center",
+  },
+  // Shimmer Styles
+  marketTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "70%",
+  },
+  bestLinesTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "40%",
+  },
+  bestLinesInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  lineBigTextShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: "80%",
+  },
+  lineSmallTextShimmer: {
+    height: 14,
+    borderRadius: 5,
+    width: "60%",
+    marginTop: 4,
+  },
+  consensusLinesTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "50%",
+  },
+  consensusLinesInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  columnHeaderTextShimmer: {
+    height: 11,
+    borderRadius: 4,
+    width: "80%",
+  },
+  teamNameShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "60%",
+    marginTop: 12,
+  },
+  dataValueShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "60%",
+  },
+  dataSecondaryShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "40%",
+    marginTop: 2,
+    opacity: 0.5,
+  },
+  publicSharpTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "60%",
+  },
+  publicSharpInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  publicSharpTextShimmer: {
+    height: 12,
+    borderRadius: 5,
+    width: "90%",
+  },
+  gaugeShimmer: {
+    height: 120,
+    width: 120,
+    borderRadius: 60,
+  },
+  marketEfficiencyTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "50%",
+  },
+  marketEfficiencyInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  progressBarShimmer: {
+    height: 5,
+    borderRadius: 20,
+    width: "100%",
+  },
+  progressBarLabelShimmer: {
+    height: 10,
+    borderRadius: 4,
+    width: 30,
+  },
+  marketEfficiencyDescriptionShimmer: {
+    height: 12,
+    borderRadius: 5,
+    width: "85%",
+    marginTop: 12,
+  },
+  oddsTableTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "45%",
+  },
+  oddsTableInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  oddsTableColumnHeaderShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "90%",
+    marginVertical: 12,
+  },
+  oddsTableColumnHeaderCellLast: {
+    borderRightWidth: 0,
+  },
+  oddsTableTeamNameShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "30%",
+    marginVertical: 12,
+    marginHorizontal: 16,
+  },
+  oddsTableValueShimmer: {
+    height: 14,
+    borderRadius: 5,
+    width: "60%",
+  },
+  freshOddsButtonShimmer: {
+    height: 44,
+    borderRadius: 34,
+    width: 176,
   },
 });

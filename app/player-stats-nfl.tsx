@@ -506,47 +506,39 @@ export default function PlayerStatsNBANew() {
 
   // Shimmer rendering
   const renderShimmer = () => (
-    <View style={styles.shimmerContainer}>
-      {/* Header Shimmer */}
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
-
-      {/* Content Shimmer Groups */}
-      {[1, 2, 3].map((_, index) => (
-        <View key={index} style={styles.shimmerGroup}>
-          <LinearGradient
-            colors={["#1A1A1A", "#363636"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradientContainer}
-          >
-            <ShimmerPlaceholder
-              style={styles.shimmerLine}
-              shimmerColors={["#919191", "#767676", "#919191"]}
-            />
-            <ShimmerPlaceholder
-              style={[styles.shimmerLine, { width: "100%" }]}
-              shimmerColors={["#919191", "#767676", "#919191"]}
-            />
-          </LinearGradient>
-        </View>
-      ))}
+    <View style={styles.container}>
+      <TopBar showBack={false} />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {/* Team Selection Items */}
+        {[1, 2].map((index) => (
+          <Pressable key={index} style={styles.selectionItem}>
+            <LinearGradient
+              colors={["#0D0D0D", "#161616"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.selectionGradient}
+            >
+              <ShimmerPlaceholder
+                style={styles.selectionLogoShimmer}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+              <ShimmerPlaceholder
+                style={styles.selectionNameShimmer}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+              <ShimmerPlaceholder
+                style={styles.chevronIconShimmer}
+                shimmerColors={["#919191", "#767676", "#919191"]}
+              />
+            </LinearGradient>
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 
   return (
-    <ScreenBackground>
+    <ScreenBackground hideBg>
       <Animated.View style={[styles.mainContainer, animatedStyle]}>
         {isLoading ? renderShimmer() : renderContent()}
       </Animated.View>
@@ -793,5 +785,62 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Light",
     fontSize: 11.42,
     color: "#FFFFFF",
+  },
+  // Shimmer Styles
+  selectionLogoShimmer: {
+    width: 58.11,
+    height: 38.28,
+  },
+  selectionNameShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "60%",
+    marginLeft: 12,
+  },
+  chevronIconShimmer: {
+    width: 24,
+    height: 24,
+  },
+  statLabelShimmer: {
+    height: 13,
+    borderRadius: 5,
+    width: "70%",
+  },
+  statValueShimmer: {
+    height: 27,
+    borderRadius: 10,
+    width: "50%",
+  },
+  statDescriptionShimmer: {
+    height: 11,
+    borderRadius: 4,
+    width: "80%",
+    marginBottom: 4,
+  },
+  progressBarShimmer: {
+    height: 5,
+    borderRadius: 20,
+    width: "100%",
+  },
+  coreKPIsTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "50%",
+  },
+  coreKPIsInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  kpiValueShimmer: {
+    height: 20,
+    borderRadius: 6,
+    width: "60%",
+  },
+  kpiLabelShimmer: {
+    height: 11,
+    borderRadius: 4,
+    width: "70%",
+    marginTop: 4,
   },
 });

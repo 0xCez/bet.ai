@@ -160,7 +160,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
       <View style={styles.navContainer}>
         {tabs.map((tab) => {
           const isActive = tab.key === activeTab;
-          const color = isActive ? "#00DDFF" : "#ffffff";
+          const color = isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)";
 
           return (
             <Pressable
@@ -170,11 +170,11 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
               disabled={isTransitioning}
             >
               {tab.key === "expert" ? (
-                <BotIcon size={22} color={isActive ? "#00DDFF" : "#ffffff"} />
+                <BotIcon size={22} color={isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)"} />
               ) : (
                 <Image
                   source={getIconSource(tab.key, isActive)}
-                  style={styles.tabIcon}
+                  style={[styles.tabIcon, !isActive && styles.inactiveIcon]}
                 />
               )}
               <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
@@ -223,6 +223,9 @@ const styles = StyleSheet.create({
     width: 22, // Reduced icon size for more compact design
     height: 22,
     marginBottom: 2, // Reduced margin for tighter spacing
+  },
+  inactiveIcon: {
+    opacity: 0.8,
   },
   tabLabel: {
     fontSize: 15, // Back to proper size
