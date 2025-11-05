@@ -43,9 +43,9 @@ import { useRevenueCatUser } from "./hooks/useRevenueCatUser";
 if (Platform.OS === "android") {
   // Configure Google Sign-In for Android
   GoogleSignin.configure({
-    // Uses the client ID with certificate_hash from google-services.json
+    // Uses the web client ID from google-services.json (Production: betai-f9176)
     webClientId:
-      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
+      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
     offlineAccess: true,
     forceCodeForRefreshToken: true,
   });
@@ -87,11 +87,11 @@ export default function LoginScreen() {
   // Use Expo Google auth for iOS only
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId:
-      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
+      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
     iosClientId:
-      "878948709969-3bk4r38njtiosh4gi22imdmbhn6km3p1.apps.googleusercontent.com",
+      "133991312998-nsjaob5e5do67f55pd1pf3at8t1en12b.apps.googleusercontent.com",
     webClientId:
-      "878948709969-hm8kosvqnvgefe4qiiso93gfntqu68sd.apps.googleusercontent.com",
+      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
   });
 
   const handleAuthSuccess = async (firebaseUser: any) => {
