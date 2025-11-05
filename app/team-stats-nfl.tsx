@@ -268,7 +268,7 @@ export default function TeamStatsNFLNew() {
 
     return (
       <View style={styles.container}>
-        <TopBar showBack={false} />
+        <TopBar onBackPress={() => router.replace("/")} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {teams.map((team) => (
           <Pressable
@@ -668,7 +668,7 @@ export default function TeamStatsNFLNew() {
   // Shimmer rendering
   const renderShimmer = () => (
     <View style={styles.container}>
-      <TopBar showBack={false} />
+      <TopBar onBackPress={() => router.replace("/")} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {/* Team Selection Items */}
         {[1, 2].map((index) => (

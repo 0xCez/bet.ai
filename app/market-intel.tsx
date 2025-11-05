@@ -1530,7 +1530,7 @@ export default function MarketIntelNew() {
   // Main render
   return (
     <ScreenBackground hideBg>
-      <TopBar showBack={false} />
+      <TopBar onBackPress={() => router.replace("/")} />
       <Animated.View style={[styles.mainContainer, animatedStyle]}>
         {isLoading ? renderShimmer() : renderMarketContent()}
       </Animated.View>

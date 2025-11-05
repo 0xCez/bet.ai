@@ -19,6 +19,9 @@ interface GradientButtonProps extends TouchableOpacityProps {
   borderRadius?: number;
   height?: number;
   colors?: ColorArray;
+  start?: { x: number; y: number };
+  end?: { x: number; y: number };
+  locations?: number[];
 }
 
 const DEFAULT_COLORS: ColorArray = ["#00A7CC", "#009EDB", "#01A7CC"];
@@ -30,8 +33,14 @@ export function GradientButton({
   borderRadius = 100,
   height = 55,
   colors = DEFAULT_COLORS,
+  start = { x: 0, y: 0 },
+  end = { x: 0, y: 1 },
+  locations,
   ...props
 }: GradientButtonProps) {
+  // Auto-generate locations if not provided, based on number of colors
+  const gradientLocations = locations || colors.map((_, index) => index / (colors.length - 1));
+
   return (
     <TouchableOpacity
       style={[styles.button, { borderRadius, height }, containerStyle]}
@@ -41,9 +50,9 @@ export function GradientButton({
       <LinearGradient
         colors={colors}
         style={styles.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        locations={[0.01, 0.45, 0.95]}
+        start={start}
+        end={end}
+        locations={gradientLocations}
       >
         <View style={styles.contentContainer}>
           {typeof children === "string" ? (

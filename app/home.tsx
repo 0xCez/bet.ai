@@ -184,7 +184,15 @@ export default function HomeScreen() {
   // }
 
   return (
-    <ScreenBackground hideBg={true}>
+    <ScreenBackground
+      hideBg={false}
+      backgroundImage={require("../assets/images/homepagebg.png")}
+      imageStyle={{
+        resizeMode: "cover",
+        height: "110%",
+        top: -20,
+      }}
+    >
       <View style={styles.container}>
         {/* Top Bar */}
         <View style={styles.topBar}>
@@ -216,52 +224,53 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Main Content */}
-        <View style={styles.content}>
-          <Image
-            source={require("../assets/images/welcome2.png")}
-            style={styles.centerImage}
-            resizeMode="contain"
-          />
-        </View>
 
         {/* Two Buttons Container */}
         <View style={styles.bottomContainer}>
           {/* Top Button - Scan a Bet */}
-          <GradientButton
-            onPress={() => {
-              if (!isSubscribed) {
-                router.push("/paywall");
-                return;
-              }
-              handleCameraPress();
-            }}
-            containerStyle={styles.scanButton}
-          >
-            <View style={styles.buttonContentRow}>
-              <Text style={styles.buttonText}>{i18n.t("imagePickerTakePhoto")} 🤳</Text>
-            </View>
-          </GradientButton>
+          <View style={styles.scanButtonShadowInner}>
+            <GradientButton
+              onPress={() => {
+                if (!isSubscribed) {
+                  router.push("/paywall");
+                  return;
+                }
+                handleCameraPress();
+              }}
+              containerStyle={styles.scanButton}
+              colors={["#00C2E0", "#007B90"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+            >
+              <View style={styles.buttonContentRow}>
+                <Text style={styles.buttonText}>{i18n.t("imagePickerTakePhoto")} 🤳</Text>
+              </View>
+            </GradientButton>
+          </View>
 
           {/* Bottom Button - Choose from Gallery */}
-          <BorderButton
-            onPress={() => {
-              if (!isSubscribed) {
-                router.push("/paywall");
-                return;
-              }
-              handleGalleryPress();
-            }}
-            containerStyle={styles.libraryButton}
-            borderColor="#00C2E0"
-            backgroundColor="#00C2E020"
-            opacity={1}
-            borderWidth={1}
-          >
-            <View style={styles.buttonContentRow}>
-              <Text style={styles.buttonText}>{i18n.t("imagePickerChooseFromLibrary")} 📚</Text>
-            </View>
-          </BorderButton>
+          <View style={styles.libraryButtonShadow}>
+            <BorderButton
+              onPress={() => {
+                if (!isSubscribed) {
+                  router.push("/paywall");
+                  return;
+                }
+                handleGalleryPress();
+              }}
+              containerStyle={styles.libraryButton}
+              borderColor="rgba(0, 221, 255, 0.25)"
+              gradientColors={["#161616", "#0D0D0D"]}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 0, y: 0 }}
+              opacity={1}
+              borderWidth={0.75}
+            >
+              <View style={styles.buttonContentRow}>
+                <Text style={styles.buttonText}>{i18n.t("imagePickerChooseFromLibrary")} 📚</Text>
+              </View>
+            </BorderButton>
+          </View>
         </View>
 
         <ImagePickerSheet
@@ -340,13 +349,32 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 20,
   },
+  scanButtonShadowInner: {
+    // Drop shadow 1: X: 0, Y: 4, Blur: 20, Spread: 0, Color: #00C2E0 at 25% opacity
+    shadowColor: "#00C2E0",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.20,
+    shadowRadius: 20,
+    borderRadius: 32,
+  },
   scanButton: {
-    height: 60,
-    borderRadius: 100,
+    height: 72,
+    borderRadius: 32,
+    overflow: "hidden", // Ensure gradient stays within bounds
+  },
+  libraryButtonShadow: {
+    // Drop shadow: X: 0, Y: 4, Blur: 16, Color: #00C2E0 at 18% opacity
+    shadowColor: "#00C2E0",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 4, // Android shadow
+    borderRadius: 32,
   },
   libraryButton: {
-    height: 60,
-    borderRadius: 100,
+    height: 72,
+    borderRadius: 32,
+    overflow: "hidden", // Ensure gradient stays within bounds
   },
   buttonContentRow: {
     flexDirection: "row",

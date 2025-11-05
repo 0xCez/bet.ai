@@ -35,7 +35,7 @@ export default {
     loginContinueWithGoogle: "Continuer avec Google",
     loginSigningIn: "Connexion en cours...",
     loginByContinuing: "En continuant, vous acceptez notre ",
-    loginPrivacyPolicy: "Politique de confidentialité",
+    loginPrivacyPolicy: "Confidentialité",
     loginTermsAndConditions: "Conditions d’utilisation",
 
     // Signup Screen
@@ -129,7 +129,7 @@ export default {
     paywallError: "Erreur",
     paywallErrorDesc: "Échec. Veuillez réessayer.",
     paywallRestorePurchase: "Restaurer un achat",
-    paywallPrivacyPolicy: "Politique de confidentialité",
+    paywallPrivacyPolicy: "Confidentialité",
     paywallTermsOfService: "Conditions d’utilisation",
     paywallLogin: "Connexion",
     paywallLogout: "Déconnexion",
@@ -144,7 +144,7 @@ export default {
     paywallTrialPerWeek: "par semaine",
     paywallTrialContinue: "Continuer",
     paywallTrialRestorePurchase: "Restaurer un achat",
-    paywallTrialPrivacyPolicy: "Politique de confidentialité",
+    paywallTrialPrivacyPolicy: "Confidentialité",
     paywallTrialTermsOfService: "Conditions d’utilisation",
 
     // Home Screen
@@ -186,7 +186,7 @@ export default {
 
     // Settings Bottom Sheet
     settingsContactUs: "Nous contacter",
-    settingsRestorePurchase: "Restaurer l’achat",
+    settingsRestorePurchase: "Restaurer un achat",
     settingsShare: "Partager",
     settingsLogout: "Déconnexion",
     settingsDeleteAccount: "Supprimer le compte",
