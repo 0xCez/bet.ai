@@ -22,6 +22,84 @@ admin.initializeApp();
 const db = admin.firestore();
 const CACHE_EXPIRY_TIME = 36 * 60 * 60 * 1000; // 36 hours in milliseconds
 
+// ====================================================================
+// TRANSLATION MAP FOR MARKET INTELLIGENCE OUTPUT
+// ====================================================================
+const phrases = {
+  en: {
+    marketEfficient: "Market efficiently priced",
+    noProfitable: "No profitable opportunities found",
+    lowestVigHomeWin: "Lowest Vig Home Win at",
+    lowestVigDraw: "Lowest Vig Draw at",
+    lowestVigAwayWin: "Lowest Vig Away Win at",
+    bestHomeWin: "Best Home to Win",
+    bestDraw: "Best Draw",
+    bestAwayWin: "Best Away to Win",
+    sharpsFade: "Sharps fade",
+    sharpsFavor: "Sharps favor",
+    noClearLean: "No clear sharp lean",
+    impliedEdge: "implied probability edge",
+    tightMarket: "Tight market",
+    marketUncertainty: "Market uncertainty",
+    sharpConfidence: "Sharp confidence",
+    pointEdge: "point edge",
+    sharp: "Sharp",
+    vsPublic: "vs public",
+    soccerMarketAnalysis: "Soccer market analysis",
+    soccerMarket3Way: "Soccer market • 3-way betting",
+    normal: "Normal"
+  },
+  fr: {
+    marketEfficient: "Marché efficacement évalué",
+    noProfitable: "Aucune opportunité rentable trouvée",
+    lowestVigHomeWin: "Vig le plus bas Domicile à",
+    lowestVigDraw: "Vig le plus bas Match Nul à",
+    lowestVigAwayWin: "Vig le plus bas Extérieur à",
+    bestHomeWin: "Meilleure Cote Domicile",
+    bestDraw: "Meilleur Match Nul",
+    bestAwayWin: "Meilleure Cote Extérieur",
+    sharpsFade: "Les pros évitent",
+    sharpsFavor: "Les pros favorisent",
+    noClearLean: "Pas de tendance claire",
+    impliedEdge: "avantage de probabilité implicite",
+    tightMarket: "Marché serré",
+    marketUncertainty: "Incertitude du marché",
+    sharpConfidence: "Confiance des pros",
+    pointEdge: "avantage de point",
+    sharp: "Pro",
+    vsPublic: "vs public",
+    soccerMarketAnalysis: "Analyse marché football",
+    soccerMarket3Way: "Marché football • 3 issues",
+    normal: "Normal"
+  },
+  es: {
+    marketEfficient: "Mercado eficientemente valorado",
+    noProfitable: "No se encontraron oportunidades rentables",
+    lowestVigHomeWin: "Vig más bajo Local en",
+    lowestVigDraw: "Vig más bajo Empate en",
+    lowestVigAwayWin: "Vig más bajo Visitante en",
+    bestHomeWin: "Mejor Cuota Local",
+    bestDraw: "Mejor Empate",
+    bestAwayWin: "Mejor Cuota Visitante",
+    sharpsFade: "Los expertos evitan",
+    sharpsFavor: "Los expertos favorecen",
+    noClearLean: "Sin tendencia clara",
+    impliedEdge: "ventaja de probabilidad implícita",
+    tightMarket: "Mercado ajustado",
+    marketUncertainty: "Incertidumbre del mercado",
+    sharpConfidence: "Confianza de expertos",
+    pointEdge: "ventaja de punto",
+    sharp: "Experto",
+    vsPublic: "vs público",
+    soccerMarketAnalysis: "Análisis mercado fútbol",
+    soccerMarket3Way: "Mercado fútbol • 3 resultados",
+    normal: "Normal"
+  }
+};
+
+// Simple translation helper
+const translate = (key, locale = 'en') => phrases[locale]?.[key] || phrases.en[key];
+
 /**
  * Converts JSON data to a more token-efficient markdown format
  * @param {Object} json - The JSON object to convert
@@ -449,8 +527,25 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             // First enhance teamStats with game data to add pointsPerGame fields
             const enhancedTeamStats = enhanceTeamStatsWithGameData(teamStats, gameData);
             jsonResponse.teamStats = enhancedTeamStats;  // Use ENHANCED version with pointsPerGame/opponentPointsPerGame
+
+            // If marketIntelligence has an error, retry with broader search for soccer
+            let finalMarketIntelligence = marketIntelligence;
+            if (marketIntelligence?.error && sport.toLowerCase().includes('soccer')) {
+              console.log('⚠️ Market Intelligence failed, retrying with broader soccer search...');
+              // Retry by trying multiple soccer leagues
+              const soccerLeagues = ['soccer_epl', 'soccer_efl_champ', 'soccer_spain_la_liga', 'soccer_germany_bundesliga', 'soccer_italy_serie_a'];
+              for (const league of soccerLeagues) {
+                const retryResult = await getMarketIntelligenceDataTest(league, team1, team2);
+                if (!retryResult.error) {
+                  console.log(`✅ Found event in ${league} on retry!`);
+                  finalMarketIntelligence = retryResult;
+                  break;
+                }
+              }
+            }
+
             jsonResponse.keyInsightsNew = calculateKeyInsightsNew(
-              marketIntelligence,
+              finalMarketIntelligence,
               enhancedTeamStats,
               jsonResponse.teams?.home || team1,
               jsonResponse.teams?.away || team2,
@@ -3029,7 +3124,10 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 
   try {
     console.log('📊 MARKET INTELLIGENCE FUNCTION CALLED');
-    const { sport, team1, team2, team1_code, team2_code } = req.body;
+    const { sport, team1, team2, team1_code, team2_code, locale } = req.body;
+
+    // Default to 'en' if locale not provided
+    const userLocale = locale || 'en';
 
     if (!sport || !team1 || !team2) {
       return res.status(400).json({
@@ -3054,7 +3152,7 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 
     // Test Market Intelligence, Team Stats, Player Stats, and Game Data
     const [marketIntelligence, teamStats, playerStats, gameData] = await Promise.all([
-      getMarketIntelligenceDataTest(sport_type_odds, team1, team2),
+      getMarketIntelligenceDataTest(sport_type_odds, team1, team2, userLocale),
       getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
       getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
       getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode) // Use normalized sport name
@@ -3073,15 +3171,17 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
       },
       // Market Intelligence data (same nesting level as keyInsights, matchSnapshot in analyzeImage)
       marketIntelligence: {
-        bestLines: marketIntelligence.bestLines,
-        sharpMeter: marketIntelligence.sharpMeter,
+        bestLines: marketIntelligence.bestLines || null,
+        sharpMeter: marketIntelligence.sharpMeter || null,
         // Handle both flattened (soccer) and nested (NFL) structures
-        vigAnalysis: marketIntelligence.vigAnalysis || marketIntelligence.evAnalysis?.vigAnalysis,
-        evOpportunities: marketIntelligence.evOpportunities || marketIntelligence.evAnalysis?.uiOpportunities,
-        fairValue: marketIntelligence.fairValue || marketIntelligence.evAnalysis?.fairValue,
-        sharpConsensus: marketIntelligence.sharpConsensus || marketIntelligence.evAnalysis?.sharpConsensus,
-        marketTightness: marketIntelligence.marketTightness,
-        oddsTable: marketIntelligence.oddsTable
+        vigAnalysis: marketIntelligence.vigAnalysis || marketIntelligence.evAnalysis?.vigAnalysis || null,
+        evOpportunities: marketIntelligence.evOpportunities || marketIntelligence.evAnalysis?.uiOpportunities || null,
+        fairValue: marketIntelligence.fairValue || marketIntelligence.evAnalysis?.fairValue || null,
+        sharpConsensus: marketIntelligence.sharpConsensus || marketIntelligence.evAnalysis?.sharpConsensus || null,
+        marketTightness: marketIntelligence.marketTightness || null,
+        oddsTable: marketIntelligence.oddsTable || null,
+        error: marketIntelligence.error || null,
+        availableEvents: marketIntelligence.availableEvents || null
       },
       // Team Stats data with calculated metrics from game data
       teamStats: enhanceTeamStatsWithGameData(teamStats, gameData),
@@ -3118,11 +3218,11 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 });
 
 // Market Intelligence Test Function - Route to sport-specific functions
-async function getMarketIntelligenceDataTest(sport, team1, team2) {
+async function getMarketIntelligenceDataTest(sport, team1, team2, locale = 'en') {
   try {
     // Route to sport-specific market intelligence functions
     if (sport.includes('soccer')) {
-      return await getSoccerMarketIntelligenceTest(sport, team1, team2);
+      return await getSoccerMarketIntelligenceTest(sport, team1, team2, locale);
     } else {
       // Use existing 2-way betting logic for NFL, NBA, MLB, etc.
       return await getTwoWayMarketIntelligenceTest(sport, team1, team2);
@@ -3209,7 +3309,7 @@ async function getTwoWayMarketIntelligenceTest(sport, team1, team2) {
 }
 
 // Soccer-specific market intelligence (3-way betting)
-async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
+async function getSoccerMarketIntelligenceTest(sport, team1, team2, locale = 'en') {
   try {
     const BASE_URL = `https://api.the-odds-api.com/v4/sports/${sport}`;
 
@@ -3223,6 +3323,12 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
 
     const event = events.find(e => fuzzyMatchTeam(e, team1, team2));
     if (!event) {
+      // If not found in current league, try Champions League
+      if (!sport.includes('uefa_champs_league')) {
+        console.log('Event not found in current league, trying Champions League...');
+        return await getSoccerMarketIntelligenceTest('soccer_uefa_champs_league', team1, team2, locale);
+      }
+
       return {
         error: "Soccer event not found",
         availableEvents: events.slice(0, 3).map(e => ({ home: e.home_team, away: e.away_team }))
@@ -3246,22 +3352,22 @@ async function getSoccerMarketIntelligenceTest(sport, team1, team2) {
     }
 
     // Use soccer-specific calculations
-    const bestLines = calculateSoccerBestLines(bookmakers, event);
-    const evAnalysis = calculateSoccerEVOpportunities(bookmakers, event);
+    const bestLines = calculateSoccerBestLines(bookmakers, event, locale);
+    const evAnalysis = calculateSoccerEVOpportunities(bookmakers, event, locale);
 
     console.log("Soccer EV Analysis Result:", JSON.stringify(evAnalysis, null, 2));
 
     const marketData = {
       bestLines,
-      sharpMeter: calculateSoccerSharpMeter(bookmakers, event),
+      sharpMeter: calculateSoccerSharpMeter(bookmakers, event, locale),
       // Flatten the EV analysis to match NFL structure
       ...evAnalysis,
       marketTightness: {
-        tightness: "Normal",
+        tightness: translate('normal', locale),
         pointRange: 0,
         priceRange: 0.2,
-        comment: "Soccer market analysis",
-        summary: "Normal • Soccer market • 3-way betting"
+        comment: translate('soccerMarketAnalysis', locale),
+        summary: `${translate('normal', locale)} • ${translate('soccerMarket3Way', locale)}`
       },
       oddsTable: formatSoccerOddsTable(bookmakers, event),
       rawBookmakerCount: bookmakers.length,
@@ -3915,8 +4021,9 @@ async function getTeamPlayerStatsTest(sport, teamId) {
         apiUrl = `https://v1.baseball.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
         break;
       case 'soccer':
-        // For soccer, we need league ID - using EPL as default for testing
-        apiUrl = `https://v3.football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+        // Dynamically determine the league based on team's country
+        const leagueId = getSoccerLeagueForTeam(teamId);
+        apiUrl = `https://v3.football.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}&league=${leagueId}`;
         break;
       default:
         return { players: [], error: `Player stats not supported for ${sport}` };
@@ -4035,6 +4142,45 @@ async function getTeamStatsDataTest(sport, team1Id, team2Id) {
   }
 }
 
+// Helper function to get the primary league ID for a soccer team based on country
+function getSoccerLeagueForTeam(teamId) {
+  try {
+    const soccerTeamsPath = path.join(__dirname, 'soccer_teams.json');
+    const soccerTeamsData = fs.readFileSync(soccerTeamsPath, 'utf8');
+    const soccerTeams = JSON.parse(soccerTeamsData);
+
+    const team = soccerTeams.find(t => t.id === parseInt(teamId));
+    if (!team) {
+      console.log(`Team ${teamId} not found in soccer_teams.json, defaulting to EPL (39)`);
+      return 39; // Default to EPL
+    }
+
+    // Map country to primary league ID
+    const leagueMap = {
+      'England': 39,      // Premier League
+      'Spain': 140,       // La Liga
+      'Germany': 78,      // Bundesliga
+      'Italy': 135,       // Serie A
+      'France': 61,       // Ligue 1
+      'Portugal': 94,     // Primeira Liga
+      'Netherlands': 88,  // Eredivisie
+      'Belgium': 144,     // Jupiler Pro League
+      'Turkey': 203,      // Super Lig
+      'Brazil': 71,       // Serie A (Brazil)
+      'Argentina': 128,   // Liga Profesional
+      'USA': 253,         // MLS
+      'Mexico': 262       // Liga MX
+    };
+
+    const leagueId = leagueMap[team.country] || 39;
+    console.log(`Team ${team.name} (${team.country}) → League ${leagueId}`);
+    return leagueId;
+  } catch (error) {
+    console.error('Error getting league for team:', error);
+    return 39; // Default to EPL on error
+  }
+}
+
 async function getSingleTeamStatsTest(sport, teamId) {
   try {
     const sportLower = sport.toLowerCase();
@@ -4055,8 +4201,9 @@ async function getSingleTeamStatsTest(sport, teamId) {
 
     // Handle Soccer (all variants: soccer, soccer_epl, soccer_uefa, etc.)
     if (sportLower.startsWith('soccer') || sportLower.includes('football')) {
-      // For soccer, we need league ID - using EPL as default
-      apiUrl = `https://v3.football.api-sports.io/teams/statistics?season=${currentSeason}&team=${teamId}&league=39`;
+      // Dynamically determine the league based on team's country
+      const leagueId = getSoccerLeagueForTeam(teamId);
+      apiUrl = `https://v3.football.api-sports.io/teams/statistics?season=${currentSeason}&team=${teamId}&league=${leagueId}`;
     } else if (sportLower === 'nba') {
       // Based on official API-Sports.io documentation - correct parameters
       apiUrl = `https://v2.nba.api-sports.io/teams/statistics?season=${currentSeason}&id=${teamId}`;
@@ -5126,7 +5273,7 @@ function formatOpportunitiesForUI(evOpportunities, arbitrageData, lowestVigBooks
 // ====================================================================
 
 // Soccer Sharp Meter - 3-Way Betting Analysis
-function calculateSoccerSharpMeter(bookmakers, event) {
+function calculateSoccerSharpMeter(bookmakers, event, locale = 'en') {
   const sharpBooks = ['pinnacle', 'betfair']; // Soccer sharp books
   const publicBooks = ['draftkings', 'fanduel', 'betmgm', 'williamhill_us', 'betrivers', 'bovada', 'betus', 'mybookieag'];
 
@@ -5214,29 +5361,29 @@ function calculateSoccerSharpMeter(bookmakers, event) {
   const vigGap = publicVig - sharpVig;
 
   // Generate Line 1: Primary Signal (which outcome sharps favor)
-  let line1 = "No clear sharp lean";
+  let line1 = translate('noClearLean', locale);
   if (Math.abs(biggestEdge.diff) > 0.5) {
     if (biggestEdge.diff > 0) {
       // Public overpricing this outcome = sharps getting better odds elsewhere
-      line1 = `Sharps fade ${biggestEdge.outcome}`;
+      line1 = `${translate('sharpsFade', locale)} ${biggestEdge.outcome}`;
     } else {
       // Sharps getting worse odds = they're driving the price down = they favor this outcome
-      line1 = `Sharps favor ${biggestEdge.outcome}`;
+      line1 = `${translate('sharpsFavor', locale)} ${biggestEdge.outcome}`;
     }
   }
 
   // Generate Line 2: Secondary Signal (vig confidence or probability edge)
   let line2 = "Limited data";
   if (Math.abs(biggestEdge.diff) > 0.5) {
-    line2 = `${Math.abs(biggestEdge.diff).toFixed(1)}% implied probability edge`;
+    line2 = `${Math.abs(biggestEdge.diff).toFixed(1)}% ${translate('impliedEdge', locale)}`;
   } else if (vigGap > 1.0) {
-    line2 = "Market uncertainty";
+    line2 = translate('marketUncertainty', locale);
   } else {
-    line2 = "Tight market";
+    line2 = translate('tightMarket', locale);
   }
 
   // Generate Line 3: Detail Line (show the actual odds comparison)
-  const line3 = `Sharp ${biggestEdge.outcome.toLowerCase()} ${biggestEdge.sharpOdds.toFixed(2)} vs public ${biggestEdge.publicOdds.toFixed(2)}`;
+  const line3 = `${translate('sharp', locale)} ${biggestEdge.outcome.toLowerCase()} ${biggestEdge.sharpOdds.toFixed(2)} ${translate('vsPublic', locale)} ${biggestEdge.publicOdds.toFixed(2)}`;
 
   // Calculate Gauge Value (0-100 scale)
   // 0 = Strong Home, 50 = Neutral/Draw, 100 = Strong Away
@@ -5345,7 +5492,7 @@ function decimalToFractional(decimal) {
   return `${numerator}/${denominator}`;
 }
 
-function calculateSoccerBestLines(bookmakers, event) {
+function calculateSoccerBestLines(bookmakers, event, locale = 'en') {
   const moneylines = { home: [], draw: [], away: [] };
 
   // Extract 3-way moneyline odds
@@ -5402,7 +5549,7 @@ function calculateSoccerBestLines(bookmakers, event) {
     bestLines: [
       bestHome && {
         type: "soccer_win",
-        label: "Best Home to Win",
+        label: translate('bestHomeWin', locale),
         odds: bestHome.odds,
         fractionalOdds: decimalToFractional(bestHome.odds),
         bookmaker: bestHome.bookmaker,
@@ -5410,7 +5557,7 @@ function calculateSoccerBestLines(bookmakers, event) {
       },
       bestDraw && {
         type: "soccer_draw",
-        label: "Best Draw",
+        label: translate('bestDraw', locale),
         odds: bestDraw.odds,
         fractionalOdds: decimalToFractional(bestDraw.odds),
         bookmaker: bestDraw.bookmaker,
@@ -5418,7 +5565,7 @@ function calculateSoccerBestLines(bookmakers, event) {
       },
       bestAway && {
         type: "soccer_win",
-        label: "Best Away to Win",
+        label: translate('bestAwayWin', locale),
         odds: bestAway.odds,
         fractionalOdds: decimalToFractional(bestAway.odds),
         bookmaker: bestAway.bookmaker,
@@ -5461,7 +5608,7 @@ function findLowestVigForOutcome(outcomeOdds, fairValue) {
   };
 }
 
-function calculateSoccerEVOpportunities(bookmakers, event) {
+function calculateSoccerEVOpportunities(bookmakers, event, locale = 'en') {
   try {
     // Extract 3-way moneyline odds (Home/Draw/Away)
     const homeOdds = [];
@@ -5704,8 +5851,8 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       // No EV+ or Arb - show efficient market message + lowest vig lines
       uiOpportunitiesArray.push({
         type: "efficient",
-        title: "Market efficiently priced",
-        description: "No profitable opportunities found",
+        title: translate('marketEfficient', locale),
+        description: translate('noProfitable', locale),
         icon: "x"
       });
 
@@ -5713,7 +5860,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       if (lowestVigHome) {
         uiOpportunitiesArray.push({
           type: "lowvig",
-          title: `Lowest Vig Home Win at ${lowestVigHome.vig}%`,
+          title: `${translate('lowestVigHomeWin', locale)} ${lowestVigHome.vig}%`,
           description: `${lowestVigHome.bookmaker} • ${lowestVigHome.fractionalOdds}`,
           icon: "dollar-sign",
           vig: lowestVigHome.vig,
@@ -5727,7 +5874,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       if (lowestVigDraw) {
         uiOpportunitiesArray.push({
           type: "lowvig",
-          title: `Lowest Vig Draw at ${lowestVigDraw.vig}%`,
+          title: `${translate('lowestVigDraw', locale)} ${lowestVigDraw.vig}%`,
           description: `${lowestVigDraw.bookmaker} • ${lowestVigDraw.fractionalOdds}`,
           icon: "dollar-sign",
           vig: lowestVigDraw.vig,
@@ -5741,7 +5888,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
       if (lowestVigAway) {
         uiOpportunitiesArray.push({
           type: "lowvig",
-          title: `Lowest Vig Away Win at ${lowestVigAway.vig}%`,
+          title: `${translate('lowestVigAwayWin', locale)} ${lowestVigAway.vig}%`,
           description: `${lowestVigAway.bookmaker} • ${lowestVigAway.fractionalOdds}`,
           icon: "dollar-sign",
           vig: lowestVigAway.vig,
@@ -5755,7 +5902,7 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
     const uiOpportunities = {
       hasOpportunities: hasEvOrArb,
       opportunities: uiOpportunitiesArray.slice(0, 4), // Max 4 items (1 efficient message + 3 lowest vig)
-      summary: hasEvOrArb ? `${allOpportunities.length} opportunities` : "Efficient market"
+      summary: hasEvOrArb ? `${allOpportunities.length} opportunities` : translate('marketEfficient', locale)
     };
 
     return {
@@ -5812,11 +5959,11 @@ function calculateSoccerEVOpportunities(bookmakers, event) {
         hasOpportunities: false,
         opportunities: [{
           type: "efficient",
-          title: "Market efficiently priced",
-          description: "No profitable opportunities found",
+          title: translate('marketEfficient', locale),
+          description: translate('noProfitable', locale),
           icon: "x"
         }],
-        summary: "Efficient market"
+        summary: translate('marketEfficient', locale)
       }
     };
   }
@@ -5902,7 +6049,8 @@ function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${favoritePercent}% ${favoriteTeam}`,
-        label: "Market Fav"
+        label: "Market Fav",
+        teamSide: favorite // "home" or "away"
       };
     }
 
@@ -5922,7 +6070,8 @@ function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${favoritePercent}% ${favoriteTeam}`,
-        label: "Market Fav"
+        label: "Market Fav",
+        teamSide: favorite // "home" or "away"
       };
     }
 
@@ -5956,7 +6105,8 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${teamLabel} ${marketType} at ${bookmakerShort}`,
-        label: "Best Value"
+        label: "Best Value",
+        teamSide: isHome ? "home" : "away"
       };
     }
 
@@ -5975,7 +6125,8 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
         const teamLabel = isHome ? "Home" : "Away";
         return {
           display: `${teamLabel} ML at ${bookmakerShort}`,
-          label: "Best Value"
+          label: "Best Value",
+          teamSide: isHome ? "home" : "away"
         };
       }
     }
@@ -6030,7 +6181,8 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
         return {
           display: favoriteLine.type === "soccer_win" ? `${oddsDisplay} at ${bookmakerShort}` : `${teamLabel} ML at ${bookmakerShort}`,
-          label: "Best Value"
+          label: "Best Value",
+          teamSide: favoriteIsHome ? "home" : "away"
         };
       }
     }
@@ -6041,11 +6193,12 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
     // STEP 4: Final fallback - truly efficient market
     return {
       display: "Efficient market",
-      label: "Best Value"
+      label: "Best Value",
+      teamSide: null // No team advantage
     };
   } catch (error) {
     console.error('Error finding best value:', error);
-    return { display: "Unable to calculate", label: "Best Value" };
+    return { display: "Unable to calculate", label: "Best Value", teamSide: null };
   }
 }
 
@@ -6093,15 +6246,16 @@ function calculateOffensiveEdge(teamStats, homeTeam, awayTeam, sport = 'nfl') {
     const differential = team1PPG - team2PPG;
     const roundedDiff = Math.round(differential * 10) / 10;
 
-    // Format with + or - sign
-    const sign = roundedDiff > 0 ? "+" : "";
+    // Always show positive value (absolute) with + sign for the team with advantage
+    const absoluteDiff = Math.abs(roundedDiff);
 
     // Use GPG for soccer, PPG for other sports
     const unit = sport?.includes('soccer') ? 'GPG' : 'PPG';
 
     const result = {
-      display: `${sign}${roundedDiff} ${unit}`,
-      label: "Offensive Edge"
+      display: `+${absoluteDiff} ${unit}`,
+      label: "Offensive Edge",
+      teamWithAdvantage: differential >= 0 ? "home" : "away" // Track which team has advantage
     };
 
     console.log('Offensive Edge Result:', result);

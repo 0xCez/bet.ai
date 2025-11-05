@@ -694,7 +694,7 @@ export default function MarketIntelNew() {
                 ))
               ) : (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No best lines data available</Text>
+                  <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoBestLines")}</Text>
                 </View>
               )}
             </View>
@@ -720,13 +720,13 @@ export default function MarketIntelNew() {
                   <View style={styles.tableHeader}>
                     <View style={styles.teamColumn} />
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelHomeWin")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Draw</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelDraw")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelAwayWin")}</Text>
                     </View>
                   </View>
 
@@ -738,7 +738,7 @@ export default function MarketIntelNew() {
                         style={styles.teamLogo}
                         contentFit="contain"
                       />
-                      <Text style={styles.teamName}>Match Winner</Text>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelMatchWinner")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
                       <View style={styles.dataCell}>
@@ -841,7 +841,7 @@ export default function MarketIntelNew() {
               )
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No consensus lines data available</Text>
+                <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoConsensusLines")}</Text>
               </View>
             )}
           </View>
@@ -878,7 +878,7 @@ export default function MarketIntelNew() {
                 {/* Line 3 */}
                 <View style={styles.publicSharpRow}>
                   <Text style={styles.publicSharpText}>
-                    {marketResult.marketIntelligence.sharpMeter.line3 || "No comparison available"}
+                    {marketResult.marketIntelligence.sharpMeter.line3 || i18n.t("marketIntelNoComparison")}
                   </Text>
                 </View>
               </View>
@@ -895,7 +895,7 @@ export default function MarketIntelNew() {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No sharp meter data available</Text>
+              <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoSharpMeter")}</Text>
             </View>
           )}
         </Card>
@@ -932,7 +932,7 @@ export default function MarketIntelNew() {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No market efficiency data available</Text>
+              <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoEfficiency")}</Text>
             </View>
           )}
         </Card>
@@ -1001,7 +1001,7 @@ export default function MarketIntelNew() {
                 <View style={styles.oddsTableHeaderRow}>
                   <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelMoneyline").toUpperCase()}</Text>
                   <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCell]}>{i18n.t("marketIntelSpread").toUpperCase()}</Text>
-                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>{i18n.t("marketIntelTotal").toUpperCase()}S</Text>
+                  <Text style={[styles.oddsTableColumnHeader, styles.oddsTableColumnHeaderCellLast]}>{i18n.t("marketIntelTotal").toUpperCase()}</Text>
                 </View>
 
                 {/* Team 1 Section */}
@@ -1110,10 +1110,10 @@ export default function MarketIntelNew() {
               </View>
             ))}
               </View>
-            )
+              )
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No odds table data available</Text>
+              <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoOddsTable")}</Text>
             </View>
           )}
         </Card>
@@ -1137,13 +1137,13 @@ export default function MarketIntelNew() {
                   <View style={styles.tableHeader}>
                     <View style={styles.teamColumn} />
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelHomeWin")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Draw</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelDraw")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelAwayWin")}</Text>
                     </View>
                   </View>
 
@@ -1303,7 +1303,7 @@ export default function MarketIntelNew() {
               )
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No vig analysis data available</Text>
+                <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoVigAnalysis")}</Text>
               </View>
             )}
           </View>
@@ -1328,13 +1328,13 @@ export default function MarketIntelNew() {
                   <View style={styles.tableHeader}>
                     <View style={styles.teamColumn} />
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Home Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelHomeWin")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Draw</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelDraw")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
-                      <Text style={styles.columnHeaderText}>Away Win</Text>
+                      <Text style={styles.columnHeaderText}>{i18n.t("marketIntelAwayWin")}</Text>
                     </View>
                   </View>
 
@@ -1346,7 +1346,7 @@ export default function MarketIntelNew() {
                         style={styles.teamLogo}
                         contentFit="contain"
                       />
-                      <Text style={styles.teamName}>Fair Value</Text>
+                      <Text style={styles.teamName}>{i18n.t("marketIntelFairValueRow")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
                       <View style={styles.dataCell}>
@@ -1457,7 +1457,7 @@ export default function MarketIntelNew() {
               )
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No fair value data available</Text>
+                <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoFairValue")}</Text>
               </View>
             )}
           </View>
@@ -1501,8 +1501,8 @@ export default function MarketIntelNew() {
                     contentFit="contain"
                   />
                   <View style={styles.lineTextContainer}>
-                    <Text style={styles.opportunityBigText}>No EV+ Opportunities</Text>
-                    <Text style={styles.lineSmallText}>No EV+ or arbitrage opportunities available</Text>
+                    <Text style={styles.opportunityBigText}>{i18n.t("marketIntelNoOpportunities")}</Text>
+                    <Text style={styles.lineSmallText}>{i18n.t("marketIntelNoEVOpps")}</Text>
                   </View>
                 </View>
               </View>

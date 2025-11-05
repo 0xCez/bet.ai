@@ -213,6 +213,16 @@ class APIService {
     try {
       console.log(`Fetching market intelligence for ${sport}: ${team1} vs ${team2}`);
 
+      // Get current locale using the same pattern as analyzeImage
+      let locale = 'en';
+      if (i18n.locale.startsWith('fr')) {
+        locale = 'fr';
+      } else if (i18n.locale.startsWith('es')) {
+        locale = 'es';
+      }
+
+      console.log('CLIENT: Using locale for market intelligence:', locale);
+
       const response = await fetch(`${this.baseURL}/marketIntelligence`, {
         method: "POST",
         headers: {
@@ -223,7 +233,8 @@ class APIService {
           team1,
           team2,
           team1_code,
-          team2_code
+          team2_code,
+          locale
         }),
       });
 

@@ -114,10 +114,12 @@ interface AnalysisResult {
     marketConsensus: {
       display: string;
       label: string;
+      teamSide?: "home" | "away" | null;
     } | null;
     bestValue: {
       display: string;
       label: string;
+      teamSide?: "home" | "away" | null;
     } | null;
     offensiveEdge: {
       display: string;
@@ -188,7 +190,7 @@ export default function AnalysisScreen() {
     // Track page entry
     posthog?.capture("analysis_page_viewed", {
       userId: auth.currentUser.uid,
-      analysisId: params.analysisId,
+      analysisId: params.analysisId || "none",
       isDemo: params.isDemo === "true",
     });
 
@@ -200,7 +202,7 @@ export default function AnalysisScreen() {
 
         posthog?.capture("analysis_page_exit", {
           userId: auth.currentUser.uid,
-          analysisId: params.analysisId,
+          analysisId: params.analysisId || "none",
           isDemo: params.isDemo === "true",
           timeSpentSeconds: timeSpentSeconds,
           timeSpentMinutes: Math.round((timeSpentSeconds / 60) * 10) / 10, // Round to 1 decimal place
@@ -822,16 +824,23 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={require("../assets/images/Fanduel.png")}
+                  source={getTeamLogo(
+                    analysisResult?.keyInsights?.marketConsensus?.teamSide === "home"
+                      ? analysisResult?.teams?.home || ""
+                      : analysisResult?.keyInsights?.marketConsensus?.teamSide === "away"
+                      ? analysisResult?.teams?.away || ""
+                      : "", // No logo if no teamSide
+                    analysisResult?.sport
+                  )}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
                 <View style={styles.metricTextContainer}>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights?.marketConsensus?.display || "No consensus"}
+                    {analysisResult?.keyInsights?.marketConsensus?.display || i18n.t("analysisNoConsensus")}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.marketConsensus?.label || "Market Consensus"}
+                    {analysisResult?.keyInsights?.marketConsensus?.label || i18n.t("analysisMarketConsensus")}
                   </Text>
                 </View>
               </View>
@@ -841,16 +850,23 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={require("../assets/images/Draftkings.png")}
+                  source={getTeamLogo(
+                    analysisResult?.keyInsights?.bestValue?.teamSide === "home"
+                      ? analysisResult?.teams?.home || ""
+                      : analysisResult?.keyInsights?.bestValue?.teamSide === "away"
+                      ? analysisResult?.teams?.away || ""
+                      : "", // No logo if no teamSide
+                    analysisResult?.sport
+                  )}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
                 <View style={styles.metricTextContainer}>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights?.bestValue?.display || "N/A"}
+                    {analysisResult?.keyInsights?.bestValue?.display || i18n.t("analysisEfficientMarket")}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.bestValue?.label || "Best Value"}
+                    {analysisResult?.keyInsights?.bestValue?.label || i18n.t("analysisBestValue")}
                   </Text>
                 </View>
               </View>
@@ -860,7 +876,14 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={getTeamLogo(analysisResult?.teams?.home || "", analysisResult?.sport)}
+                  source={getTeamLogo(
+                    // Show team with offensive advantage: Positive = Home scores more, Negative = Away scores more
+                    (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("+") ||
+                    (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("0")
+                      ? analysisResult?.teams?.home || ""
+                      : analysisResult?.teams?.away || "",
+                    analysisResult?.sport
+                  )}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
@@ -869,7 +892,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.offensiveEdge?.label || "Offensive Edge"}
+                    {analysisResult?.keyInsights?.offensiveEdge?.label || i18n.t("analysisOffensiveEdge")}
                   </Text>
                 </View>
               </View>
@@ -879,7 +902,13 @@ export default function AnalysisScreen() {
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
                 <Image
-                  source={getTeamLogo(analysisResult?.teams?.away || "", analysisResult?.sport)}
+                  source={getTeamLogo(
+                    // Show team with defensive advantage: Negative = Home allows fewer (better), Positive = Away allows fewer (better)
+                    (analysisResult?.keyInsights?.defensiveEdge?.display || "").startsWith("-")
+                      ? analysisResult?.teams?.home || ""
+                      : analysisResult?.teams?.away || "",
+                    analysisResult?.sport
+                  )}
                   style={styles.kIcon}
                   contentFit="contain"
                 />
@@ -888,7 +917,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.defensiveEdge?.label || "Defensive Edge"}
+                    {analysisResult?.keyInsights?.defensiveEdge?.label || i18n.t("analysisDefensiveEdge")}
                   </Text>
                 </View>
               </View>
@@ -994,13 +1023,13 @@ export default function AnalysisScreen() {
                   <View style={styles.xFactorTextContainer}>
                     <Text style={styles.xFactorLabel}>
                       {xFactor.type === 1
-                        ? "Health & Availability"
+                        ? i18n.t("analysisHealthAvailability")
                         : xFactor.type === 2
-                        ? "Location & Weather"
+                        ? i18n.t("analysisLocationWeather")
                         : xFactor.type === 3
-                        ? "Officiating & Rules"
+                        ? i18n.t("analysisOfficiatingRules")
                         : xFactor.type === 4
-                        ? "Travel & Fatigue"
+                        ? i18n.t("analysisTravelFatigue")
                         : xFactor.title}
                     </Text>
                     <BlurText
