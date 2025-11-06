@@ -3242,15 +3242,18 @@ async function getTwoWayMarketIntelligenceTest(sport, team1, team2) {
     const BASE_URL = `https://api.the-odds-api.com/v4/sports/${sport}`;
 
     console.log(`Fetching 2-way events from: ${BASE_URL}/events`);
+    console.log(`Searching for: "${team1}" vs "${team2}"`);
 
     // Get events
     const eventsResponse = await axios.get(`${BASE_URL}/events?apiKey=${ODDS_API_KEY}`);
     const events = eventsResponse.data;
 
     console.log(`Found ${events.length} events for ${sport}`);
+    console.log('Available events:', events.slice(0, 5).map(e => `${e.home_team} vs ${e.away_team}`));
 
     const event = events.find(e => fuzzyMatchTeam(e, team1, team2));
     if (!event) {
+      console.error(`❌ EVENT NOT FOUND for "${team1}" vs "${team2}"`);
       return {
         error: "Event not found",
         availableEvents: events.slice(0, 3).map(e => ({ home: e.home_team, away: e.away_team }))

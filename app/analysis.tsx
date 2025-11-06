@@ -174,6 +174,27 @@ type AnalysisParams = {
   isDemo?: string;
 };
 
+// Helper function to remove empty string keys from objects (Firestore doesn't allow them)
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item));
+  }
+
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    Object.keys(obj).forEach(key => {
+      // Skip empty string keys
+      if (key === '') return;
+      cleaned[key] = sanitizeForFirestore(obj[key]);
+    });
+    return cleaned;
+  }
+
+  return obj;
+}
+
 export default function AnalysisScreen() {
   // Get both potential parameters
   const params = useLocalSearchParams<AnalysisParams>();
@@ -558,7 +579,7 @@ export default function AnalysisScreen() {
             sport: analysisData.sport || "nfl", // Add sport to top level for easier access
             imageUrl: downloadURL,
             createdAt: serverTimestamp(),
-            analysis: analysisData,
+            analysis: sanitizeForFirestore(analysisData), // Clean empty string keys
           };
 
           await setDoc(newAnalysisRef, analysisDataToSave);

@@ -230,6 +230,13 @@ export default function MarketIntelNew() {
       cachedMarketResult = null;
     }
 
+    // DON'T auto-fetch if coming from history (analysisId exists)
+    // User must click "Get Fresh Odds" button to refresh historical data
+    if (params.analysisId) {
+      setIsLoading(false);
+      return;
+    }
+
     if (params.team1 && params.team2 && params.sport) {
       getMarketIntelligence();
     } else {
