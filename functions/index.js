@@ -6052,7 +6052,7 @@ function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${favoritePercent}% ${favoriteTeam}`,
-        label: "Market Fav",
+        label:
         teamSide: favorite // "home" or "away"
       };
     }
@@ -6073,7 +6073,6 @@ function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${favoritePercent}% ${favoriteTeam}`,
-        label: "Market Fav",
         teamSide: favorite // "home" or "away"
       };
     }
@@ -6108,7 +6107,6 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${teamLabel} ${marketType} at ${bookmakerShort}`,
-        label: "Best Value",
         teamSide: isHome ? "home" : "away"
       };
     }
@@ -6128,7 +6126,7 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
         const teamLabel = isHome ? "Home" : "Away";
         return {
           display: `${teamLabel} ML at ${bookmakerShort}`,
-          label: "Best Value",
+          label:
           teamSide: isHome ? "home" : "away"
         };
       }
@@ -6184,7 +6182,7 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
         return {
           display: favoriteLine.type === "soccer_win" ? `${oddsDisplay} at ${bookmakerShort}` : `${teamLabel} ML at ${bookmakerShort}`,
-          label: "Best Value",
+          label:
           teamSide: favoriteIsHome ? "home" : "away"
         };
       }

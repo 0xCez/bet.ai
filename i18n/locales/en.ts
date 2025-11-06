@@ -157,7 +157,7 @@ export default {
   analysisMarketActivity: "Market Activity",
   analysisLineShift: "Line Shift",
   analysisPublicVsSharps: "Public vs Sharps",
-  analysisMarketConsensus: "Market Consensus",
+  analysisMarketConsensus: "Favorite",
   analysisBestValue: "Best Value",
   analysisOffensiveEdge: "Offensive Edge",
   analysisDefensiveEdge: "Defensive Edge",

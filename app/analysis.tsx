@@ -838,7 +838,7 @@ export default function AnalysisScreen() {
 
         {/* Key Insights Card */}
         <Card style={styles.keyInsightsCard}>
-          <Text style={styles.keyInsightsTitle}>Key Insights 💸</Text>
+          <Text style={styles.keyInsightsTitle}>{i18n.t("analysisKeyInsights")}</Text>
 
           <View style={styles.gridContainer}>
             {/* Market Consensus */}
@@ -861,7 +861,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.marketConsensus?.display || i18n.t("analysisNoConsensus")}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.marketConsensus?.label || i18n.t("analysisMarketConsensus")}
+                    {i18n.t("analysisMarketConsensus")}
                   </Text>
                 </View>
               </View>
@@ -887,7 +887,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.bestValue?.display || i18n.t("analysisEfficientMarket")}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.bestValue?.label || i18n.t("analysisBestValue")}
+                    {i18n.t("analysisBestValue")}
                   </Text>
                 </View>
               </View>
@@ -913,7 +913,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.offensiveEdge?.label || i18n.t("analysisOffensiveEdge")}
+                    {i18n.t("analysisOffensiveEdge")}
                   </Text>
                 </View>
               </View>
@@ -938,7 +938,7 @@ export default function AnalysisScreen() {
                     {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
                   </Text>
                   <Text style={styles.metricLabel}>
-                    {analysisResult?.keyInsights?.defensiveEdge?.label || i18n.t("analysisDefensiveEdge")}
+                    {i18n.t("analysisDefensiveEdge")}
                   </Text>
                 </View>
               </View>
