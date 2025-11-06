@@ -962,14 +962,14 @@ export default function AnalysisScreen() {
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisRecentPerformances")}
               </Text>
-              <BlurText card="ms-1" blur={!auth.currentUser} style={styles.teamSectionValue}>
+              <BlurText card="ms-1" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.recentPerformance.home}
               </BlurText>
 
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisMomentumIndicator")}
               </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser} style={styles.teamSectionValue}>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.momentum.home}
               </BlurText>
             </View>
@@ -989,14 +989,14 @@ export default function AnalysisScreen() {
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisRecentPerformances")}
               </Text>
-              <BlurText card="ms-2" blur={!auth.currentUser} style={styles.teamSectionValue}>
+              <BlurText card="ms-2" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.recentPerformance.away}
               </BlurText>
 
               <Text style={styles.teamSectionLabel}>
                 {i18n.t("analysisMomentumIndicator")}
               </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser} style={styles.teamSectionValue}>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
                 {analysisResult?.matchSnapshot.momentum.away}
               </BlurText>
             </View>
@@ -1053,22 +1053,9 @@ export default function AnalysisScreen() {
                         ? i18n.t("analysisTravelFatigue")
                         : xFactor.title}
                     </Text>
-                    <BlurText
-                      card={
-                        xFactor.type === 1
-                          ? "xf-1"
-                          : xFactor.type === 2
-                          ? "xf-2"
-                          : xFactor.type === 3
-                          ? "xf-3"
-                          : xFactor.type === 4
-                          ? "xf-4"
-                          : "xf-1"
-                      }
-                      blur={!auth.currentUser}
-                    >
+                    <Text style={styles.xFactorDetail}>
                       {xFactor.detail}
-                    </BlurText>
+                    </Text>
                   </View>
                 </View>
               ))}
@@ -1111,14 +1098,10 @@ export default function AnalysisScreen() {
                       {i18n.t("analysisConfidenceScore")}
                     </Text>
 
-                    {auth.currentUser ? (
-                      <BlurText
-                        card="ai-2"
-                        blur={false}
-                        style={styles.aiMetricValue}
-                      >
+                    {auth.currentUser || isDemo ? (
+                      <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.confidenceScore}
-                      </BlurText>
+                      </Text>
                     ) : (
                       <Image
                         source={require("../assets/images/ai-blur-1.png")}
@@ -1146,14 +1129,10 @@ export default function AnalysisScreen() {
                     <Text style={styles.aiMetricLabel}>
                       {i18n.t("analysisBettingSignal")}
                     </Text>
-                    {auth.currentUser ? (
-                      <BlurText
-                        card="ai-2"
-                        blur={false}
-                        style={styles.aiMetricValue}
-                      >
+                    {auth.currentUser || isDemo ? (
+                      <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.bettingSignal}
-                      </BlurText>
+                      </Text>
                     ) : (
                       <Image
                         source={require("../assets/images/ai-blur-2.png")}
@@ -1173,15 +1152,10 @@ export default function AnalysisScreen() {
                 <Text style={styles.aiBreakdownTitle}>
                   {i18n.t("analysisBreakdown")}
                 </Text>
-                {auth.currentUser ? (
-                  <BlurText
-                    textColor="#FFFFFF"
-                    card="ai-3"
-                    lineHeight={18}
-                    blur={false}
-                  >
+                {auth.currentUser || isDemo ? (
+                  <Text style={styles.aiBreakdownText}>
                     {analysisResult?.aiAnalysis.breakdown}
-                  </BlurText>
+                  </Text>
                 ) : (
                   <Image
                     source={require("../assets/images/aiblur.png")}
@@ -1196,29 +1170,6 @@ export default function AnalysisScreen() {
             </View>
           )}
         </Card>
-
-
-        {isDemo && (
-          <View style={styles.demoDebateContainer}>
-            <BorderButton
-              onPress={() => setShowUnlockMessage(true)}
-              containerStyle={styles.floatingButton}
-              borderColor="#00C2E0"
-              backgroundColor="#00C2E020"
-              opacity={1}
-              borderWidth={1}
-            >
-              <Text style={styles.buttonText}>
-                {i18n.t("analysisDebateWithAI")}
-              </Text>
-            </BorderButton>
-            {showUnlockMessage && (
-              <Text style={styles.unlockText}>
-                {i18n.t("analysisUnlockPremium")}
-              </Text>
-            )}
-          </View>
-        )}
       </ScrollView>
     );
   };
@@ -1239,42 +1190,20 @@ export default function AnalysisScreen() {
           </View>
         </ScrollView>
 
-        {/* Floating Bottom Navigation - Only show for non-demo */}
-        {!isDemo && (
-          <FloatingBottomNav
-            activeTab="insight"
-            analysisData={{
-              team1: analysisResult?.teams?.home,
-              team2: analysisResult?.teams?.away,
-              sport: analysisResult?.sport,
-              team1Logo: analysisResult?.teams?.logos?.home,
-              team2Logo: analysisResult?.teams?.logos?.away,
-              analysisId: currentAnalysisId || undefined,
-            }}
-          />
-        )}
-
-        {/* Floating Next Button */}
-        {!isLoading && isDemo && (
-          <View style={styles.floatingButtonContainer}>
-            {isDemo && (
-              <>
-                <GradientButton
-                  onPress={() => {
-                    if (isSubscribed) {
-                      console.log("User is subscribed, navigating to login.");
-                      router.push("/login");
-                    } else {
-                      router.push("/paywall");
-                    }
-                  }}
-                >
-                  {i18n.t("analysisNext")}
-                </GradientButton>
-              </>
-            )}
-          </View>
-        )}
+        {/* Floating Bottom Navigation - Show for both demo and regular mode */}
+        <FloatingBottomNav
+          activeTab="insight"
+          analysisData={{
+            team1: analysisResult?.teams?.home,
+            team2: analysisResult?.teams?.away,
+            sport: analysisResult?.sport,
+            team1Logo: analysisResult?.teams?.logos?.home,
+            team2Logo: analysisResult?.teams?.logos?.away,
+            analysisId: currentAnalysisId || undefined,
+            isDemo: isDemo,
+          }}
+          isSubscribed={isSubscribed}
+        />
       </View>
     </ScreenBackground>
   );
@@ -1562,6 +1491,12 @@ const styles = StyleSheet.create({
     fontSize: 11.42,
     color: "#FFFFFF",
   },
+  xFactorDetail: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 11.42,
+    color: "rgba(255, 255, 255, 0.8)",
+    lineHeight: 16,
+  },
   aiAnalysisCard: {
     marginTop: 16,
     padding: 20,
@@ -1610,13 +1545,13 @@ const styles = StyleSheet.create({
   },
   aiMetricLabel: {
     color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: "Aeonik-Regular",
     marginBottom: 4,
   },
   aiMetricValue: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: "Aeonik-Regular",
   },
   aiBreakdownContainer: {
@@ -1626,16 +1561,16 @@ const styles = StyleSheet.create({
   },
   aiBreakdownTitle: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 12,
     fontFamily: "Aeonik-Regular",
     marginBottom: 18,
     textAlign: "center",
   },
   aiBreakdownText: {
     color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: "Aeonik-Regular",
-    lineHeight: 28,
+    lineHeight: 18,
   },
   keyInsightsCard: {
     padding: 20,

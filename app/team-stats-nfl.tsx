@@ -13,6 +13,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import APIService from "@/services/api";
 import i18n from "@/i18n";
 import { usePageTransition } from "@/hooks/usePageTransition";
+import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
+import { auth, db } from "@/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
@@ -149,6 +152,7 @@ export default function TeamStatsNFLNew() {
   const params = useLocalSearchParams<TeamStatsParams>();
   const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
+  const { isSubscribed } = useRevenueCatPurchases();
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -188,6 +192,12 @@ export default function TeamStatsNFLNew() {
       cachedTeamResult = null;
     }
 
+    // If analysisId exists (history/demo), load from Firestore instead of API
+    if (params.analysisId) {
+      loadTeamStatsFromFirestore();
+      return;
+    }
+
     if (params.team1 && params.team2 && params.sport) {
       console.log(`Team Stats Flow: Starting analysis for ${params.sport}: ${params.team1} vs ${params.team2}`);
       getTeamStats();
@@ -197,6 +207,58 @@ export default function TeamStatsNFLNew() {
       setIsLoading(false);
     }
   }, [params.team1, params.team2, params.sport, isSameAnalysis]);
+
+  // Load team stats from Firestore (for history/demo mode)
+  const loadTeamStatsFromFirestore = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+        ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2"
+        : auth.currentUser?.uid;
+
+      if (!userId || !params.analysisId) {
+        throw new Error("User ID or Analysis ID missing");
+      }
+
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("@/firebaseConfig");
+
+      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error("Analysis not found in history");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis;
+
+      if (cachedAnalysis?.teamStats) {
+        const teamData: NFLTeamStatsResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          teamStats: cachedAnalysis.teamStats,
+          timestamp: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          teamIds: cachedAnalysis.teamStats.team1?.teamId && cachedAnalysis.teamStats.team2?.teamId ?
+            { team1Id: cachedAnalysis.teamStats.team1.teamId, team2Id: cachedAnalysis.teamStats.team2.teamId } :
+            { team1Id: 0, team2Id: 0 }
+        };
+
+        setTeamResult(teamData);
+        cachedTeamResult = teamData;
+        console.log("✅ Loaded team stats from Firestore cache");
+      } else {
+        throw new Error("No team stats data in cached analysis");
+      }
+    } catch (err) {
+      console.error("Error loading team stats from Firestore:", err);
+      setError("Team stats unavailable for this analysis.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Main function to fetch team stats data
   const getTeamStats = async () => {
@@ -715,13 +777,15 @@ export default function TeamStatsNFLNew() {
       <FloatingBottomNav
         activeTab="teams"
         analysisData={{
-          team1: params.team1,
-          team2: params.team2,
-          sport: params.sport,
+          team1: params.team1 || teamResult?.teams?.home,
+          team2: params.team2 || teamResult?.teams?.away,
+          sport: params.sport || teamResult?.sport,
           team1Logo: params.team1Logo,
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
+          isDemo: params.isDemo === "true",
         }}
+        isSubscribed={isSubscribed}
       />
     </ScreenBackground>
   );

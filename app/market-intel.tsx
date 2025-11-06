@@ -19,8 +19,10 @@ import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
 import { TopBar } from "@/components/ui/TopBar";
 import APIService from "@/services/api";
 import { usePageTransition } from "@/hooks/usePageTransition";
+import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import i18n from "@/i18n";
-import { auth } from "@/firebaseConfig";
+import { auth, db } from "@/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
@@ -124,6 +126,7 @@ type MarketIntelParams = {
   team1Logo?: string;
   team2Logo?: string;
   analysisId?: string;
+  isDemo?: string;
 };
 
 // Helper function to get bookmaker logo
@@ -192,6 +195,7 @@ export default function MarketIntelNew() {
   const params = useLocalSearchParams<MarketIntelParams>();
   const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
+  const { isSubscribed } = useRevenueCatPurchases();
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -230,10 +234,9 @@ export default function MarketIntelNew() {
       cachedMarketResult = null;
     }
 
-    // DON'T auto-fetch if coming from history (analysisId exists)
-    // User must click "Get Fresh Odds" button to refresh historical data
+    // If analysisId exists (history/demo), load from Firestore instead of API
     if (params.analysisId) {
-      setIsLoading(false);
+      loadMarketIntelFromFirestore();
       return;
     }
 
@@ -244,6 +247,55 @@ export default function MarketIntelNew() {
       setIsLoading(false);
     }
   }, [params.team1, params.team2, params.sport, auth.currentUser, isSameAnalysis]);
+
+  // Load market intel from Firestore (for history/demo mode)
+  const loadMarketIntelFromFirestore = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+        ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2" // Demo user
+        : auth.currentUser?.uid; // Regular user
+
+      if (!userId || !params.analysisId) {
+        throw new Error("User ID or Analysis ID missing");
+      }
+
+      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error("Analysis not found in history");
+      }
+
+      const data = docSnap.data();
+
+      // Extract market intel data from cached analysis
+      const cachedAnalysis = data.analysis;
+
+      if (cachedAnalysis?.marketIntelligence) {
+        // Build the expected structure
+        const marketData: MarketIntelResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          marketIntelligence: cachedAnalysis.marketIntelligence,
+          timestamp: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+        };
+
+        setMarketResult(marketData);
+        cachedMarketResult = marketData;
+        console.log("✅ Loaded market intel from Firestore cache");
+      } else {
+        throw new Error("No market intelligence data in cached analysis");
+      }
+    } catch (err) {
+      console.error("Error loading from Firestore:", err);
+      setError("Historical data unavailable. Click 'Get Fresh Odds' to fetch current data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Main function to fetch market intelligence data
   const getMarketIntelligence = async () => {
@@ -1546,13 +1598,15 @@ export default function MarketIntelNew() {
       <FloatingBottomNav
         activeTab="market"
         analysisData={{
-          team1: params.team1,
-          team2: params.team2,
-          sport: params.sport,
+          team1: params.team1 || marketResult?.teams?.home,
+          team2: params.team2 || marketResult?.teams?.away,
+          sport: params.sport || marketResult?.sport,
           team1Logo: params.team1Logo,
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
+          isDemo: params.isDemo === "true",
         }}
+        isSubscribed={isSubscribed}
       />
     </ScreenBackground>
   );

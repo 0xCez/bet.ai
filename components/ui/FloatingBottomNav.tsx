@@ -2,6 +2,8 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable, Image, Animated } from "react-native";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
+import { BorderButton } from "./BorderButton";
+import i18n from "@/i18n";
 
 // BotIcon component using the bot.svg path
 const BotIcon: React.FC<{ size?: number; color?: string }> = ({ size = 22, color = "#ffffff" }) => (
@@ -23,13 +25,16 @@ interface FloatingBottomNavProps {
     sport?: string;
     team1Logo?: string;
     team2Logo?: string;
-    analysisId?: string; // Add analysisId for proper insight navigation
+    analysisId?: string;
+    isDemo?: boolean;
   };
+  isSubscribed?: boolean; // For demo "Next" button logic
 }
 
 export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   activeTab,
   analysisData,
+  isSubscribed,
 }) => {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
@@ -62,7 +67,8 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
       sport: analysisData?.sport || "nfl",
       team1Logo: analysisData?.team1Logo || "",
       team2Logo: analysisData?.team2Logo || "",
-      analysisId: analysisData?.analysisId || "", // Include analysisId for navigation back to insight
+      analysisId: analysisData?.analysisId || "",
+      isDemo: analysisData?.isDemo ? "true" : undefined, // Include isDemo for demo mode
     };
 
     // Add slight delay for animation to be visible
@@ -77,7 +83,8 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
             router.push({
               pathname: "/analysis",
               params: {
-                analysisId: analysisData.analysisId
+                analysisId: analysisData.analysisId,
+                isDemo: analysisData.isDemo ? "true" : undefined
               }
             });
           } else {
@@ -156,43 +163,96 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   ];
 
   return (
-    <Animated.View style={[styles.floatingContainer, { transform: [{ scale: scaleAnim }] }]}>
-      <View style={styles.navContainer}>
-        {tabs.map((tab) => {
-          const isActive = tab.key === activeTab;
-          const color = isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)";
+    <>
+      {/* Demo Next Button - Positioned above nav bar in demo mode */}
+      {analysisData?.isDemo && (
+        <View style={styles.nextButtonContainer}>
+          <BorderButton
+            onPress={() => {
+              if (isSubscribed) {
+                router.push("/login");
+              } else {
+                router.push("/paywall");
+              }
+            }}
+            containerStyle={styles.nextButton}
+            borderColor="rgba(0, 221, 255, 0.25)"
+            gradientColors={["#161616", "#0D0D0D"]}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+            opacity={1}
+            borderWidth={0.75}
+          >
+            <Text style={styles.nextButtonText}>{i18n.t("analysisNext")}</Text>
+          </BorderButton>
+        </View>
+      )}
 
-          return (
-            <Pressable
-              key={tab.key}
-              style={[styles.tabItem, isTransitioning && styles.tabItemDisabled]}
-              onPress={() => navigateToTab(tab.key)}
-              disabled={isTransitioning}
-            >
-              {tab.key === "expert" ? (
-                <BotIcon size={22} color={isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)"} />
-              ) : (
-                <Image
-                  source={getIconSource(tab.key, isActive)}
-                  style={[styles.tabIcon, !isActive && styles.inactiveIcon]}
-                />
-              )}
-              <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </Animated.View>
+      {/* Floating Bottom Nav Bar - Original positioning restored */}
+      <Animated.View style={[styles.floatingContainer, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={styles.navContainer}>
+          {tabs.map((tab) => {
+            const isActive = tab.key === activeTab;
+            const color = isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)";
+
+            return (
+              <Pressable
+                key={tab.key}
+                style={[styles.tabItem, isTransitioning && styles.tabItemDisabled]}
+                onPress={() => navigateToTab(tab.key)}
+                disabled={isTransitioning}
+              >
+                {tab.key === "expert" ? (
+                  <BotIcon size={22} color={isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)"} />
+                ) : (
+                  <Image
+                    source={getIconSource(tab.key, isActive)}
+                    style={[styles.tabIcon, !isActive && styles.inactiveIcon]}
+                  />
+                )}
+                <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  floatingContainer: {
+  nextButtonContainer: {
     position: "absolute",
-    bottom: 30, // Floating with bottom padding
+    bottom: 125, // Position above the nav bar with more spacing
     left: 20,
     right: 20,
-    zIndex: 1000, // On top of other elements
+    zIndex: 999,
+    paddingHorizontal: 20,
+    // Match "Choose from library" button shadow
+    shadowColor: "#00C2E0",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    elevation: 4, // Android shadow
+    borderRadius: 32,
+  },
+  nextButton: {
+    height: 60,
+    borderRadius: 32,
+    overflow: "hidden",
+  },
+  nextButtonText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontFamily: "Aeonik-Medium",
+    textAlign: "center",
+  },
+  floatingContainer: {
+    position: "absolute",
+    bottom: 30,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
   },
   navContainer: {
     flexDirection: "row",

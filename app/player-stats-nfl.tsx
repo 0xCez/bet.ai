@@ -18,8 +18,10 @@ import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
 import { TopBar } from "@/components/ui/TopBar";
 import APIService from "@/services/api";
 import { usePageTransition } from "@/hooks/usePageTransition";
+import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import i18n from "@/i18n";
-import { auth } from "@/firebaseConfig";
+import { auth, db } from "@/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
 import { useRouter } from "expo-router";
 
@@ -83,6 +85,7 @@ type PlayerStatsParams = {
   analysisId?: string;
   selectedTeam?: string;
   selectedPlayer?: string;
+  isDemo?: string;
 };
 
 
@@ -109,6 +112,7 @@ export default function PlayerStatsNBANew() {
   const params = useLocalSearchParams<PlayerStatsParams>();
   const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
+  const { isSubscribed } = useRevenueCatPurchases();
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
@@ -151,6 +155,13 @@ export default function PlayerStatsNBANew() {
       cachedPlayerResult = null;
     }
 
+    // If analysisId exists AND we have team params (fresh analysis), use API
+    // If analysisId exists WITHOUT team params (demo/history), load from Firestore
+    if (params.analysisId && !params.team1) {
+      loadPlayerStatsFromFirestore();
+      return;
+    }
+
     if (params.team1 && params.team2 && params.sport) {
       getPlayerStats();
     } else {
@@ -158,6 +169,56 @@ export default function PlayerStatsNBANew() {
       setIsLoading(false);
     }
   }, [params.team1, params.team2, params.sport, auth.currentUser, isSameAnalysis]);
+
+  // Load player stats from Firestore (for history/demo mode)
+  const loadPlayerStatsFromFirestore = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+        ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2"
+        : auth.currentUser?.uid;
+
+      if (!userId || !params.analysisId) {
+        throw new Error("User ID or Analysis ID missing");
+      }
+
+      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error("Analysis not found in history");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis;
+
+      if (cachedAnalysis?.playerStats) {
+        const playerData: PlayerStatsResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          playerStats: cachedAnalysis.playerStats,
+          timestamp: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+          teamIds: cachedAnalysis.playerStats.team1?.teamId && cachedAnalysis.playerStats.team2?.teamId ?
+            { team1Id: cachedAnalysis.playerStats.team1.teamId, team2Id: cachedAnalysis.playerStats.team2.teamId } :
+            { team1Id: 0, team2Id: 0 }
+        };
+
+        setPlayerResult(playerData);
+        cachedPlayerResult = playerData;
+        console.log("✅ Loaded player stats from Firestore cache");
+      } else {
+        setError("Player stats not available for this analysis. This analysis was created before player stats were added.");
+        setIsLoading(false);
+      }
+    } catch (err) {
+      console.error("Error loading player stats from Firestore:", err);
+      setError("Player stats unavailable for this analysis.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Main function to fetch player stats data
   const getPlayerStats = async () => {
@@ -547,13 +608,15 @@ export default function PlayerStatsNBANew() {
       <FloatingBottomNav
         activeTab="players"
         analysisData={{
-          team1: params.team1,
-          team2: params.team2,
-          sport: params.sport,
+          team1: params.team1 || playerResult?.teams?.home,
+          team2: params.team2 || playerResult?.teams?.away,
+          sport: params.sport || playerResult?.sport,
           team1Logo: params.team1Logo,
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
+          isDemo: params.isDemo === "true",
         }}
+        isSubscribed={isSubscribed}
       />
     </ScreenBackground>
   );
