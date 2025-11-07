@@ -26,6 +26,7 @@ import { BorderButton } from "@/components/ui/BorderButton";
 import { TopBar } from "../components/ui/TopBar";
 import { Card } from "@/components/ui/Card";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
+import { LOGO_SIZES } from "@/utils/logoConstants";
 import {
   doc,
   setDoc,
@@ -1612,8 +1613,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   teamLogo: {
-    width: 36,
-    height: 36,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
   },
   teamName: {
     flex: 1,
@@ -1785,13 +1786,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   snapshotIcon: {
-    width: 24,
-    height: 24,
+    width: LOGO_SIZES.SMALL,
+    height: LOGO_SIZES.SMALL,
     resizeMode: "contain",
   },
   kIcon: {
-    width: 36,
-    height: 36,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
     resizeMode: "contain",
   },
   unlockText: {

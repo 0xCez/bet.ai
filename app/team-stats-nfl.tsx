@@ -14,6 +14,7 @@ import APIService from "@/services/api";
 import i18n from "@/i18n";
 import { usePageTransition } from "@/hooks/usePageTransition";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
+import { LOGO_SIZES } from "@/utils/logoConstants";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -761,8 +762,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectionLogo: {
-    width: 58.11,
-    height: 38.28,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
   },
   selectionName: {
     flex: 1,
@@ -841,8 +842,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   teamLogo: {
-    width: 58.11,
-    height: 38.28,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
   },
   statsRow: {
     flexDirection: "row",
@@ -962,8 +963,8 @@ const styles = StyleSheet.create({
   },
   // Shimmer Styles
   selectionLogoShimmer: {
-    width: 58.11,
-    height: 38.28,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
   },
   selectionNameShimmer: {
     height: 20,

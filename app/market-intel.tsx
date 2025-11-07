@@ -22,6 +22,7 @@ import { usePageTransition } from "@/hooks/usePageTransition";
 import i18n from "@/i18n";
 import { auth } from "@/firebaseConfig";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
+import { LOGO_SIZES } from "@/utils/logoConstants";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -1655,8 +1656,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   teamLogo: {
-    width: 40.31,
-    height: 40.31,
+    width: LOGO_SIZES.MEDIUM,
+    height: LOGO_SIZES.MEDIUM,
   },
   teamName: {
     fontFamily: "Aeonik-Medium",
