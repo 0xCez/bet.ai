@@ -25,6 +25,7 @@ import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getSoccerTeamLogo } from "@/utils/teamLogos";
 import { useRouter } from "expo-router";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -130,6 +131,19 @@ export default function TeamStatsSoccerNew() {
   const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
   const { isSubscribed } = useRevenueCatPurchases();
+
+  // Track page views and time spent
+  usePageTracking({
+    pageName: 'team_stats_soccer',
+    metadata: {
+      team1: params.team1,
+      team2: params.team2,
+      sport: params.sport,
+      analysisId: params.analysisId,
+      selectedTeam: params.selectedTeam,
+      isDemo: params.isDemo === 'true',
+    },
+  });
 
   // Check if we're navigating with the same params
   const isSameAnalysis =

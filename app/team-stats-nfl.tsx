@@ -17,6 +17,7 @@ import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
+import { usePageTracking } from "@/hooks/usePageTracking";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -122,6 +123,7 @@ type TeamStatsParams = {
   team2Logo?: string;
   analysisId?: string;
   selectedTeam?: string;
+  isDemo?: string;
 };
 
 // Helper function to calculate recent form from string
@@ -153,6 +155,19 @@ export default function TeamStatsNFLNew() {
   const router = useRouter();
   const { animatedStyle } = usePageTransition(false);
   const { isSubscribed } = useRevenueCatPurchases();
+
+  // Track page views and time spent
+  usePageTracking({
+    pageName: 'team_stats_nfl',
+    metadata: {
+      team1: params.team1,
+      team2: params.team2,
+      sport: params.sport,
+      analysisId: params.analysisId,
+      selectedTeam: params.selectedTeam,
+      isDemo: params.isDemo === 'true',
+    },
+  });
 
   // Check if we're navigating with the same params
   const isSameAnalysis =
