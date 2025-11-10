@@ -1,9 +1,10 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image, Animated } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { BorderButton } from "./BorderButton";
 import i18n from "@/i18n";
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, withDelay, Easing } from "react-native-reanimated";
 
 // BotIcon component using the bot.svg path
 const BotIcon: React.FC<{ size?: number; color?: string }> = ({ size = 22, color = "#ffffff" }) => (
@@ -37,7 +38,73 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   isSubscribed,
 }) => {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  // Use Reanimated for smooth animations
+  const shakeX = useSharedValue(0);
+  const glowOpacity = useSharedValue(0.5);
+  const glowRadius = useSharedValue(10);
+  const scaleValue = useSharedValue(1);
+
+  // Start animations when in demo mode - synced timing for rhythm
+  React.useEffect(() => {
+    if (analysisData?.isDemo) {
+      const shakeDuration = 400; // 80ms * 5 = 400ms for shake sequence
+      const pauseDuration = 2000;
+      const totalCycleDuration = shakeDuration + pauseDuration; // 2400ms total
+
+      // Shake animation with pause - quick shakes then pause
+      shakeX.value = withRepeat(
+        withSequence(
+          withTiming(3, { duration: 80 }),
+          withTiming(-3, { duration: 80 }),
+          withTiming(3, { duration: 80 }),
+          withTiming(-3, { duration: 80 }),
+          withTiming(0, { duration: 80 }),
+          withDelay(pauseDuration, withTiming(0, { duration: 0 }))
+        ),
+        -1,
+        false
+      );
+
+      // Glow pulse animation - synced to match shake rhythm (one full pulse per cycle)
+      glowOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.9, { duration: totalCycleDuration / 2 }), // 1200ms
+          withTiming(0.5, { duration: totalCycleDuration / 2 })  // 1200ms
+        ),
+        -1,
+        true
+      );
+
+      glowRadius.value = withRepeat(
+        withSequence(
+          withTiming(20, { duration: totalCycleDuration / 2 }), // 1200ms - stronger glow
+          withTiming(10, { duration: totalCycleDuration / 2 })  // 1200ms
+        ),
+        -1,
+        true
+      );
+    }
+  }, [analysisData?.isDemo]);
+
+  // Animated styles for Next button
+  const nextButtonAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: shakeX.value }],
+      shadowColor: "#00C2E0",
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: glowOpacity.value,
+      shadowRadius: glowRadius.value,
+      elevation: glowRadius.value, // Android shadow
+    };
+  });
+
+  // Nav bar scale animation style
+  const navBarAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scaleValue.value }],
+    };
+  });
 
   const navigateToTab = (tab: string) => {
     if (tab === activeTab || isTransitioning) return; // Don't navigate if already on the tab or transitioning
@@ -45,21 +112,15 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
     // Start transition animation
     setIsTransitioning(true);
 
-    // Scale down animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
+    // Scale down animation using Reanimated
+    scaleValue.value = withSequence(
+      withTiming(0.95, { duration: 150 }),
+      withTiming(1, { duration: 150 })
+    );
+
+    setTimeout(() => {
       setIsTransitioning(false);
-    });
+    }, 300);
 
     const baseParams = {
       team1: analysisData?.team1 || "",
@@ -166,7 +227,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
     <>
       {/* Demo Next Button - Positioned above nav bar in demo mode */}
       {analysisData?.isDemo && (
-        <View style={styles.nextButtonContainer}>
+        <Animated.View style={[styles.nextButtonContainer, nextButtonAnimatedStyle]}>
           <BorderButton
             onPress={() => {
               if (isSubscribed) {
@@ -185,11 +246,11 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           >
             <Text style={styles.nextButtonText}>{i18n.t("analysisNext")}</Text>
           </BorderButton>
-        </View>
+        </Animated.View>
       )}
 
       {/* Floating Bottom Nav Bar - Original positioning restored */}
-      <Animated.View style={[styles.floatingContainer, { transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View style={[styles.floatingContainer, navBarAnimatedStyle]}>
         <View style={styles.navContainer}>
           {tabs.map((tab) => {
             const isActive = tab.key === activeTab;
@@ -224,16 +285,10 @@ const styles = StyleSheet.create({
   nextButtonContainer: {
     position: "absolute",
     bottom: 125, // Position above the nav bar with more spacing
-    left: 20,
-    right: 20,
+    left: "13%", // Reduce width by adding left/right margins
+    right: "13%",
     zIndex: 999,
     paddingHorizontal: 20,
-    // Match "Choose from library" button shadow
-    shadowColor: "#00C2E0",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 16,
-    elevation: 4, // Android shadow
     borderRadius: 32,
   },
   nextButton: {

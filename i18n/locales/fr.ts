@@ -22,8 +22,8 @@ export default {
 
   onboardingButtonNext: "Suivant",
     // Welcome Screen
-    welcomeFindWinningBets: "Trouvez les paris gagnants",
-    welcomeWithJustAPic: "avec une photo",
+    welcomeFindWinningBets: "Les paris gagnants",
+    welcomeWithJustAPic: "avec 1 photo",
     welcomeGetStarted: "Commencer",
     welcomeAlreadyHaveAccount: "Vous avez déjà un compte ?",
 
@@ -157,8 +157,8 @@ export default {
     analysisMarketActivity: "Marché",
     analysisLineShift: "Mouvement de côte",
     analysisPublicVsSharps: "Public vs Pros",
-    analysisMarketConsensus: "Consensus Marché",
-    analysisBestValue: "Meilleure Valeur",
+    analysisMarketConsensus: "Favori",
+    analysisBestValue: "Meilleure Pari",
     analysisOffensiveEdge: "Avantage Offensif",
     analysisDefensiveEdge: "Avantage Défensif",
     analysisNoConsensus: "Pas de consensus",
