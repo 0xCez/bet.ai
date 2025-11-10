@@ -805,11 +805,6 @@ export default function MarketIntelNew() {
                   {/* Single Match Winner Row */}
                   <View style={styles.tableRow}>
                     <View style={styles.teamColumn}>
-                      <Image
-                        source={require("../assets/images/logo.png")}
-                        style={styles.teamLogo}
-                        contentFit="contain"
-                      />
                       <Text style={styles.teamName}>{i18n.t("marketIntelMatchWinner")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
@@ -1413,11 +1408,6 @@ export default function MarketIntelNew() {
                   {/* Single Fair Value Row */}
                   <View style={styles.tableRow}>
                     <View style={styles.teamColumn}>
-                      <Image
-                        source={require("../assets/images/logo.png")}
-                        style={styles.teamLogo}
-                        contentFit="contain"
-                      />
                       <Text style={styles.teamName}>{i18n.t("marketIntelFairValueRow")}</Text>
                     </View>
                     <View style={styles.dataColumn}>
@@ -1704,7 +1694,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   bestLinesContent: {
-    paddingVertical: 22,
+    paddingVertical: 18,
     paddingHorizontal: 0,
   },
   bestLinesHeader: {
@@ -1725,7 +1715,7 @@ const styles = StyleSheet.create({
     color: "#00C2E0",
   },
   linesList: {
-    gap: 36,
+    gap: 24,
   },
   lineItem: {
     flexDirection: "row",

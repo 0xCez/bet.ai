@@ -396,6 +396,8 @@ export default {
 
   marketIntelInfoEVOpportunitiesTitle: "EV+ & Arb Opportunities 💸",
   marketIntelInfoEVOpportunitiesContent: "Bets with positive expected value or guaranteed profit. +EV means positive expected value - over time, these bets make money. Arbitrage means betting both sides at different books for guaranteed profit. If none exist, we show the lowest vig options instead.",
+  marketIntelDisclaimerLine1: "Betting selections are informational. Bet.AI does not offer real-money gambling.",
+  marketIntelDisclaimerLine2: "Links redirect to licensed operators. Please bet responsibly.",
 
   teamStatsSoccerInfoTitle: "Team Stats Soccer Guide 📊",
 

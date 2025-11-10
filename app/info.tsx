@@ -39,7 +39,7 @@ export default function InfoPage() {
     // Navigate to the specific page the user came from with analysis data
     if (params.from) {
       const queryParams: Record<string, string> = {};
-      
+
       // Preserve analysis data
       if (params.team1) queryParams.team1 = params.team1;
       if (params.team2) queryParams.team2 = params.team2;
@@ -47,11 +47,11 @@ export default function InfoPage() {
       if (params.team1Logo) queryParams.team1Logo = params.team1Logo;
       if (params.team2Logo) queryParams.team2Logo = params.team2Logo;
       if (params.analysisId) queryParams.analysisId = params.analysisId;
-      
+
       // Preserve state for player/team stats pages
       if (params.selectedTeam) queryParams.selectedTeam = params.selectedTeam;
       if (params.selectedPlayer) queryParams.selectedPlayer = params.selectedPlayer;
-      
+
       // Use replace to go back without adding to navigation stack
       router.replace({
         pathname: `/${params.from}` as any,
@@ -466,6 +466,7 @@ export default function InfoPage() {
   };
 
   const infoContent = getInfoContent();
+  const showMarketDisclaimer = params.from === "market-intel";
 
   return (
     <ScreenBackground>
@@ -486,6 +487,16 @@ export default function InfoPage() {
                 </View>
               );
             })}
+            {showMarketDisclaimer && (
+              <View style={styles.disclaimerContainer}>
+                <Text style={styles.disclaimerText}>
+                  {i18n.t("marketIntelDisclaimerLine1")}
+                </Text>
+                <Text style={styles.disclaimerText}>
+                  {i18n.t("marketIntelDisclaimerLine2")}
+                </Text>
+              </View>
+            )}
           </View>
         </Card>
       </ScrollView>
@@ -550,6 +561,19 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.8)",
     lineHeight: 21,
     marginBottom: 16,
+  },
+  disclaimerContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(255, 255, 255, 0.12)",
+    gap: 6,
+  },
+  disclaimerText: {
+    fontFamily: "Aeonik-Regular",
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.6)",
+    lineHeight: 18,
   },
   emptyState: {
     padding: 32,

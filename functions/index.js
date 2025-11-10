@@ -6052,7 +6052,7 @@ function calculateMarketConsensus(marketIntelligence, homeTeam, awayTeam) {
 
       return {
         display: `${favoritePercent}% ${favoriteTeam}`,
-        label:
+        label: `Market Consensus: ${favoritePercent}% ${favoriteTeam}`,
         teamSide: favorite // "home" or "away"
       };
     }
@@ -6126,7 +6126,7 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
         const teamLabel = isHome ? "Home" : "Away";
         return {
           display: `${teamLabel} ML at ${bookmakerShort}`,
-          label:
+          label: `Best Value: ${teamLabel} ML at ${bookmakerShort}`,
           teamSide: isHome ? "home" : "away"
         };
       }
@@ -6182,7 +6182,7 @@ function findBestValue(marketIntelligence, homeTeam, awayTeam) {
 
         return {
           display: favoriteLine.type === "soccer_win" ? `${oddsDisplay} at ${bookmakerShort}` : `${teamLabel} ML at ${bookmakerShort}`,
-          label:
+          label: `Best Line: ${teamLabel} at ${bookmakerShort}`,
           teamSide: favoriteIsHome ? "home" : "away"
         };
       }
@@ -6952,3 +6952,100 @@ function getTopPlayersForSport(players, sport) {
   // Default fallback
       return players.slice(0, 10);
 }
+
+// ====================================================================
+// TEMPORARY HELPER: Copy Analysis to French Demo Document
+// ====================================================================
+exports.updateFrenchDemoAnalysis = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  try {
+    const sourceAnalysisId = '8q4tR1o645gY3pJsZua4';
+    const targetDemoId = 'WxmvWHRNBCrULv7uuKeV';
+    const sourceUserId = 'MTxoKPLMfIcm8UOXWpJuvXEpyL22'; // Your user ID
+    const demoUserId = 'piWQIzwI9tNXrNTgb5dWTqAjUrj2';
+
+    console.log(`Copying analysis ${sourceAnalysisId} from user ${sourceUserId} to French demo ${targetDemoId}`);
+
+    // Read source analysis from your user's collection
+    const sourceRef = db.collection('userAnalyses').doc(sourceUserId).collection('analyses').doc(sourceAnalysisId);
+    const sourceDoc = await sourceRef.get();
+
+    if (!sourceDoc.exists) {
+      return res.status(404).json({
+        error: 'Source analysis not found',
+        sourceAnalysisId,
+        sourceUserId
+      });
+    }
+
+    const sourceData = sourceDoc.data();
+    
+    // Read current demo document to preserve certain fields
+    const targetRef = db.collection('userAnalyses').doc(demoUserId).collection('analyses').doc(targetDemoId);
+    const targetDoc = await targetRef.get();
+    
+    let preservedData = {};
+    if (targetDoc.exists) {
+      const targetData = targetDoc.data();
+      // Preserve fields that shouldn't be overwritten
+      preservedData = {
+        createdAt: targetData.createdAt, // Keep original creation time
+      };
+    }
+
+    // Sanitize the analysis data (remove undefined/null that Firestore doesn't like)
+    const sanitizeForFirestore = (obj) => {
+      if (obj === null || obj === undefined) return null;
+      if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+      if (typeof obj === 'object') {
+        const cleaned = {};
+        for (const [key, value] of Object.entries(obj)) {
+          if (value !== undefined && value !== null && key !== '') {
+            cleaned[key] = sanitizeForFirestore(value);
+          }
+        }
+        return cleaned;
+      }
+      return obj;
+    };
+
+    // Prepare the data to write
+    const dataToWrite = {
+      ...sanitizeForFirestore(sourceData),
+      ...preservedData,
+      // Ensure we keep the demo structure
+      teams: sourceData.teams,
+      confidence: sourceData.confidence,
+      sport: sourceData.sport,
+      imageUrl: sourceData.imageUrl,
+      analysis: sanitizeForFirestore(sourceData.analysis),
+    };
+
+    // Write to the French demo document
+    await targetRef.set(dataToWrite, { merge: false }); // Complete overwrite
+
+    console.log(`✅ Successfully copied analysis to French demo ${targetDemoId}`);
+    
+    res.status(200).json({
+      success: true,
+      message: 'French demo analysis updated successfully',
+      sourceAnalysisId,
+      targetDemoId,
+      teams: sourceData.teams,
+      sport: sourceData.sport
+    });
+
+  } catch (error) {
+    console.error('Error updating French demo analysis:', error);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});

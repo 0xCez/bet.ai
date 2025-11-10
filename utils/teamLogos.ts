@@ -160,6 +160,7 @@ export const getSoccerTeamLogo = (teamName: string) => {
 
     // La Liga - prefer SVG
     "Barcelona": require("../assets/images/team-logos/soccer/barcelona.svg"),
+    "FC Barcelona": require("../assets/images/team-logos/soccer/barcelona.svg"),
     "Real Madrid": require("../assets/images/team-logos/soccer/real_madrid.svg"),
     "Atletico Madrid": require("../assets/images/team-logos/soccer/atletico_madrid.svg"),
     "Sevilla": require("../assets/images/team-logos/soccer/sevilla.svg"),

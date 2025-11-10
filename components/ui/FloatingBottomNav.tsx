@@ -242,7 +242,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
             start={{ x: 0, y: 1 }}
             end={{ x: 0, y: 0 }}
             opacity={1}
-            borderWidth={0.75}
+            borderWidth={1}
           >
             <Text style={styles.nextButtonText}>{i18n.t("analysisNext")}</Text>
           </BorderButton>
