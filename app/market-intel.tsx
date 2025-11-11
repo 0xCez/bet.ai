@@ -362,6 +362,14 @@ export default function MarketIntelNew() {
 
   // Function to refresh market intelligence (clear cache and fetch fresh data)
   const refreshMarketIntelligence = async () => {
+    // Disable refresh in demo mode
+    if (params.isDemo === 'true') {
+      triggerShake();
+      setCooldownMessage('Feature unavailable in demo mode');
+      setTimeout(() => setCooldownMessage(null), 3000);
+      return;
+    }
+
     // Check if enough time has passed since last refresh (10 minutes)
     const now = Date.now();
     const timeElapsed = now - lastRefreshTime;
@@ -1715,7 +1723,7 @@ const styles = StyleSheet.create({
     color: "#00C2E0",
   },
   linesList: {
-    gap: 24,
+    gap: 22,
   },
   lineItem: {
     flexDirection: "row",
