@@ -378,7 +378,9 @@ export default function AnalysisScreen() {
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
 
-      const docRef = doc(db, "userAnalyses", userId, "analyses", docId);
+      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
+      const collection = isDemo ? "demoAnalysis" : "userAnalyses";
+      const docRef = doc(db, collection, userId, "analyses", docId);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -1191,15 +1193,15 @@ export default function AnalysisScreen() {
         </ScrollView>
 
         {/* Floating Bottom Navigation - Show for both demo and regular mode */}
-        <FloatingBottomNav
-          activeTab="insight"
-          analysisData={{
-            team1: analysisResult?.teams?.home,
-            team2: analysisResult?.teams?.away,
-            sport: analysisResult?.sport,
-            team1Logo: analysisResult?.teams?.logos?.home,
-            team2Logo: analysisResult?.teams?.logos?.away,
-            analysisId: currentAnalysisId || undefined,
+          <FloatingBottomNav
+            activeTab="insight"
+            analysisData={{
+              team1: analysisResult?.teams?.home,
+              team2: analysisResult?.teams?.away,
+              sport: analysisResult?.sport,
+              team1Logo: analysisResult?.teams?.logos?.home,
+              team2Logo: analysisResult?.teams?.logos?.away,
+              analysisId: currentAnalysisId || undefined,
             isDemo: isDemo,
           }}
           isSubscribed={isSubscribed}

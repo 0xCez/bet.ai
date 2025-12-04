@@ -48,6 +48,7 @@ android/
 google-services.json
 GoogleService-Info.plist
 scripts/*firebase-adminsdk*.json
+serviceAccountKey.json
 firebaseConfig.js
 firebaseConfig.ts
 app/firebaseConfig.ts

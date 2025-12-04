@@ -1,13 +1,13 @@
 /**
- * Script to update the English demo analysis with new content
+ * Script to update the Spanish demo analysis with new content
  *
- * Source: User's new analysis
+ * Source: User's new Spanish analysis
  *   - User ID: MTxoKPLMfIcm8UOXWpJuvXEpyL22
- *   - Analysis ID: UgGfgCqIjY4QNEJVvacj
+ *   - Analysis ID: vZkjjbfoOqMoc7KLrDUi
  *
- * Target: Demo analysis
+ * Target: Spanish Demo analysis
  *   - Demo User ID: piWQIzwI9tNXrNTgb5dWTqAjUrj2
- *   - Analysis ID: OT8KyNVdriQgnRi7Q5b6
+ *   - Analysis ID: JTSXUKYC5cNhfqpXvIue
  */
 
 const admin = require('firebase-admin');
@@ -22,14 +22,16 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// Source and target info
+// Source and target info for SPANISH
 const SOURCE_USER_ID = 'MTxoKPLMfIcm8UOXWpJuvXEpyL22';
-const SOURCE_ANALYSIS_ID = 'UgGfgCqIjY4QNEJVvacj';
+const SOURCE_ANALYSIS_ID = 'vZkjjbfoOqMoc7KLrDUi';
 const DEMO_USER_ID = 'piWQIzwI9tNXrNTgb5dWTqAjUrj2';
-const DEMO_ANALYSIS_ID = 'OT8KyNVdriQgnRi7Q5b6';
+const DEMO_ANALYSIS_ID = 'JTSXUKYC5cNhfqpXvIue';
 
 async function updateDemoAnalysis() {
   try {
+    console.log('🇪🇸 Updating Spanish Demo Analysis');
+    console.log('=====================================\n');
     console.log('🔍 Fetching source analysis...');
     console.log(`   User ID: ${SOURCE_USER_ID}`);
     console.log(`   Analysis ID: ${SOURCE_ANALYSIS_ID}`);
@@ -58,11 +60,12 @@ async function updateDemoAnalysis() {
     // Prepare the data to update in the demo analysis
     // Keep the demo's original document ID and createdAt, but replace everything else
     console.log('\n📝 Preparing update for demo analysis...');
+    console.log(`   Collection: demoAnalysis`);
     console.log(`   Demo User ID: ${DEMO_USER_ID}`);
     console.log(`   Demo Analysis ID: ${DEMO_ANALYSIS_ID}`);
 
     const targetDocRef = db
-      .collection('userAnalyses')
+      .collection('demoAnalysis')
       .doc(DEMO_USER_ID)
       .collection('analyses')
       .doc(DEMO_ANALYSIS_ID);
@@ -84,7 +87,7 @@ async function updateDemoAnalysis() {
     console.log('\n🔄 Updating demo analysis...');
     await targetDocRef.set(updateData, { merge: false }); // Full replace, not merge
 
-    console.log('✅ Demo analysis updated successfully!');
+    console.log('✅ Spanish demo analysis updated successfully!');
     console.log('\n📊 Summary:');
     console.log(`   ✓ Copied teams: ${updateData.teams}`);
     console.log(`   ✓ Copied sport: ${updateData.sport}`);
@@ -93,7 +96,10 @@ async function updateDemoAnalysis() {
     console.log(`   ✓ Copied market intelligence data (if available)`);
     console.log(`   ✓ Copied image URL: ${!!updateData.imageUrl}`);
 
-    console.log('\n🎉 Demo analysis cache update complete!');
+    console.log('\n🎉 Spanish demo analysis cache update complete!');
+    console.log('\n⚠️  NEXT STEPS:');
+    console.log(`    1. Update tutorial.tsx to use analysis ID: ${DEMO_ANALYSIS_ID}`);
+    console.log(`    2. Test the Spanish demo in the app`);
 
   } catch (error) {
     console.error('❌ Error updating demo analysis:', error);

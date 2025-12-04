@@ -20,7 +20,7 @@ const TENNIS_API_KEY = process.env.TENNIS_API_KEY || '2cf2f7d9e8e9d7ea2ab285677a
 
 admin.initializeApp();
 const db = admin.firestore();
-const CACHE_EXPIRY_TIME = 36 * 60 * 60 * 1000; // 36 hours in milliseconds
+const CACHE_EXPIRY_TIME = 0; // DISABLED TEMPORARILY - fixing broken data issue
 
 // ====================================================================
 // TRANSLATION MAP FOR MARKET INTELLIGENCE OUTPUT
@@ -111,6 +111,7 @@ const translate = (key, locale = 'en') => phrases[locale]?.[key] || phrases.en[k
 
 
 exports.analyzeImage = functions.https.onRequest(async (req, res) => {
+  console.log("🔥 ANALYZE IMAGE v2.0 - NO CACHE VERIFICATION");
   try {
       // Extract locale from both request body and query params for redundancy
       let { imageUrl, locale } = req.body;
@@ -564,8 +565,6 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             saveAnalysisToCache(sport, team1Id, team2Id, jsonResponse, locale)
               .catch(error => console.error("Error saving to cache:", error));
 
-               // Verify cache is immediately retrievable
-            await verifyCacheRetrieval(sport, team1Id, team2Id, locale);
             // We already sent the response, so we're done
             return;
 
@@ -1051,8 +1050,7 @@ async function getLatest10Games(sport, teamId, team2Id = null) {
         try {
             const response = await axios.get(apiUrl, {
                 headers: {
-                    "x-apisports-key": API_KEY,
-                    "x-rapidapi-host": config.host
+                    "x-apisports-key": API_KEY
                 }
             });
 
@@ -1369,9 +1367,7 @@ async function getHeadToHeadGames(sport, team1Id, team2Id) {
     try {
         const response = await axios.get(apiUrl, {
             headers: {
-                "x-apisports-key": API_KEY,
-                 // Include host if required by the API provider
-                "x-rapidapi-host": config.host
+                "x-apisports-key": API_KEY
             }
         });
 
@@ -4313,7 +4309,15 @@ async function getStatPalTeamStatsTest(teamId) {
       return { stats: null, error: `StatPal API returned status ${response.status}` };
     }
 
+    console.log(`StatPal API response structure for team code ${teamCode}:`, JSON.stringify({
+      hasData: !!response.data,
+      hasStatistics: !!response.data?.statistics,
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      responsePreview: response.data ? JSON.stringify(response.data).substring(0, 500) : 'no data'
+    }));
+
     if (!response.data || !response.data.statistics) {
+      console.error(`StatPal missing statistics field. Full response:`, JSON.stringify(response.data).substring(0, 1000));
       return { stats: null, error: "No statistics data in StatPal response" };
     }
 
@@ -6958,7 +6962,7 @@ function getTopPlayersForSport(players, sport) {
 // ====================================================================
 exports.updateFrenchDemoAnalysis = functions.https.onRequest(async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
-  
+
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
     return;
@@ -6985,11 +6989,11 @@ exports.updateFrenchDemoAnalysis = functions.https.onRequest(async (req, res) =>
     }
 
     const sourceData = sourceDoc.data();
-    
+
     // Read current demo document to preserve certain fields
     const targetRef = db.collection('userAnalyses').doc(demoUserId).collection('analyses').doc(targetDemoId);
     const targetDoc = await targetRef.get();
-    
+
     let preservedData = {};
     if (targetDoc.exists) {
       const targetData = targetDoc.data();
@@ -7031,7 +7035,7 @@ exports.updateFrenchDemoAnalysis = functions.https.onRequest(async (req, res) =>
     await targetRef.set(dataToWrite, { merge: false }); // Complete overwrite
 
     console.log(`✅ Successfully copied analysis to French demo ${targetDemoId}`);
-    
+
     res.status(200).json({
       success: true,
       message: 'French demo analysis updated successfully',

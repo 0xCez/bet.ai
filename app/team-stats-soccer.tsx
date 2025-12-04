@@ -351,6 +351,24 @@ export default function TeamStatsSoccerNew() {
 
     const teamData = selectedTeam === "team1" ? teamResult.teamStats.team1 : teamResult.teamStats.team2;
     const teamName = selectedTeam === "team1" ? params.team1 : params.team2;
+
+    // Add null checks for stats
+    if (!teamData || !teamData.stats) {
+      return (
+        <View style={styles.container}>
+          <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+            <Card style={styles.topCard}>
+              <View style={styles.teamHeader}>
+                <Text style={styles.teamName}>{teamName}</Text>
+                <Text style={styles.errorText}>{i18n.t("teamStatsUnavailable") || "Team statistics are currently unavailable"}</Text>
+              </View>
+            </Card>
+          </ScrollView>
+        </View>
+      );
+    }
+
     const stats = teamData.stats;
 
     // Calculate win percentage

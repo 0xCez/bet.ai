@@ -93,10 +93,10 @@ export default function TutorialScreen() {
                   isDemo: "true",
                   analysisId:
                     i18n.locale.startsWith("fr")
-                      ? "WxmvWHRNBCrULv7uuKeV"
+                      ? "9vYnwxZ4MIyDZvuaB3HR"
                       : i18n.locale.startsWith("es")
-                        ? "SpanishDemoAnalysis"
-                        : "OT8KyNVdriQgnRi7Q5b6",
+                        ? "JTSXUKYC5cNhfqpXvIue"
+                        : "EzUfK8cw0tbFR0cFSIfF",
                 },
               })
             }
