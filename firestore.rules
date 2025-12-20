@@ -31,6 +31,12 @@ service cloud.firestore {
       allow write: if false; // Only Cloud Functions can write to cache
     }
 
+    // Demo analyses - readable by anyone (for onboarding demo), writable by server only
+    match /demoAnalysis/{userId}/analyses/{analysisId} {
+      allow read: if true; // Allow unauthenticated users to read demo content
+      allow write: if false; // Only admins/Cloud Functions can write demo data
+    }
+
     // Deny all other access by default
     match /{document=**} {
       allow read, write: if false;

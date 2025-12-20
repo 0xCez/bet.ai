@@ -5,6 +5,7 @@ import Svg, { Path } from "react-native-svg";
 import { BorderButton } from "./BorderButton";
 import i18n from "@/i18n";
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, withDelay, Easing } from "react-native-reanimated";
+import { colors, spacing, borderRadius, typography } from "../../constants/designTokens";
 
 // BotIcon component using the bot.svg path
 const BotIcon: React.FC<{ size?: number; color?: string }> = ({ size = 22, color = "#ffffff" }) => (
@@ -230,18 +231,17 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         <Animated.View style={[styles.nextButtonContainer, nextButtonAnimatedStyle]}>
           <BorderButton
             onPress={() => {
-              if (isSubscribed) {
-                router.push("/login");
-              } else {
-                router.push("/paywall");
-              }
+              // TODO: Restore original logic after paywall work is done
+              // if (isSubscribed) {
+              //   router.push("/login");
+              // } else {
+              //   router.push("/paywall");
+              // }
+              router.push("/paywall");
             }}
             containerStyle={styles.nextButton}
-            borderColor="rgba(0, 221, 255, 0.25)"
-            gradientColors={["#161616", "#0D0D0D"]}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-            opacity={1}
+            borderColor="rgba(0, 215, 215, 0.3)"
+            backgroundColor={colors.card}
             borderWidth={1}
           >
             <Text style={styles.nextButtonText}>{i18n.t("analysisNext")}</Text>
@@ -254,7 +254,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
         <View style={styles.navContainer}>
           {tabs.map((tab) => {
             const isActive = tab.key === activeTab;
-            const color = isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)";
+            const color = isActive ? colors.primary : colors.mutedForeground;
 
             return (
               <Pressable
@@ -264,7 +264,7 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
                 disabled={isTransitioning}
               >
                 {tab.key === "expert" ? (
-                  <BotIcon size={22} color={isActive ? "#00DDFF" : "rgba(255, 255, 255, 0.8)"} />
+                  <BotIcon size={22} color={isActive ? colors.primary : colors.mutedForeground} />
                 ) : (
                   <Image
                     source={getIconSource(tab.key, isActive)}
@@ -284,67 +284,65 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
 const styles = StyleSheet.create({
   nextButtonContainer: {
     position: "absolute",
-    bottom: 125, // Position above the nav bar with more spacing
-    left: "13%", // Reduce width by adding left/right margins
-    right: "13%",
+    bottom: 120,
+    left: spacing[5],
+    right: spacing[5],
     zIndex: 999,
-    paddingHorizontal: 20,
-    borderRadius: 32,
+    paddingHorizontal: spacing[4],
   },
   nextButton: {
-    height: 60,
-    borderRadius: 32,
+    height: 56,
+    borderRadius: borderRadius.full,
     overflow: "hidden",
   },
   nextButtonText: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.medium,
     textAlign: "center",
   },
   floatingContainer: {
     position: "absolute",
     bottom: 30,
-    left: 20,
-    right: 20,
+    left: spacing[4],
+    right: spacing[4],
     zIndex: 1000,
   },
   navContainer: {
     flexDirection: "row",
-    backgroundColor: "rgba(12, 12, 12, 0.98)",
-    borderRadius: 100,
-    padding: 12, // Reduced padding for more compact design
+    backgroundColor: colors.card, // #161A22
+    borderRadius: borderRadius.full,
+    padding: spacing[3],
     justifyContent: "space-evenly",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10, // Android shadow
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    // Subtle glow effect
+    shadowColor: "rgba(0, 200, 255, 1)",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
   },
   tabItem: {
     alignItems: "center",
-    paddingVertical: 6, // Reduced padding for more compact design
-    paddingHorizontal: 8,
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
     flex: 1,
   },
   tabItemDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   tabIcon: {
-    width: 22, // Reduced icon size for more compact design
+    width: 22,
     height: 22,
-    marginBottom: 2, // Reduced margin for tighter spacing
+    marginBottom: spacing[1],
   },
   inactiveIcon: {
-    opacity: 0.8,
+    opacity: 0.7,
   },
   tabLabel: {
-    fontSize: 15, // Back to proper size
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "400",
+    fontSize: 13, // slightly larger than xs (12)
+    fontFamily: typography.fontFamily.medium,
   },
 });

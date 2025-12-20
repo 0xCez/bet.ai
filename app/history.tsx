@@ -4,12 +4,12 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { TopBar } from "../components/ui/TopBar";
 import { AnalysisHistoryItem } from "../components/ui/AnalysisHistoryItem";
+import { LogoSpinner } from "../components/ui/LogoSpinner";
 import { useRouter } from "expo-router";
 import {
   getFirestore,
@@ -155,7 +155,7 @@ export default function HistoryScreen() {
       <ScreenBackground hideBg>
         <TopBar />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
+          <LogoSpinner size={96} />
         </View>
       </ScreenBackground>
     );

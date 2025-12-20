@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,25 +7,35 @@ import {
   Share,
   Linking,
   Platform,
+  Animated,
 } from "react-native";
 import ActionSheet, { ActionSheetRef } from "react-native-actions-sheet";
 import { TouchableOpacity } from "react-native-gesture-handler";
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Logo } from "./Logo";
 import { router } from "expo-router";
 import { auth } from "../../firebaseConfig";
 import { deleteUser, signOut } from "firebase/auth";
 import { updateAppState } from "../../utils/appStorage";
-import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import { useRevenueCatPurchases } from "../../app/hooks/useRevenueCatPurchases";
 import { useRevenueCat } from "../../app/providers/RevenueCatProvider";
 import i18n from "../../i18n";
+import { colors, spacing, borderRadius, typography, shadows } from "../../constants/designTokens";
 
 interface SettingsBottomSheetProps {
   isVisible: boolean;
   onClose: () => void;
 }
+
+// Menu item configuration
+const menuItems = [
+  { icon: "call-outline" as const, label: "settingsContactUs", action: "contact", color: colors.primary },
+  { icon: "bag-handle-outline" as const, label: "settingsRestorePurchase", action: "restore", color: colors.primary },
+  { icon: "share-social-outline" as const, label: "settingsShare", action: "share", color: colors.primary },
+  { icon: "log-out-outline" as const, label: "settingsLogout", action: "logout", color: colors.primary },
+  { icon: "trash-outline" as const, label: "settingsDeleteAccount", action: "delete", color: colors.destructive },
+];
 
 export function SettingsBottomSheet({
   isVisible,
@@ -35,18 +45,40 @@ export function SettingsBottomSheet({
   const { checkSubscriptionStatus } = useRevenueCatPurchases();
   const { restorePurchases } = useRevenueCat();
 
-  React.useEffect(() => {
+  // Animation values for staggered menu items
+  const itemAnimations = useRef(
+    menuItems.map(() => new Animated.Value(0))
+  ).current;
+
+  const animateItemsIn = () => {
+    // Reset all animations
+    itemAnimations.forEach(anim => anim.setValue(0));
+
+    // Stagger animate each item
+    const animations = itemAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 300,
+        delay: index * 80,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.stagger(80, animations).start();
+  };
+
+  useEffect(() => {
     if (isVisible) {
       actionSheetRef.current?.show();
+      // Delay animation to let sheet open first
+      setTimeout(animateItemsIn, 150);
     } else {
       actionSheetRef.current?.hide();
     }
   }, [isVisible]);
 
   const handleContactPress = async () => {
-    // await actionSheetRef.current?.hide();
     setTimeout(() => {
-      // Add contact functionality send email to cesar@betaiapp.com
       const email = "cesar@betaiapp.com";
       const subject = "Betting AI App Support";
       const body = "I need help with the Betting AI App";
@@ -76,9 +108,7 @@ export function SettingsBottomSheet({
   };
 
   const handleSharePress = async () => {
-    // await actionSheetRef.current?.hide();
     setTimeout(() => {
-      // Add share functionality
       Share.share({
         message: i18n.t("settingsShareText"),
         url: "https://betaiapp.com",
@@ -88,8 +118,6 @@ export function SettingsBottomSheet({
 
   const handleLogout = async () => {
     try {
-      // await actionSheetRef.current?.hide();
-      // Reset app state
       Alert.alert("Logging out", i18n.t("settingsLogoutConfirm"), [
         { text: i18n.t("common.cancel"), style: "cancel" },
         {
@@ -102,7 +130,6 @@ export function SettingsBottomSheet({
               signupAnswers: {},
               signupStep: 0,
             });
-            // Sign out user
             await signOut(auth);
             router.replace("/login");
           },
@@ -114,14 +141,10 @@ export function SettingsBottomSheet({
   };
 
   const handleDeleteAccount = async () => {
-    // await actionSheetRef.current?.hide();
-
-    // First check if user has an active subscription
     try {
       const hasActiveSubscription = await checkSubscriptionStatus();
 
       if (hasActiveSubscription) {
-        // If user has active subscription, prompt them to cancel it first
         Alert.alert(
           "Active Subscription Found",
           i18n.t("settingsActiveSubscription"),
@@ -130,7 +153,6 @@ export function SettingsBottomSheet({
             {
               text: i18n.t("settingsManageSubscriptions"),
               onPress: () => {
-                // Open subscription management in App Store/Google Play
                 if (Platform.OS === "ios") {
                   Linking.openURL(
                     "itms-apps://apps.apple.com/account/subscriptions"
@@ -147,7 +169,6 @@ export function SettingsBottomSheet({
         return;
       }
 
-      // If no active subscription, proceed with account deletion flow
       Alert.alert(
         i18n.t("settingsDeleteAccount"),
         i18n.t("settingsDeleteConfirm"),
@@ -192,7 +213,6 @@ export function SettingsBottomSheet({
       );
     } catch (error) {
       console.error("Error checking subscription status:", error);
-      // If we can't check subscription status, show default delete account flow
       Alert.alert(
         i18n.t("settingsDeleteAccount"),
         i18n.t("settingsDeleteConfirm"),
@@ -253,174 +273,205 @@ export function SettingsBottomSheet({
     WebBrowser.openBrowserAsync("https://betaiapp.com/terms.html");
   };
 
+  const handleAction = (action: string) => {
+    switch (action) {
+      case "contact":
+        handleContactPress();
+        break;
+      case "restore":
+        handleRestorePress();
+        break;
+      case "share":
+        handleSharePress();
+        break;
+      case "logout":
+        handleLogout();
+        break;
+      case "delete":
+        handleDeleteAccount();
+        break;
+    }
+  };
+
   return (
-    // <LinearGradient
-    //   colors={["#1f1f1f", "#141414"]}
-    //   start={{ x: 0, y: 0 }}
-    //   end={{ x: 0, y: 1 }}
-    //   style={styles.gradientBackground}
-    // >
     <ActionSheet
       headerAlwaysVisible={false}
       useBottomSafeAreaPadding={true}
-      CustomHeaderComponent={<View></View>}
-      // safeAreaInsets={{ top: 0, left: 10, right: 10, bottom: 10 }}
+      CustomHeaderComponent={<View />}
       ref={actionSheetRef}
       onClose={handleClose}
       containerStyle={styles.container}
       indicatorStyle={styles.indicator}
       gestureEnabled={true}
     >
-      <LinearGradient
-        colors={["#1f1f1f", "#141414", "#141414"]}
-        start={{ x: 0, y: 0 }}
-        locations={[0.01, 0.75, 0.95]}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradientBackground}
-      >
-        <View style={styles.contentContainer}>
-          <TouchableOpacity style={styles.option} onPress={handleContactPress}>
-            <View style={styles.optionContent}>
-              <Feather name="phone" size={30} color="#00A7CC" />
-              <Text style={styles.optionText}>
-                {i18n.t("settingsContactUs")}
-              </Text>
-            </View>
-          </TouchableOpacity>
+      <View style={styles.contentContainer}>
+        {/* Drag indicator */}
+        <View style={styles.dragIndicator} />
 
-          <View style={styles.divider} />
+        {/* Menu Items */}
+        {menuItems.map((item, index) => (
+          <Animated.View
+            key={item.action}
+            style={{
+              opacity: itemAnimations[index],
+              transform: [
+                {
+                  translateX: itemAnimations[index].interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-30, 0],
+                  }),
+                },
+                {
+                  scale: itemAnimations[index].interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1],
+                  }),
+                },
+              ],
+            }}
+          >
+            <TouchableOpacity
+              style={styles.option}
+              onPress={() => handleAction(item.action)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.optionContent}>
+                <View style={[
+                  styles.iconContainer,
+                  item.action === "delete" && styles.iconContainerDestructive
+                ]}>
+                  <Ionicons name={item.icon} size={24} color={item.color} />
+                </View>
+                <Text style={[
+                  styles.optionText,
+                  item.action === "delete" && styles.deleteText
+                ]}>
+                  {i18n.t(item.label)}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.mutedForeground}
+                />
+              </View>
+            </TouchableOpacity>
+            {index < menuItems.length - 1 && <View style={styles.divider} />}
+          </Animated.View>
+        ))}
 
-          <TouchableOpacity style={styles.option} onPress={handleRestorePress}>
-            <View style={styles.optionContent}>
-              <Feather name="shopping-cart" size={30} color="#00A7CC" />
-              <Text style={styles.optionText}>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Logo size="medium" />
+          <View style={styles.links}>
+            <TouchableOpacity onPress={handleRestorePress}>
+              <Text style={styles.linkText}>
                 {i18n.t("settingsRestorePurchase")}
               </Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <TouchableOpacity style={styles.option} onPress={handleSharePress}>
-            <View style={styles.optionContent}>
-              <Feather name="share-2" size={30} color="#00A7CC" />
-              <Text style={styles.optionText}>{i18n.t("settingsShare")}</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <TouchableOpacity style={styles.option} onPress={handleLogout}>
-            <View style={styles.optionContent}>
-              <Feather name="log-out" size={30} color="#00A7CC" />
-              <Text style={styles.optionText}>{i18n.t("settingsLogout")}</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <TouchableOpacity style={styles.option} onPress={handleDeleteAccount}>
-            <View style={styles.optionContent}>
-              <Feather name="trash-2" size={30} color="#F44336" />
-              <Text style={[styles.optionText, styles.deleteText]}>
-                {i18n.t("settingsDeleteAccount")}
+            </TouchableOpacity>
+            <Text style={styles.separator}>|</Text>
+            <TouchableOpacity onPress={handlePrivacyPress}>
+              <Text style={styles.linkText}>
+                {i18n.t("paywallTrialPrivacyPolicy")}
               </Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Logo size="medium" />
-            <View style={styles.links}>
-              <TouchableOpacity onPress={handleRestorePress}>
-                <Text style={styles.linkText}>
-                  {i18n.t("settingsRestorePurchase")}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.separator}>|</Text>
-              <TouchableOpacity onPress={handlePrivacyPress}>
-                <Text style={styles.linkText}>
-                  {i18n.t("paywallTrialPrivacyPolicy")}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.separator}>|</Text>
-              <TouchableOpacity onPress={handleTermsPress}>
-                <Text style={styles.linkText}>
-                  {i18n.t("paywallTrialTermsOfService")}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
+            <Text style={styles.separator}>|</Text>
+            <TouchableOpacity onPress={handleTermsPress}>
+              <Text style={styles.linkText}>
+                {i18n.t("paywallTrialTermsOfService")}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </LinearGradient>
+      </View>
     </ActionSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientBackground: {
-    borderTopLeftRadius: 30,
-    // backgroundColor: "#1f1f1f",
-    borderTopRightRadius: 30,
-  },
   container: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    backgroundColor: "#141414",
+    borderTopLeftRadius: borderRadius.xl * 2,
+    borderTopRightRadius: borderRadius.xl * 2,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.rgba.primary20,
   },
   indicator: {
     backgroundColor: "transparent",
     width: 0,
     height: 0,
   },
+  dragIndicator: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.muted,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: spacing[6],
+  },
   contentContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[4],
   },
   option: {
-    paddingVertical: 24,
+    paddingVertical: spacing[4],
   },
   optionContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    gap: 24,
+    paddingHorizontal: spacing[2],
+    gap: spacing[4],
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.rgba.primary20,
+  },
+  iconContainerDestructive: {
+    borderColor: colors.rgba.destructiveBg,
+    backgroundColor: colors.rgba.destructiveBg,
   },
   optionText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontFamily: "Aeonik-Medium",
-    opacity: 0.8,
-    fontWeight: "500",
+    flex: 1,
+    color: colors.foreground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.medium,
   },
   divider: {
-    height: 0.7,
-    backgroundColor: "#ffffff20",
+    height: 1,
+    backgroundColor: colors.muted,
+    marginLeft: 44 + spacing[4] + spacing[2], // iconContainer width + gap + padding
   },
   footer: {
-    marginTop: 40,
-    marginBottom: 20,
+    marginTop: spacing[10],
+    marginBottom: spacing[4],
     alignItems: "center",
-    gap: 20,
+    gap: spacing[5],
   },
   links: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
-    gap: 8,
+    gap: spacing[2],
   },
   linkText: {
-    color: "#ffffff",
-    opacity: 0.5,
-    fontSize: 10,
-    padding: 8,
-    fontFamily: "Aeonik-Light",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    padding: spacing[2],
+    fontFamily: typography.fontFamily.light,
   },
   separator: {
-    color: "#ffffff40",
-    fontSize: 14,
+    color: colors.muted,
+    fontSize: typography.sizes.sm,
   },
   deleteText: {
-    color: "#F44336", // Red color for delete account
+    color: colors.destructive,
   },
 });

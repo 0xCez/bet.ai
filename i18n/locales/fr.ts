@@ -78,6 +78,26 @@ export default {
     signupSportTennis: "Tennis",
     signupNext: "Suivant",
 
+    // Profit Growth Chart (Signup)
+    profitGrowthTitle: "Votre croissance",
+    profitGrowth3Days: "3 Jours",
+    profitGrowth7Days: "7 Jours",
+    profitGrowth30Days: "30 Jours",
+    profitGrowthDescription: "Notre IA analyse des milliers de données pour vous aider à faire croître vos gains de manière constante.",
+
+    // Profitability Comparison Chart (Signup)
+    profitabilityTitle: "Votre Rentabilité",
+    profitabilityBetAI: "Bet.AI",
+    profitabilityOther: "Autres outils d'analyse",
+    profitabilityMonth1: "Mois 1",
+    profitabilityMonth6: "Mois 6",
+    profitabilityDescription: "80% des utilisateurs Bet.AI atteignent une rentabilité à long terme.",
+
+    // User Reviews (Signup)
+    reviewJake: "\"Je pensais être un bon parieur avant, mais Bet.AI m'a montré tout ce que je ratais. Les analyses IA sont d'un autre niveau. Je recommande vivement !\"",
+    reviewEmily: "\"Cette appli, c'est comme avoir un parieur pro dans sa poche. Les insights sur l'argent intelligent et les facteurs cachés m'ont aidée à repérer des paris que j'aurais totalement manqués.\"",
+    reviewChris: "\"Avant je me fiais à mon instinct—maintenant j'ai de vraies données pour appuyer mes paris. Bet.AI a complètement changé ma façon de parier, et mon bankroll le prouve !\"",
+
     // Loading Screen
     loadingAnalyzingTradingStyle1: "Analyse de votre",
     loadingAnalyzingTradingStyle2: "style de pari",

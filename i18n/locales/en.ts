@@ -78,6 +78,26 @@ export default {
   signupSportTennis: "Tennis",
   signupNext: "Next",
 
+  // Profit Growth Chart (Signup)
+  profitGrowthTitle: "Your Profit Growth",
+  profitGrowth3Days: "3 Days",
+  profitGrowth7Days: "7 Days",
+  profitGrowth30Days: "30 Days",
+  profitGrowthDescription: "Our AI analyzes thousands of data points to help you consistently grow your betting profits over time.",
+
+  // Profitability Comparison Chart (Signup)
+  profitabilityTitle: "Your Profitability",
+  profitabilityBetAI: "Bet.AI",
+  profitabilityOther: "Other betting analytics tool",
+  profitabilityMonth1: "Month 1",
+  profitabilityMonth6: "Month 6",
+  profitabilityDescription: "80% of Bet.AI users achieve long-term profitability.",
+
+  // User Reviews (Signup)
+  reviewJake: "\"I thought I was a sharp bettor before, but Bet.AI showed me how much I was missing. The AI breakdowns are next level. Highly recommend!\"",
+  reviewEmily: "\"This app is like having a pro bettor in your pocket. The insights on sharp money and hidden factors helped me catch plays I would've totally missed.\"",
+  reviewChris: "\"I used to rely on gut feeling—now I have real data backing my bets. Bet.AI has completely changed the way I approach betting, and my bankroll shows it!\"",
+
   // Loading Screen
   loadingAnalyzingTradingStyle1: "Analyzing your ",
   loadingAnalyzingTradingStyle2: "betting style",

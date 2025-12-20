@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { getSoccerTeamLogo } from "@/utils/teamLogos";
 import { useRouter } from "expo-router";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
+import { Ionicons } from "@expo/vector-icons";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -136,6 +138,53 @@ export default function PlayerStatsSoccerNew() {
     params.selectedPlayer ? JSON.parse(params.selectedPlayer) : null
   );
 
+  // Card animation values (5 cards in player stats view)
+  const cardAnimations = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateCardsIn = useCallback(() => {
+    // Reset all animations
+    cardAnimations.forEach(anim => anim.setValue(0));
+
+    // Create staggered animations
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.parallel(animations).start();
+  }, [cardAnimations]);
+
+  const getCardStyle = useCallback((index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  }), [cardAnimations]);
+
+  // Trigger animation when player is selected and data is loaded
+  useEffect(() => {
+    if (selectedPlayer && playerResult && !isLoading) {
+      animateCardsIn();
+    }
+  }, [selectedPlayer, playerResult, isLoading, animateCardsIn]);
+
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
@@ -172,7 +221,8 @@ export default function PlayerStatsSoccerNew() {
     setError(null);
 
     try {
-      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+      const isDemo = params.isDemo === 'true';
+      const userId = isDemo
         ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2"
         : auth.currentUser?.uid;
 
@@ -180,7 +230,9 @@ export default function PlayerStatsSoccerNew() {
         throw new Error("User ID or Analysis ID missing");
       }
 
-      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
+      const collection = isDemo ? "demoAnalysis" : "userAnalyses";
+      const docRef = doc(db, collection, userId, "analyses", params.analysisId);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
@@ -292,24 +344,15 @@ export default function PlayerStatsSoccerNew() {
             onPress={() => setSelectedTeam(team.key)}
             style={styles.selectionItem}
           >
-            <LinearGradient
-              colors={["#0D0D0D", "#161616"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.selectionGradient}
-            >
+            <View style={styles.selectionContent}>
               <Image
                 source={getSoccerTeamLogo(team.name)}
                 style={styles.selectionLogo}
                 contentFit="contain"
               />
               <Text style={styles.selectionName}>{team.name}</Text>
-              <Image
-                source={require("../assets/images/icons/chevron.svg")}
-                style={styles.chevronIcon}
-                contentFit="contain"
-              />
-            </LinearGradient>
+              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
+            </View>
           </Pressable>
         ))}
         </ScrollView>
@@ -335,24 +378,15 @@ export default function PlayerStatsSoccerNew() {
             onPress={() => setSelectedPlayer({ ...player, teamName })}
             style={styles.selectionItem}
           >
-            <LinearGradient
-              colors={["#0D0D0D", "#161616"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.selectionGradient}
-            >
+            <View style={styles.selectionContent}>
               <Image
                 source={getSoccerTeamLogo(String(teamName || ""))}
                 style={styles.selectionLogo}
                 contentFit="contain"
               />
               <Text style={styles.selectionName}>{player.name}</Text>
-              <Image
-                source={require("../assets/images/icons/chevron.svg")}
-                style={styles.chevronIcon}
-                contentFit="contain"
-              />
-            </LinearGradient>
+              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
+            </View>
           </Pressable>
         ))}
         </ScrollView>
@@ -373,22 +407,25 @@ export default function PlayerStatsSoccerNew() {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
         {/* Top Card - Player Header */}
-        <Card style={styles.topCard}>
-          <View style={styles.playerHeader}>
-            <View style={styles.nameLogoRow}>
-              <Text style={styles.playerName}>{player.name}</Text>
-              <Image
-                source={getSoccerTeamLogo(String(player.teamName || ""))}
-                style={styles.teamLogo}
-                contentFit="contain"
-              />
+        <Animated.View style={getCardStyle(0)}>
+          <Card style={styles.topCard}>
+            <View style={styles.playerHeader}>
+              <View style={styles.nameLogoRow}>
+                <Text style={styles.playerName}>{player.name}</Text>
+                <Image
+                  source={getSoccerTeamLogo(String(player.teamName || ""))}
+                  style={styles.teamLogo}
+                  contentFit="contain"
+                />
+              </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
 
 
         {/* Core KPIs Card */}
-        <Card style={styles.coreKPIsCard}>
+        <Animated.View style={getCardStyle(1)}>
+          <Card style={styles.coreKPIsCard}>
           <View style={styles.coreKPIsContent}>
             {/* Header */}
             <View style={styles.coreKPIsHeader}>
@@ -402,11 +439,7 @@ export default function PlayerStatsSoccerNew() {
           <View style={styles.kpiRow}>
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/meter.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="football-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.goals || 0}</Text>
@@ -416,11 +449,7 @@ export default function PlayerStatsSoccerNew() {
 
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/target.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="locate-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.assists || 0}</Text>
@@ -433,11 +462,7 @@ export default function PlayerStatsSoccerNew() {
           <View style={styles.kpiRow}>
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/shield.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="time-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.minutesPerGoal || 0} {i18n.t("playerStatsSoccerMins")}</Text>
@@ -447,11 +472,7 @@ export default function PlayerStatsSoccerNew() {
 
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/bars.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="stats-chart-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.goalsPerGame || 0}</Text>
@@ -464,11 +485,7 @@ export default function PlayerStatsSoccerNew() {
           <View style={[styles.kpiRow, styles.kpiRowLast]}>
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/double-sided-arrow.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="swap-horizontal-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.keyPasses || 0}</Text>
@@ -478,11 +495,7 @@ export default function PlayerStatsSoccerNew() {
 
             <View style={styles.kpiItem}>
               <View style={styles.iconContainer}>
-                <Image
-                  source={require("../assets/images/icons/card.svg")}
-                  style={styles.kpiIcon}
-                  contentFit="contain"
-                />
+                <Ionicons name="card-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.kpiTextContainer}>
                   <Text style={styles.kpiValue}>{stats.yellowCards || 0}-{stats.redCards || 0}</Text>
@@ -492,9 +505,10 @@ export default function PlayerStatsSoccerNew() {
           </View>
           </View>
         </Card>
+        </Animated.View>
 
         {/* Stats Row - Shot Accuracy and Pass Accuracy */}
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, getCardStyle(2)]}>
           {/* Shot Accuracy Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -514,7 +528,7 @@ export default function PlayerStatsSoccerNew() {
               <GradientProgressBar value={stats.passAccuracy || 0} maxValue={100} />
             </View>
           </Card>
-        </View>
+        </Animated.View>
         </ScrollView>
       </View>
     );
@@ -527,27 +541,22 @@ export default function PlayerStatsSoccerNew() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {/* Team Selection Items */}
         {[1, 2].map((index) => (
-          <Pressable key={index} style={styles.selectionItem}>
-            <LinearGradient
-              colors={["#0D0D0D", "#161616"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.selectionGradient}
-            >
+          <View key={index} style={styles.selectionItem}>
+            <View style={styles.selectionContent}>
               <ShimmerPlaceholder
                 style={styles.selectionLogoShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
               <ShimmerPlaceholder
                 style={styles.selectionNameShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
               <ShimmerPlaceholder
                 style={styles.chevronIconShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
-            </LinearGradient>
-          </Pressable>
+            </View>
+          </View>
         ))}
       </ScrollView>
     </View>
@@ -658,32 +667,30 @@ const styles = StyleSheet.create({
   },
   selectionItem: {
     height: 85.87,
-    borderRadius: 14,
-    marginBottom: 16,
+    borderRadius: radii.xl,
+    marginBottom: spacing[4],
     overflow: "hidden",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
-  selectionGradient: {
+  selectionContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 22,
-    gap: 12,
+    paddingHorizontal: spacing[5],
+    gap: spacing[3],
   },
   selectionLogo: {
-    width: 58.11,
-    height: 38.28,
+    width: 58,
+    height: 40,
   },
   selectionName: {
     flex: 1,
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20,
-    color: "#FFFFFF",
-  },
-  chevronIcon: {
-    width: 24,
-    height: 24,
-    tintColor: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.lg,
+    color: colors.foreground,
   },
   backButton: {
     marginBottom: 16,
@@ -804,16 +811,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   iconContainer: {
-    width: 45.11,
-    height: 44.17,
-    borderRadius: 12.62,
-    backgroundColor: "#161616",
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
     justifyContent: "center",
     alignItems: "center",
-  },
-  kpiIcon: {
-    width: 24,
-    height: 24,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   kpiValue: {
     fontFamily: "Aeonik-Medium",

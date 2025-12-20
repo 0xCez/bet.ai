@@ -1,9 +1,10 @@
 import React from "react";
-import { View, TouchableOpacity, StyleSheet, Text } from "react-native";
+import { View, StyleSheet, Text } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { Logo } from "./Logo";
-import { Image } from "expo-image";
+import { IconButton } from "./IconButton";
+import { colors, spacing, typography } from "../../constants/designTokens";
+
 interface TopBarProps {
   showBack?: boolean;
   title?: string;
@@ -18,18 +19,9 @@ export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
   return (
     <View style={styles.container}>
       {showBack ? (
-        <TouchableOpacity
-          onPress={handleBackPress}
-          style={styles.backButton}
-        >
-          <Image
-            source={require("../../assets/images/back.png")}
-            style={styles.backIcon}
-            contentFit="contain"
-          />
-        </TouchableOpacity>
+        <IconButton icon="chevron-back" onPress={handleBackPress} size={28} />
       ) : (
-        <View style={styles.backButton} />
+        <View style={styles.placeholder} />
       )}
 
       <View style={styles.logoContainer}>
@@ -40,39 +32,31 @@ export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
         )}
       </View>
 
-      <View style={styles.rightPlaceholder} />
+      <View style={styles.placeholder} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backIcon: {
-    width: 48,
-    height: 48,
-  },
   container: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
     width: "100%",
   },
-  backButton: {
+  placeholder: {
     width: 48,
     height: 48,
-    justifyContent: "center",
   },
   logoContainer: {
     flex: 1,
     alignItems: "center",
   },
-  rightPlaceholder: {
-    width: 48,
-  },
   title: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontFamily: "Aeonik-Bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.bold,
   },
 });

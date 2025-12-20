@@ -1,27 +1,25 @@
 import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, Dimensions, Image, Alert } from "react-native";
+import { View, StyleSheet, Dimensions, Image, Alert, Text } from "react-native";
 import { router } from "expo-router";
 import Carousel, { ICarouselInstance } from "react-native-reanimated-carousel";
-import { BlurView } from "expo-blur";
-import MaskedView from "@react-native-masked-view/masked-view";
-import { LinearGradient } from "expo-linear-gradient";
 import { GradientButton } from "../components/ui/GradientButton";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { Logo } from "../components/ui/Logo";
-import { GradientText } from "../components/ui/GradientText";
 import { updateAppState } from "../utils/appStorage";
-import { MultilineText } from "@/components/ui/MultilineText";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import i18n from "../i18n";
 import LottieView from "lottie-react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 interface OnboardingSlide {
   id: number;
   title: string;
   title2: string;
   description: string;
-  image: any;
+  icon: keyof typeof Ionicons.glyphMap;
+  image?: any;
 }
 
 const slides: OnboardingSlide[] = [
@@ -30,13 +28,14 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide1Title'),
     title2: i18n.t('onboardingSlide1Title2'),
     description: i18n.t('onboardingSlide1Description'),
-    image: require("../assets/images/onboarding/slide1.png"),
+    icon: "gift-outline",
   },
   {
     id: 2,
     title: i18n.t('onboardingSlide2Title'),
     title2: i18n.t('onboardingSlide2Title2'),
     description: i18n.t('onboardingSlide2Description'),
+    icon: "camera-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide2-fr.png")
     : i18n.locale.startsWith("es")
@@ -48,6 +47,7 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide3Title'),
     title2: i18n.t('onboardingSlide3Title2'),
     description: i18n.t('onboardingSlide3Description'),
+    icon: "analytics-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide3-fr.png")
     : i18n.locale.startsWith("es")
@@ -59,6 +59,7 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide4Title'),
     title2: i18n.t('onboardingSlide4Title2'),
     description: i18n.t('onboardingSlide4Description'),
+    icon: "flash-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide4-fr.png")
     : i18n.locale.startsWith("es")
@@ -70,6 +71,7 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide5Title'),
     title2: i18n.t('onboardingSlide5Title2'),
     description: i18n.t('onboardingSlide5Description'),
+    icon: "trending-up-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide5-fr.png")
     : i18n.locale.startsWith("es")
@@ -119,22 +121,24 @@ export default function OnboardingScreen() {
   const renderSlide = ({ item }: { item: OnboardingSlide }) => (
     <View style={styles.slide}>
       <View style={styles.contentContainer}>
-        <View style={styles.titleContainer}>
-          {/* <GradientText fontSize={38}>{item.title}</GradientText> */}
-          <MultilineText
-            line1={item.title}
-            line2={item.title2}
-            fontSize={26} // optional
-          />
+        {/* Icon in circular container */}
+        <View style={styles.iconCircle}>
+          <Ionicons name={item.icon} size={48} color={colors.primary} />
         </View>
+
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.titleHighlight}>{item.title2}</Text>
+        </View>
+
         {item.id === 1 ? (
           <LottieView
             source={require("../assets/lottie/welcome.json")}
             autoPlay
             loop={true}
-            style={{ width: "100%", height: "60%", marginBottom: 20 }}
+            style={styles.lottieAnimation}
           />
-        ) : (
+        ) : item.image ? (
           <View style={styles.imageContainer}>
             <Image
               source={item.image}
@@ -142,12 +146,10 @@ export default function OnboardingScreen() {
               resizeMode="contain"
             />
           </View>
-        )}
+        ) : null}
 
-        <View style={styles.textContainer}>
-          <GradientText fontSize={24} style={styles.description}>
-            {item.description}
-          </GradientText>
+        <View style={styles.descriptionContainer}>
+          <Text style={styles.description}>{item.description}</Text>
         </View>
       </View>
     </View>
@@ -168,7 +170,7 @@ export default function OnboardingScreen() {
   );
 
   return (
-    <ScreenBackground backgroundImage={require("../assets/images/bg4.png")}>
+    <ScreenBackground hideBg>
       <View style={styles.header}>
         <Logo size="small" />
       </View>
@@ -188,100 +190,150 @@ export default function OnboardingScreen() {
         }}
       />
 
-      <BlurView intensity={0} tint="dark" style={styles.bottomContainer}>
+      <View style={styles.bottomContainer}>
         {renderPaginationDots()}
         <GradientButton onPress={handleNext}>{i18n.t('onboardingButtonNext')}</GradientButton>
-      </BlurView>
+      </View>
     </ScreenBackground>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[4],
     alignItems: "center",
-  },
-  logo: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 30,
-    color: "#FFFFFF",
-    textAlign: "center",
   },
   slide: {
     flex: 1,
   },
   contentContainer: {
     flex: 1,
-    paddingHorizontal: 0,
-    justifyContent: "space-between",
-    paddingTop: 0,
-    paddingBottom: 100,
+    paddingHorizontal: spacing[5],
+    justifyContent: "flex-start",
+    paddingTop: spacing[6],
+    paddingBottom: 120,
     alignItems: "center",
+  },
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: borderRadius.full,
+    backgroundColor: "rgba(22, 26, 34, 0.9)",
+    borderWidth: 2,
+    borderColor: colors.rgba.primary50,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing[6],
+    // Strong glow effect
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 12,
   },
   titleContainer: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: spacing[4],
     width: "100%",
+  },
+  title: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes["2xl"],
+    color: colors.mutedForeground,
+    textAlign: "center",
+  },
+  titleHighlight: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes["3xl"],
+    color: colors.foreground,
+    textAlign: "center",
+    marginTop: spacing[1],
+  },
+  lottieAnimation: {
+    width: "100%",
+    height: "55%",
+    marginTop: spacing[4],
   },
   imageContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     width: "100%",
-    position: "relative",
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[2],
+    // Glass card styling
+    backgroundColor: "rgba(22, 26, 34, 0.7)",
+    borderRadius: borderRadius["2xl"],
+    borderWidth: 1.5,
+    borderColor: colors.rgba.primary40,
+    overflow: "hidden",
+    // Subtle glow
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
   },
   image: {
     width: "100%",
     height: "100%",
   },
-  textContainer: {
-    marginTop: 32,
+  descriptionContainer: {
+    marginTop: spacing[6],
     alignItems: "center",
     width: "100%",
-    marginBottom: 30,
-  },
-  title: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 38,
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: 8,
-    paddingHorizontal: 0,
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[5],
+    backgroundColor: "rgba(22, 26, 34, 0.85)",
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: colors.rgba.primary30,
+    // Glow effect
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   description: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 20,
-    color: "#ffffff",
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.base,
+    color: colors.foreground,
     textAlign: "center",
-    lineHeight: 30,
-    // letterSpacing: 0.5,
-    paddingHorizontal: 0,
+    lineHeight: 24,
   },
   bottomContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
+    padding: spacing[5],
     paddingBottom: 34,
   },
   paginationContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: spacing[6],
     width: "100%",
   },
   paginationDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 4,
-    backgroundColor: "#333333",
+    width: 8,
+    height: 8,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.muted,
     marginHorizontal: 5,
   },
   paginationDotActive: {
-    backgroundColor: "#ffffff",
-    width: 9,
+    backgroundColor: colors.primary,
+    width: 28,
+    height: 10,
+    // Strong glow on active dot
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 12,
+    elevation: 6,
   },
 });

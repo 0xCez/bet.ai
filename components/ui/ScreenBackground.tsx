@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { colors } from "../../constants/designTokens";
 
 interface ScreenBackgroundProps {
   children: React.ReactNode;
@@ -48,7 +49,7 @@ export function ScreenBackground({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0C0C0C", // Fallback color
+    backgroundColor: colors.background, // #0D0F14 - dark blue-black
   },
   backgroundImage: {
     ...StyleSheet.absoluteFillObject,

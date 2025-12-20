@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -232,6 +233,53 @@ export default function MarketIntelNew() {
   const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
+  // Card animation values (9 cards in market intel view)
+  const cardAnimations = useRef(
+    Array.from({ length: 9 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateCardsIn = useCallback(() => {
+    // Reset all animations
+    cardAnimations.forEach(anim => anim.setValue(0));
+
+    // Create staggered animations
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.parallel(animations).start();
+  }, [cardAnimations]);
+
+  const getCardStyle = useCallback((index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  }), [cardAnimations]);
+
+  // Trigger animation when data is loaded
+  useEffect(() => {
+    if (marketResult && !isLoading) {
+      animateCardsIn();
+    }
+  }, [marketResult, isLoading, animateCardsIn]);
+
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
@@ -267,7 +315,8 @@ export default function MarketIntelNew() {
     setError(null);
 
     try {
-      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+      const isDemo = params.isDemo === 'true';
+      const userId = isDemo
         ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2" // Demo user
         : auth.currentUser?.uid; // Regular user
 
@@ -275,7 +324,9 @@ export default function MarketIntelNew() {
         throw new Error("User ID or Analysis ID missing");
       }
 
-      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
+      const collection = isDemo ? "demoAnalysis" : "userAnalyses";
+      const docRef = doc(db, collection, userId, "analyses", params.analysisId);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
@@ -288,17 +339,29 @@ export default function MarketIntelNew() {
       const cachedAnalysis = data.analysis;
 
       if (cachedAnalysis?.marketIntelligence) {
+        // Handle nested evAnalysis structure (some old data has vigAnalysis/fairValue/evOpportunities nested inside evAnalysis)
+        const mi = cachedAnalysis.marketIntelligence;
+        const flattenedMarketIntel = {
+          ...mi,
+          // Un-nest if data is inside evAnalysis
+          vigAnalysis: mi.vigAnalysis || mi.evAnalysis?.vigAnalysis || null,
+          fairValue: mi.fairValue || mi.evAnalysis?.fairValue || null,
+          evOpportunities: mi.evOpportunities || mi.evAnalysis?.uiOpportunities || mi.evAnalysis?.evOpportunities || null,
+          sharpConsensus: mi.sharpConsensus || mi.evAnalysis?.sharpConsensus || null,
+        };
+
         // Build the expected structure
         const marketData: MarketIntelResult = {
           sport: data.sport || cachedAnalysis.sport,
           teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
-          marketIntelligence: cachedAnalysis.marketIntelligence,
+          marketIntelligence: flattenedMarketIntel,
           timestamp: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
         };
 
         setMarketResult(marketData);
         cachedMarketResult = marketData;
         console.log("✅ Loaded market intel from Firestore cache");
+        console.log("Market intel structure:", JSON.stringify(Object.keys(flattenedMarketIntel), null, 2));
       } else {
         throw new Error("No market intelligence data in cached analysis");
       }
@@ -450,13 +513,13 @@ export default function MarketIntelNew() {
 
   // Shimmer rendering
   const renderShimmer = () => (
-    <View style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* Top Card - Market Intelligence Header */}
       <Card style={styles.topCard}>
         <View style={styles.marketHeader}>
           <ShimmerPlaceholder
             style={styles.marketTitleShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
         </View>
       </Card>
@@ -468,11 +531,11 @@ export default function MarketIntelNew() {
           <View style={styles.bestLinesHeader}>
             <ShimmerPlaceholder
               style={styles.bestLinesTitleShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
             <ShimmerPlaceholder
               style={styles.bestLinesInfoShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
           </View>
 
@@ -482,16 +545,16 @@ export default function MarketIntelNew() {
               <View key={index} style={styles.lineItem}>
                 <ShimmerPlaceholder
                   style={styles.bookmakerLogo}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                 />
                 <View style={styles.lineTextContainer}>
                   <ShimmerPlaceholder
                     style={styles.lineBigTextShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                   <ShimmerPlaceholder
                     style={styles.lineSmallTextShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                 </View>
               </View>
@@ -507,11 +570,11 @@ export default function MarketIntelNew() {
           <View style={styles.consensusLinesHeader}>
             <ShimmerPlaceholder
               style={styles.consensusLinesTitleShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
             <ShimmerPlaceholder
               style={styles.consensusLinesInfoShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
           </View>
 
@@ -524,7 +587,7 @@ export default function MarketIntelNew() {
                 <View key={index} style={styles.dataColumn}>
                   <ShimmerPlaceholder
                     style={styles.columnHeaderTextShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                 </View>
               ))}
@@ -536,11 +599,11 @@ export default function MarketIntelNew() {
                 <View style={styles.teamColumn}>
                   <ShimmerPlaceholder
                     style={styles.teamLogo}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                   <ShimmerPlaceholder
                     style={styles.teamNameShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                 </View>
                 {[1, 2, 3].map((colIndex) => (
@@ -548,12 +611,12 @@ export default function MarketIntelNew() {
                     <View style={styles.dataCell}>
                       <ShimmerPlaceholder
                         style={styles.dataValueShimmer}
-                        shimmerColors={["#919191", "#767676", "#919191"]}
+                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                       />
                       {colIndex !== 3 && (
                         <ShimmerPlaceholder
                           style={styles.dataSecondaryShimmer}
-                          shimmerColors={["#919191", "#767676", "#919191"]}
+                          shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                         />
                       )}
                     </View>
@@ -571,11 +634,11 @@ export default function MarketIntelNew() {
         <View style={styles.publicSharpHeader}>
           <ShimmerPlaceholder
             style={styles.publicSharpTitleShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
           <ShimmerPlaceholder
             style={styles.publicSharpInfoShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
         </View>
 
@@ -586,7 +649,7 @@ export default function MarketIntelNew() {
               <View key={index} style={[styles.publicSharpRow, index === 2 && styles.publicSharpRowBordered]}>
                 <ShimmerPlaceholder
                   style={styles.publicSharpTextShimmer}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                 />
               </View>
             ))}
@@ -596,7 +659,7 @@ export default function MarketIntelNew() {
           <View style={styles.publicSharpRight}>
             <ShimmerPlaceholder
               style={styles.gaugeShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
           </View>
         </View>
@@ -608,11 +671,11 @@ export default function MarketIntelNew() {
         <View style={styles.marketEfficiencyHeader}>
           <ShimmerPlaceholder
             style={styles.marketEfficiencyTitleShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
           <ShimmerPlaceholder
             style={styles.marketEfficiencyInfoShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
         </View>
 
@@ -621,16 +684,16 @@ export default function MarketIntelNew() {
           <View style={styles.progressBarContainer}>
             <ShimmerPlaceholder
               style={styles.progressBarShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
             />
             <View style={styles.progressBarLabels}>
               <ShimmerPlaceholder
                 style={styles.progressBarLabelShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
               <ShimmerPlaceholder
                 style={styles.progressBarLabelShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
             </View>
           </View>
@@ -638,7 +701,7 @@ export default function MarketIntelNew() {
           {/* Description */}
           <ShimmerPlaceholder
             style={styles.marketEfficiencyDescriptionShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
         </View>
       </Card>
@@ -649,11 +712,11 @@ export default function MarketIntelNew() {
         <View style={styles.oddsTableHeader}>
           <ShimmerPlaceholder
             style={styles.oddsTableTitleShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
           <ShimmerPlaceholder
             style={styles.oddsTableInfoShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
         </View>
 
@@ -664,7 +727,7 @@ export default function MarketIntelNew() {
               <ShimmerPlaceholder
                 key={index}
                 style={[styles.oddsTableColumnHeaderShimmer, index === 3 && styles.oddsTableColumnHeaderCellLast]}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
             ))}
           </View>
@@ -672,7 +735,7 @@ export default function MarketIntelNew() {
           {/* Team Name */}
           <ShimmerPlaceholder
             style={styles.oddsTableTeamNameShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
           />
 
           {/* Bookmaker Rows */}
@@ -682,22 +745,22 @@ export default function MarketIntelNew() {
                 <View key={colIndex} style={[styles.oddsTableCell, colIndex === 3 && styles.oddsTableCellLast]}>
                   <ShimmerPlaceholder
                     style={styles.oddsTableLogo}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                   />
                   {colIndex === 1 ? (
                     <ShimmerPlaceholder
                       style={styles.oddsTableValueShimmer}
-                      shimmerColors={["#919191", "#767676", "#919191"]}
+                      shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                     />
                   ) : (
                     <View style={styles.oddsTableMultiValue}>
                       <ShimmerPlaceholder
                         style={styles.oddsTableValueShimmer}
-                        shimmerColors={["#919191", "#767676", "#919191"]}
+                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                       />
                       <ShimmerPlaceholder
                         style={styles.oddsTableValueShimmer}
-                        shimmerColors={["#919191", "#767676", "#919191"]}
+                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
                       />
                     </View>
                   )}
@@ -712,10 +775,10 @@ export default function MarketIntelNew() {
       <View style={styles.buttonContainer}>
         <ShimmerPlaceholder
           style={styles.freshOddsButtonShimmer}
-          shimmerColors={["#919191", "#767676", "#919191"]}
+          shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
         />
       </View>
-    </View>
+    </ScrollView>
   );
 
   // Main content rendering
@@ -731,61 +794,66 @@ export default function MarketIntelNew() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         {/* Top Card - Market Intelligence Header */}
-        <Card style={styles.topCard}>
-          <View style={styles.marketHeader}>
-            <Text style={styles.marketTitle}>{i18n.t("marketIntelTitle")}</Text>
-          </View>
-        </Card>
+        <Animated.View style={getCardStyle(0)}>
+          <Card style={styles.topCard}>
+            <View style={styles.marketHeader}>
+              <Text style={styles.marketTitle}>{i18n.t("marketIntelTitle")}</Text>
+            </View>
+          </Card>
+        </Animated.View>
 
         {/* Best Lines Section */}
-        <Card style={styles.bestLinesCard}>
-          <View style={styles.bestLinesContent}>
-            {/* Header */}
-            <View style={styles.bestLinesHeader}>
-              <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelBestLines")}</Text>
-              <Pressable onPress={() => navigateToInfo("bestLines")}>
-                <Text style={styles.bestLinesInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(1)}>
+          <Card style={styles.bestLinesCard}>
+            <View style={styles.bestLinesContent}>
+              {/* Header */}
+              <View style={styles.bestLinesHeader}>
+                <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelBestLines")}</Text>
+                <Pressable onPress={() => navigateToInfo("bestLines")}>
+                  <Text style={styles.bestLinesInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {/* Dynamic Line Items */}
-            <View style={styles.linesList}>
-              {marketResult?.marketIntelligence?.bestLines?.bestLines && marketResult.marketIntelligence.bestLines.bestLines.length > 0 ? (
-                marketResult.marketIntelligence.bestLines.bestLines.slice(0, 6).map((line, index) => (
-                  <View key={index} style={styles.lineItem}>
-                    <Image
-                      source={getBookmakerLogo(line.bookmaker)}
-                      style={styles.bookmakerLogo}
-                      contentFit="contain"
-                    />
-                    <View style={styles.lineTextContainer}>
-                      <Text style={styles.lineBigText}>
-                        {line.team?.split(' ').pop() || ""} {
-                          line.type === "soccer_win" ? (line.fractionalOdds || formatOdds(line.odds)) + " to win" :
-                          line.type === "soccer_draw" ? (line.fractionalOdds || formatOdds(line.odds)) :
-                          line.type === "moneyline" ? "ML " + formatOdds(line.odds) :
-                          line.type === "spread" ? (line.line || "") + " " + formatOdds(line.odds) :
-                          `${line.type === "over" ? "Over" : "Under"} ${line.line || ""} ${formatOdds(line.odds)}`
-                        }
-                      </Text>
-                      <Text style={styles.lineSmallText}>{line.label}</Text>
+              {/* Dynamic Line Items */}
+              <View style={styles.linesList}>
+                {marketResult?.marketIntelligence?.bestLines?.bestLines && marketResult.marketIntelligence.bestLines.bestLines.length > 0 ? (
+                  marketResult.marketIntelligence.bestLines.bestLines.slice(0, 6).map((line, index) => (
+                    <View key={index} style={styles.lineItem}>
+                      <Image
+                        source={getBookmakerLogo(line.bookmaker)}
+                        style={styles.bookmakerLogo}
+                        contentFit="contain"
+                      />
+                      <View style={styles.lineTextContainer}>
+                        <Text style={styles.lineBigText}>
+                          {line.team?.split(' ').pop() || ""} {
+                            line.type === "soccer_win" ? (line.fractionalOdds || formatOdds(line.odds)) + " to win" :
+                            line.type === "soccer_draw" ? (line.fractionalOdds || formatOdds(line.odds)) :
+                            line.type === "moneyline" ? "ML " + formatOdds(line.odds) :
+                            line.type === "spread" ? (line.line || "") + " " + formatOdds(line.odds) :
+                            `${line.type === "over" ? "Over" : "Under"} ${line.line || ""} ${formatOdds(line.odds)}`
+                          }
+                        </Text>
+                        <Text style={styles.lineSmallText}>{line.label}</Text>
+                      </View>
                     </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoBestLines")}</Text>
                   </View>
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoBestLines")}</Text>
-                </View>
-              )}
+                )}
+              </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Consensus Lines Section */}
-        <Card style={styles.consensusLinesCard}>
-          <View style={styles.consensusLinesContent}>
-            {/* Header */}
-            <View style={styles.consensusLinesHeader}>
+        <Animated.View style={getCardStyle(2)}>
+          <Card style={styles.consensusLinesCard}>
+            <View style={styles.consensusLinesContent}>
+              {/* Header */}
+              <View style={styles.consensusLinesHeader}>
               <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelConsensusLines")}</Text>
               <Pressable onPress={() => navigateToInfo("consensusLines")}>
                 <Text style={styles.consensusLinesInfo}>ⓘ</Text>
@@ -919,11 +987,13 @@ export default function MarketIntelNew() {
                 <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoConsensusLines")}</Text>
               </View>
             )}
-          </View>
-        </Card>
+            </View>
+          </Card>
+        </Animated.View>
 
         {/* Public vs Sharp Meter Card */}
-        <Card style={styles.publicSharpCard}>
+        <Animated.View style={getCardStyle(3)}>
+          <Card style={styles.publicSharpCard}>
           {/* Header */}
           <View style={styles.publicSharpHeader}>
             <Text style={styles.publicSharpTitle}>{i18n.t("marketIntelPublicVsSharp")}</Text>
@@ -973,17 +1043,19 @@ export default function MarketIntelNew() {
               <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoSharpMeter")}</Text>
             </View>
           )}
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Market Efficiency Card */}
-        <Card style={styles.marketEfficiencyCard}>
-          {/* Header */}
-          <View style={styles.marketEfficiencyHeader}>
-            <Text style={styles.marketEfficiencyTitle}>{i18n.t("marketIntelEfficiency")}</Text>
-            <Pressable onPress={() => navigateToInfo("marketEfficiency")}>
-              <Text style={styles.marketEfficiencyInfo}>ⓘ</Text>
-            </Pressable>
-          </View>
+        <Animated.View style={getCardStyle(4)}>
+          <Card style={styles.marketEfficiencyCard}>
+            {/* Header */}
+            <View style={styles.marketEfficiencyHeader}>
+              <Text style={styles.marketEfficiencyTitle}>{i18n.t("marketIntelEfficiency")}</Text>
+              <Pressable onPress={() => navigateToInfo("marketEfficiency")}>
+                <Text style={styles.marketEfficiencyInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
           {marketResult?.marketIntelligence?.marketTightness ? (
             <View style={styles.marketEfficiencyContent}>
@@ -1010,17 +1082,19 @@ export default function MarketIntelNew() {
               <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoEfficiency")}</Text>
             </View>
           )}
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Odds Table Card */}
-        <Card style={styles.oddsTableCard}>
-          {/* Header */}
-          <View style={styles.oddsTableHeader}>
-            <Text style={styles.oddsTableTitle}>{i18n.t("marketIntelOddsTable")}</Text>
-            <Pressable onPress={() => navigateToInfo("oddsTable")}>
-              <Text style={styles.oddsTableInfo}>ⓘ</Text>
-            </Pressable>
-          </View>
+        <Animated.View style={getCardStyle(5)}>
+          <Card style={styles.oddsTableCard}>
+            {/* Header */}
+            <View style={styles.oddsTableHeader}>
+              <Text style={styles.oddsTableTitle}>{i18n.t("marketIntelOddsTable")}</Text>
+              <Pressable onPress={() => navigateToInfo("oddsTable")}>
+                <Text style={styles.oddsTableInfo}>ⓘ</Text>
+              </Pressable>
+            </View>
 
           {marketResult?.marketIntelligence?.oddsTable && marketResult.marketIntelligence.oddsTable.length > 0 ? (
             params.sport?.includes('soccer') ? (
@@ -1191,18 +1265,20 @@ export default function MarketIntelNew() {
               <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoOddsTable")}</Text>
             </View>
           )}
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Vig Analysis Card */}
-        <Card style={styles.consensusLinesCard}>
-          <View style={styles.consensusLinesContent}>
-            {/* Header */}
-            <View style={styles.consensusLinesHeader}>
-              <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelVigAnalysis")}</Text>
-              <Pressable onPress={() => navigateToInfo("vigAnalysis")}>
-                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(6)}>
+          <Card style={styles.consensusLinesCard}>
+            <View style={styles.consensusLinesContent}>
+              {/* Header */}
+              <View style={styles.consensusLinesHeader}>
+                <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelVigAnalysis")}</Text>
+                <Pressable onPress={() => navigateToInfo("vigAnalysis")}>
+                  <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
             {marketResult?.marketIntelligence?.vigAnalysis ? (
               params.sport?.includes('soccer') ? (
@@ -1381,21 +1457,23 @@ export default function MarketIntelNew() {
                 <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoVigAnalysis")}</Text>
               </View>
             )}
-          </View>
-        </Card>
+            </View>
+          </Card>
+        </Animated.View>
 
         {/* Fair Value Card */}
-        <Card style={styles.consensusLinesCard}>
-          <View style={styles.consensusLinesContent}>
-            {/* Header */}
-            <View style={styles.consensusLinesHeader}>
-              <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelFairValue")}</Text>
-              <Pressable onPress={() => navigateToInfo("fairValue")}>
-                <Text style={styles.consensusLinesInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(7)}>
+          <Card style={styles.consensusLinesCard}>
+            <View style={styles.consensusLinesContent}>
+              {/* Header */}
+              <View style={styles.consensusLinesHeader}>
+                <Text style={styles.consensusLinesTitle}>{i18n.t("marketIntelFairValue")}</Text>
+                <Pressable onPress={() => navigateToInfo("fairValue")}>
+                  <Text style={styles.consensusLinesInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {marketResult?.marketIntelligence?.fairValue ? (
+              {marketResult?.marketIntelligence?.fairValue ? (
               params.sport?.includes('soccer') ? (
                 // SOCCER: 1 row with Home/Draw/Away fractional odds
                 <View style={styles.consensusTable}>
@@ -1530,55 +1608,58 @@ export default function MarketIntelNew() {
                 <Text style={styles.emptyStateText}>{i18n.t("marketIntelNoFairValue")}</Text>
               </View>
             )}
-          </View>
-        </Card>
+            </View>
+          </Card>
+        </Animated.View>
 
         {/* EV+ & Arb Opportunities Card */}
-        <Card style={styles.bestLinesCard}>
-          <View style={styles.bestLinesContent}>
-            {/* Header */}
-            <View style={styles.bestLinesHeader}>
-              <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelEVOpportunities")}</Text>
-              <Pressable onPress={() => navigateToInfo("evOpportunities")}>
-                <Text style={styles.bestLinesInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(8)}>
+          <Card style={styles.bestLinesCard}>
+            <View style={styles.bestLinesContent}>
+              {/* Header */}
+              <View style={styles.bestLinesHeader}>
+                <Text style={styles.bestLinesTitle}>{i18n.t("marketIntelEVOpportunities")}</Text>
+                <Pressable onPress={() => navigateToInfo("evOpportunities")}>
+                  <Text style={styles.bestLinesInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {/* Dynamic Line Items */}
-            {marketResult?.marketIntelligence?.evOpportunities?.opportunities &&
-             marketResult.marketIntelligence.evOpportunities.opportunities.length > 0 ? (
-              <View style={styles.linesList}>
-                {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
-                  <View key={index} style={styles.lineItem}>
+              {/* Dynamic Line Items */}
+              {marketResult?.marketIntelligence?.evOpportunities?.opportunities &&
+               marketResult.marketIntelligence.evOpportunities.opportunities.length > 0 ? (
+                <View style={styles.linesList}>
+                  {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
+                    <View key={index} style={styles.lineItem}>
+                      <Image
+                        source={opportunity.icon === "x" ? require("../assets/images/noevopps.png") : getBookmakerLogo(opportunity.bookmaker)}
+                        style={styles.bookmakerLogo}
+                        contentFit="contain"
+                      />
+                      <View style={styles.lineTextContainer}>
+                        <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
+                        <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.linesList}>
+                  <View style={styles.lineItem}>
                     <Image
-                      source={opportunity.icon === "x" ? require("../assets/images/noevopps.png") : getBookmakerLogo(opportunity.bookmaker)}
+                      source={require("../assets/images/noevopps.png")}
                       style={styles.bookmakerLogo}
                       contentFit="contain"
                     />
                     <View style={styles.lineTextContainer}>
-                      <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
-                      <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                      <Text style={styles.opportunityBigText}>{i18n.t("marketIntelNoOpportunities")}</Text>
+                      <Text style={styles.lineSmallText}>{i18n.t("marketIntelNoEVOpps")}</Text>
                     </View>
                   </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.linesList}>
-                <View style={styles.lineItem}>
-                  <Image
-                    source={require("../assets/images/noevopps.png")}
-                    style={styles.bookmakerLogo}
-                    contentFit="contain"
-                  />
-                  <View style={styles.lineTextContainer}>
-                    <Text style={styles.opportunityBigText}>{i18n.t("marketIntelNoOpportunities")}</Text>
-                    <Text style={styles.lineSmallText}>{i18n.t("marketIntelNoEVOpps")}</Text>
-                  </View>
                 </View>
-              </View>
-            )}
-          </View>
-        </Card>
+              )}
+            </View>
+          </Card>
+        </Animated.View>
 
         {/* Get Fresh Odds Button */}
         <View style={styles.buttonContainer}>
@@ -1631,32 +1712,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[5],
     paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   shimmerContainer: {
     width: "100%",
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[5],
   },
   shimmerGroup: {
     width: "100%",
-    marginBottom: 20,
-    borderRadius: 12,
-    borderWidth: 0.3,
-    borderColor: "#888888",
+    marginBottom: spacing[5],
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.rgba.primary20,
     overflow: "hidden",
   },
   gradientContainer: {
     width: "100%",
-    padding: 15,
+    padding: spacing[4],
     opacity: 0.6,
-    gap: 8,
+    gap: spacing[2],
   },
   shimmerLine: {
     height: 20,
-    borderRadius: 15,
+    borderRadius: radii.md,
     marginBottom: 0,
     width: "100%",
   },
@@ -1664,24 +1745,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: spacing[5],
   },
   errorText: {
-    color: "#FF5252",
-    fontSize: 16,
+    color: colors.destructive,
+    fontSize: typography.sizes.base,
     textAlign: "center",
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
   },
   emptyState: {
-    padding: 32,
+    padding: spacing[8],
     alignItems: "center",
     justifyContent: "center",
   },
   emptyStateText: {
-    color: "#888888",
-    fontSize: 14,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
     textAlign: "center",
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
   },
   topCard: {
     height: 85.87,
@@ -1690,94 +1771,101 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 13.44,
-    paddingHorizontal: 22,
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[6],
   },
   marketTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   bestLinesCard: {
-    marginTop: 16,
+    marginTop: spacing[4],
   },
   bestLinesContent: {
-    paddingVertical: 18,
+    paddingVertical: spacing[4],
     paddingHorizontal: 0,
   },
   bestLinesHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
-    marginBottom: 20,
+    paddingHorizontal: spacing[6],
+    marginBottom: spacing[5],
   },
   bestLinesTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   bestLinesInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   linesList: {
-    gap: 22,
+    gap: spacing[3],
   },
   lineItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20.15,
-    gap: 16,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    marginHorizontal: spacing[4],
+    gap: spacing[3],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   bookmakerLogo: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radii.lg,
   },
   lineTextContainer: {
     flex: 1,
-    gap: 4,
+    gap: spacing[1],
   },
   lineBigText: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.5,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.base,
+    color: colors.mutedForeground,
   },
   lineSmallText: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 14,
-    color: "#FFFFFF",
-    opacity: 0.7,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   consensusLinesCard: {
-    marginTop: 16,
+    marginTop: spacing[4],
   },
   consensusLinesContent: {
-    paddingVertical: 22,
+    paddingVertical: spacing[5],
     paddingHorizontal: 0,
   },
   consensusLinesHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
-    marginBottom: 20,
+    paddingHorizontal: spacing[6],
+    marginBottom: spacing[5],
   },
   consensusLinesTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   consensusLinesInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   consensusTable: {
-    paddingHorizontal: 20.15,
-    gap: 12,
+    paddingHorizontal: spacing[5],
+    gap: spacing[3],
   },
   tableHeader: {
     flexDirection: "row",
@@ -1786,13 +1874,13 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: spacing[1],
   },
   teamColumn: {
     flex: 2,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing[3],
   },
   dataColumn: {
     flex: 0.85,
@@ -1801,73 +1889,77 @@ const styles = StyleSheet.create({
   dataCell: {
     width: 52,
     height: 52,
-    borderRadius: 14,
-    backgroundColor: "#161616",
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
     borderWidth: 1,
-    borderColor: "#212121",
+    borderColor: "rgba(0, 215, 215, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     gap: 2,
   },
   columnHeaderText: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 11,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 10,
+    color: colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    textAlign: "center",
+    flexWrap: "nowrap",
   },
   teamLogo: {
-    width: 40.31,
-    height: 40.31,
+    width: 40,
+    height: 40,
   },
   teamName: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 14,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.foreground,
   },
   dataValue: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 12,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.foreground,
   },
   dataSecondary: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 12,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.foreground,
     opacity: 0.5,
   },
   publicSharpCard: {
-    marginTop: 16,
+    marginTop: spacing[4],
   },
   publicSharpHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
-    paddingTop: 22,
-    paddingBottom: 16,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[4],
   },
   publicSharpTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   publicSharpInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   publicSharpContent: {
     flexDirection: "row",
-    paddingHorizontal: 31.91,
-    paddingBottom: 22,
+    paddingHorizontal: spacing[6],
+    paddingBottom: spacing[5],
     justifyContent: "space-between",
     alignItems: "center",
   },
   publicSharpLeft: {
     flex: 1,
-    gap: 12,
+    gap: spacing[3],
   },
   publicSharpRight: {
-    marginLeft: 20,
+    marginLeft: spacing[5],
     marginTop: -30,
     marginRight: -10,
   },
@@ -1877,44 +1969,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   publicSharpRowBordered: {
-    borderTopWidth: 0.2,
-    borderBottomWidth: 0.2,
-    borderColor: "#686868",
-    paddingVertical: 12,
+    borderTopWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderColor: colors.rgba.primary20,
+    paddingVertical: spacing[3],
   },
   publicSharpText: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 12,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.light,
+    fontSize: typography.sizes.xs,
+    color: colors.foreground,
   },
   marketEfficiencyCard: {
-    marginTop: 16,
+    marginTop: spacing[4],
   },
   marketEfficiencyHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
-    paddingTop: 22,
-    paddingBottom: 16,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[4],
   },
   marketEfficiencyTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   marketEfficiencyInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   marketEfficiencyContent: {
-    paddingHorizontal: 31.91,
-    paddingBottom: 22,
-    gap: 12,
+    paddingHorizontal: spacing[6],
+    paddingBottom: spacing[5],
+    gap: spacing[3],
   },
   progressBarContainer: {
-    gap: 8,
+    gap: spacing[2],
   },
   progressBarLabels: {
     flexDirection: "row",
@@ -1922,222 +2014,222 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   progressBarLabel: {
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
     fontSize: 10,
-    color: "#FFFFFF",
+    color: colors.foreground,
     opacity: 0.6,
   },
   marketEfficiencyDescription: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 12,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.xs,
+    color: colors.foreground,
     opacity: 0.8,
   },
   oddsTableCard: {
-    marginTop: 16,
+    marginTop: spacing[4],
   },
   oddsTableHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 31.91,
-    paddingTop: 22,
-    paddingBottom: 16,
+    paddingHorizontal: spacing[6],
+    paddingTop: spacing[5],
+    paddingBottom: spacing[4],
   },
   oddsTableTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   oddsTableInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   oddsTableContainer: {
-    paddingHorizontal: 20.15,
-    paddingBottom: 22,
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[5],
   },
   oddsTableHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     borderBottomWidth: 0.5,
-    borderBottomColor: "#2A2A2A",
+    borderBottomColor: colors.rgba.primary20,
   },
   oddsTableColumnHeader: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 14,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.foreground,
     flex: 1,
     textAlign: "center",
-    paddingVertical: 12,
+    paddingVertical: spacing[3],
   },
   oddsTableColumnHeaderCell: {
     borderRightWidth: 0.5,
-    borderRightColor: "#2A2A2A",
+    borderRightColor: colors.rgba.primary20,
   },
   oddsTableColumnHeaderCellLast: {
     borderRightWidth: 0,
   },
   oddsTableTeamName: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 14,
-    color: "#FFFFFF",
-    paddingVertical: 12,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.foreground,
+    paddingVertical: spacing[3],
     textAlign: "center",
     borderBottomWidth: 0.5,
-    borderBottomColor: "#2A2A2A",
+    borderBottomColor: colors.rgba.primary20,
   },
   oddsTableRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     borderBottomWidth: 0.5,
-    borderBottomColor: "#2A2A2A",
+    borderBottomColor: colors.rgba.primary20,
   },
   oddsTableCell: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
+    gap: spacing[2],
+    paddingVertical: spacing[3],
     borderRightWidth: 0.5,
-    borderRightColor: "#2A2A2A",
+    borderRightColor: colors.rgba.primary20,
   },
   oddsTableLogo: {
-    width: 30.23,
-    height: 30.23,
+    width: 30,
+    height: 30,
     alignSelf: "flex-start",
     marginTop: 2,
   },
   oddsTableValue: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 13.5,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.foreground,
   },
   oddsTableMultiValue: {
-    gap: 4,
+    gap: spacing[1],
     alignItems: "center",
   },
   oddsTableCellLast: {
     borderRightWidth: 0,
   },
   opportunityLogo: {
-    width: 40.31,
-    height: 40.31,
+    width: 40,
+    height: 40,
   },
   opportunityTextContainer: {
     flex: 1,
-    gap: 4,
+    gap: spacing[1],
   },
   opportunityBigText: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 15,
-    color: "#0BFF13",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.success,
   },
   opportunitySmallText: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 14,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.sm,
+    color: colors.mutedForeground,
   },
   buttonContainer: {
     alignItems: "center",
-    marginTop: 24,
-    marginBottom: 20,
+    marginTop: spacing[6],
+    marginBottom: spacing[5],
   },
   freshOddsButton: {
-    width: 176.35,
-    height: 43.67,
-    backgroundColor: "#00C2E0",
-    borderRadius: 33.59,
+    width: 176,
+    height: 44,
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
     justifyContent: "center",
     alignItems: "center",
   },
   freshOddsButtonText: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 14,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.sm,
+    color: colors.primaryForeground,
   },
   cooldownMessage: {
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
     fontSize: 13,
-    color: "#888888",
-    marginTop: 8,
+    color: colors.mutedForeground,
+    marginTop: spacing[2],
     textAlign: "center",
   },
   // Shimmer Styles
   marketTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "70%",
   },
   bestLinesTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "40%",
   },
   bestLinesInfoShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: 20,
   },
   lineBigTextShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: "80%",
   },
   lineSmallTextShimmer: {
     height: 14,
-    borderRadius: 5,
+    borderRadius: radii.sm,
     width: "60%",
-    marginTop: 4,
+    marginTop: spacing[1],
   },
   consensusLinesTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "50%",
   },
   consensusLinesInfoShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: 20,
   },
   columnHeaderTextShimmer: {
     height: 11,
-    borderRadius: 4,
+    borderRadius: spacing[1],
     width: "80%",
   },
   teamNameShimmer: {
     height: 14,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: "60%",
-    marginTop: 12,
+    marginTop: spacing[3],
   },
   dataValueShimmer: {
     height: 12,
-    borderRadius: 4,
+    borderRadius: spacing[1],
     width: "60%",
   },
   dataSecondaryShimmer: {
     height: 12,
-    borderRadius: 4,
+    borderRadius: spacing[1],
     width: "40%",
     marginTop: 2,
     opacity: 0.5,
   },
   publicSharpTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "60%",
   },
   publicSharpInfoShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: 20,
   },
   publicSharpTextShimmer: {
     height: 12,
-    borderRadius: 5,
+    borderRadius: radii.sm,
     width: "90%",
   },
   gaugeShimmer: {
@@ -2147,64 +2239,61 @@ const styles = StyleSheet.create({
   },
   marketEfficiencyTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "50%",
   },
   marketEfficiencyInfoShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: 20,
   },
   progressBarShimmer: {
     height: 5,
-    borderRadius: 20,
+    borderRadius: radii.full,
     width: "100%",
   },
   progressBarLabelShimmer: {
     height: 10,
-    borderRadius: 4,
+    borderRadius: spacing[1],
     width: 30,
   },
   marketEfficiencyDescriptionShimmer: {
     height: 12,
-    borderRadius: 5,
+    borderRadius: radii.sm,
     width: "85%",
-    marginTop: 12,
+    marginTop: spacing[3],
   },
   oddsTableTitleShimmer: {
     height: 20,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     width: "45%",
   },
   oddsTableInfoShimmer: {
     height: 17,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: 20,
   },
   oddsTableColumnHeaderShimmer: {
     height: 14,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: "90%",
-    marginVertical: 12,
-  },
-  oddsTableColumnHeaderCellLast: {
-    borderRightWidth: 0,
+    marginVertical: spacing[3],
   },
   oddsTableTeamNameShimmer: {
     height: 14,
-    borderRadius: 6,
+    borderRadius: radii.sm,
     width: "30%",
-    marginVertical: 12,
-    marginHorizontal: 16,
+    marginVertical: spacing[3],
+    marginHorizontal: spacing[4],
   },
   oddsTableValueShimmer: {
     height: 14,
-    borderRadius: 5,
+    borderRadius: radii.sm,
     width: "60%",
   },
   freshOddsButtonShimmer: {
     height: 44,
-    borderRadius: 34,
+    borderRadius: radii.full,
     width: 176,
   },
 });

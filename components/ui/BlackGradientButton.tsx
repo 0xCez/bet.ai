@@ -8,43 +8,44 @@ import {
   TextStyle,
   TouchableOpacityProps,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { colors, borderRadius as radii, typography } from "../../constants/designTokens";
 
 interface BlackGradientButtonProps extends TouchableOpacityProps {
   containerStyle?: ViewStyle;
   textStyle?: TextStyle;
   children?: React.ReactNode;
   borderRadius?: number;
+  height?: number;
 }
 
 export function BlackGradientButton({
   containerStyle,
   textStyle,
   children,
-  borderRadius = 100,
+  borderRadius = radii.lg,
+  height = 55,
+  disabled,
   ...props
 }: BlackGradientButtonProps) {
   return (
     <TouchableOpacity
-      style={[styles.button, { borderRadius }, containerStyle]}
+      style={[
+        styles.button,
+        { borderRadius, height },
+        disabled && styles.buttonDisabled,
+        containerStyle,
+      ]}
       activeOpacity={0.8}
+      disabled={disabled}
       {...props}
     >
-      <LinearGradient
-        colors={["#101010", "#161616"]}
-        style={styles.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        locations={[0, 0.63]}
-      >
-        <View style={styles.contentContainer}>
-          {typeof children === "string" ? (
-            <Text style={[styles.buttonText, textStyle]}>{children}</Text>
-          ) : (
-            children
-          )}
-        </View>
-      </LinearGradient>
+      <View style={styles.contentContainer}>
+        {typeof children === "string" ? (
+          <Text style={[styles.buttonText, textStyle]}>{children}</Text>
+        ) : (
+          children
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -52,15 +53,14 @@ export function BlackGradientButton({
 const styles = StyleSheet.create({
   button: {
     width: "100%",
-    height: 60,
     overflow: "hidden",
     marginVertical: 0,
+    backgroundColor: colors.secondary, // #212733 - secondary surface
     borderWidth: 1,
-    borderColor: "rgba(76, 74, 74, 0.2)", // #4C4A4A with 0.2 opacity
+    borderColor: colors.rgba.borderGlass, // rgba(39, 46, 58, 0.5)
   },
-  gradient: {
-    width: "100%",
-    height: "100%",
+  buttonDisabled: {
+    opacity: 0.5,
   },
   contentContainer: {
     flex: 1,
@@ -68,11 +68,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   buttonText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "500",
+    color: colors.foreground, // #F5F8FC - light text
     textAlign: "center",
     lineHeight: 20,
-    fontFamily: "Aeonik-Medium",
+    fontFamily: typography.fontFamily.medium,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   Text,
   Pressable,
   ViewStyle,
+  Animated,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
@@ -41,6 +42,7 @@ import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import * as Progress from "react-native-progress";
 import i18n from "../i18n";
+import { colors, spacing, borderRadius as radii, typography, shadows } from "../constants/designTokens";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -278,6 +280,58 @@ export default function AnalysisScreen() {
           aiAnalysis: false,
         }
   );
+
+  // Animation values for staggered card animations (6 cards total)
+  const cardAnimations = useRef(
+    Array.from({ length: 6 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateCardsIn = () => {
+    // Reset all animations
+    cardAnimations.forEach(anim => anim.setValue(0));
+
+    // Stagger animate each card
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.parallel(animations).start();
+  };
+
+  // Trigger animation when loading completes
+  const hasAnimatedRef = useRef(false);
+  useEffect(() => {
+    if (!isLoading && analysisResult && !hasAnimatedRef.current) {
+      hasAnimatedRef.current = true;
+      setTimeout(animateCardsIn, 100);
+    }
+    if (isLoading) {
+      hasAnimatedRef.current = false;
+    }
+  }, [isLoading, analysisResult]);
+
+  const getCardStyle = (index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  });
 
   const toggleCard = (cardName: "snapshot" | "xFactors" | "aiAnalysis") => {
     try {
@@ -810,7 +864,7 @@ export default function AnalysisScreen() {
         style={styles.analysisContent}
       >
         {/* Image Container - Use displayImageUrl state */}
-        <View style={styles.imageContainer}>
+        <Animated.View style={[styles.imageContainer, getCardStyle(0)]}>
           {isDemo && displayImageUrl ? (
             // Use the image URL from the fetched Firestore document
             // This ensures the image matches the analysis data
@@ -831,7 +885,7 @@ export default function AnalysisScreen() {
               <Text style={styles.placeholderText}></Text>
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {/* <Text style={styles.sectionTitle}>AI Insights</Text>
         <Text style={styles.sectionContent}>
@@ -839,6 +893,7 @@ export default function AnalysisScreen() {
         </Text> */}
 
         {/* Key Insights Card */}
+        <Animated.View style={getCardStyle(1)}>
         <Card style={styles.keyInsightsCard}>
           <Text style={styles.keyInsightsTitle}>{i18n.t("analysisKeyInsights")}</Text>
 
@@ -846,24 +901,24 @@ export default function AnalysisScreen() {
             {/* Market Consensus */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <Image
-                  source={getTeamLogo(
-                    analysisResult?.keyInsights?.marketConsensus?.teamSide === "home"
-                      ? analysisResult?.teams?.home || ""
-                      : analysisResult?.keyInsights?.marketConsensus?.teamSide === "away"
-                      ? analysisResult?.teams?.away || ""
-                      : "", // No logo if no teamSide
-                    analysisResult?.sport
-                  )}
-                  style={styles.kIcon}
-                  contentFit="contain"
-                />
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      analysisResult?.keyInsights?.marketConsensus?.teamSide === "home"
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.keyInsights?.marketConsensus?.teamSide === "away"
+                        ? analysisResult?.teams?.away || ""
+                        : "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
                 <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisMarketConsensus")}</Text>
                   <Text style={styles.metricValue}>
                     {analysisResult?.keyInsights?.marketConsensus?.display || i18n.t("analysisNoConsensus")}
-                  </Text>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisMarketConsensus")}
                   </Text>
                 </View>
               </View>
@@ -872,24 +927,24 @@ export default function AnalysisScreen() {
             {/* Best Value */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <Image
-                  source={getTeamLogo(
-                    analysisResult?.keyInsights?.bestValue?.teamSide === "home"
-                      ? analysisResult?.teams?.home || ""
-                      : analysisResult?.keyInsights?.bestValue?.teamSide === "away"
-                      ? analysisResult?.teams?.away || ""
-                      : "", // No logo if no teamSide
-                    analysisResult?.sport
-                  )}
-                  style={styles.kIcon}
-                  contentFit="contain"
-                />
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      analysisResult?.keyInsights?.bestValue?.teamSide === "home"
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.keyInsights?.bestValue?.teamSide === "away"
+                        ? analysisResult?.teams?.away || ""
+                        : "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
                 <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisBestValue")}</Text>
                   <Text style={styles.metricValue}>
                     {analysisResult?.keyInsights?.bestValue?.display || i18n.t("analysisEfficientMarket")}
-                  </Text>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisBestValue")}
                   </Text>
                 </View>
               </View>
@@ -898,24 +953,23 @@ export default function AnalysisScreen() {
             {/* Offensive Edge */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <Image
-                  source={getTeamLogo(
-                    // Show team with offensive advantage: Positive = Home scores more, Negative = Away scores more
-                    (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("+") ||
-                    (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("0")
-                      ? analysisResult?.teams?.home || ""
-                      : analysisResult?.teams?.away || "",
-                    analysisResult?.sport
-                  )}
-                  style={styles.kIcon}
-                  contentFit="contain"
-                />
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("+") ||
+                      (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("0")
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.teams?.away || "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
                 <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisOffensiveEdge")}</Text>
                   <Text style={styles.metricValue}>
                     {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
-                  </Text>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisOffensiveEdge")}
                   </Text>
                 </View>
               </View>
@@ -924,88 +978,118 @@ export default function AnalysisScreen() {
             {/* Defensive Edge */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <Image
-                  source={getTeamLogo(
-                    // Show team with defensive advantage: Negative = Home allows fewer (better), Positive = Away allows fewer (better)
-                    (analysisResult?.keyInsights?.defensiveEdge?.display || "").startsWith("-")
-                      ? analysisResult?.teams?.home || ""
-                      : analysisResult?.teams?.away || "",
-                    analysisResult?.sport
-                  )}
-                  style={styles.kIcon}
-                  contentFit="contain"
-                />
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      (analysisResult?.keyInsights?.defensiveEdge?.display || "").startsWith("-")
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.teams?.away || "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
                 <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisDefensiveEdge")}</Text>
                   <Text style={styles.metricValue}>
                     {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
-                  </Text>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisDefensiveEdge")}
                   </Text>
                 </View>
               </View>
             </View>
           </View>
         </Card>
+        </Animated.View>
 
-        {/* Match Snapshot Section */}
-        <View style={styles.matchSnapshotRow}>
-          {/* Home Team Card */}
-          <Card style={styles.teamSnapshotCard}>
-            <View style={styles.teamHeader}>
-                  <Image
-                    source={getTeamLogo(analysisResult?.teams.home || "", analysisResult?.sport)}
-                    style={styles.teamLogo}
-                    contentFit="contain"
-                  />
-              <Text style={styles.teamName}>{analysisResult?.teams.home}</Text>
+        {/* Match Snapshot - Home Team */}
+        <Animated.View style={getCardStyle(2)}>
+        <Card style={styles.teamCard}>
+          {/* Team Title Header */}
+          <View style={styles.teamCardHeader}>
+            <View style={styles.iconContainer}>
+              <Image
+                source={getTeamLogo(analysisResult?.teams.home || "", analysisResult?.sport)}
+                style={styles.xFactorIcon}
+                contentFit="contain"
+              />
             </View>
-            <View style={styles.teamContent}>
-              <Text style={styles.teamSectionLabel}>
-                {i18n.t("analysisRecentPerformances")}
-              </Text>
-              <BlurText card="ms-1" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
+            <Text style={styles.teamCardTitle}>{analysisResult?.teams.home}</Text>
+          </View>
+
+          {/* Recent Performances */}
+          <View style={styles.xFactorItem}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="stats-chart" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisRecentPerformances")}</Text>
+              <BlurText card="ms-1" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
                 {analysisResult?.matchSnapshot.recentPerformance.home}
               </BlurText>
+            </View>
+          </View>
 
-              <Text style={styles.teamSectionLabel}>
-                {i18n.t("analysisMomentumIndicator")}
-              </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
+          {/* Momentum */}
+          <View style={[styles.xFactorItem, styles.xFactorItemLast]}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="trending-up" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisMomentumIndicator")}</Text>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
                 {analysisResult?.matchSnapshot.momentum.home}
               </BlurText>
             </View>
-          </Card>
+          </View>
+        </Card>
+        </Animated.View>
 
-          {/* Away Team Card */}
-          <Card style={styles.teamSnapshotCard}>
-            <View style={styles.teamHeader}>
-                  <Image
-                    source={getTeamLogo(analysisResult?.teams.away || "", analysisResult?.sport)}
-                    style={styles.teamLogo}
-                    contentFit="contain"
-                  />
-              <Text style={styles.teamName}>{analysisResult?.teams.away}</Text>
+        {/* Match Snapshot - Away Team */}
+        <Animated.View style={getCardStyle(3)}>
+        <Card style={styles.teamCard}>
+          {/* Team Title Header */}
+          <View style={styles.teamCardHeader}>
+            <View style={styles.iconContainer}>
+              <Image
+                source={getTeamLogo(analysisResult?.teams.away || "", analysisResult?.sport)}
+                style={styles.xFactorIcon}
+                contentFit="contain"
+              />
             </View>
-            <View style={styles.teamContent}>
-              <Text style={styles.teamSectionLabel}>
-                {i18n.t("analysisRecentPerformances")}
-              </Text>
-              <BlurText card="ms-2" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
+            <Text style={styles.teamCardTitle}>{analysisResult?.teams.away}</Text>
+          </View>
+
+          {/* Recent Performances */}
+          <View style={styles.xFactorItem}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="stats-chart" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisRecentPerformances")}</Text>
+              <BlurText card="ms-2" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
                 {analysisResult?.matchSnapshot.recentPerformance.away}
               </BlurText>
+            </View>
+          </View>
 
-              <Text style={styles.teamSectionLabel}>
-                {i18n.t("analysisMomentumIndicator")}
-              </Text>
-              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.teamSectionValue}>
+          {/* Momentum */}
+          <View style={[styles.xFactorItem, styles.xFactorItemLast]}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="trending-up" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisMomentumIndicator")}</Text>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
                 {analysisResult?.matchSnapshot.momentum.away}
               </BlurText>
             </View>
-          </Card>
-        </View>
+          </View>
+        </Card>
+        </Animated.View>
 
         {/* X-Factors Card */}
+        <Animated.View style={getCardStyle(4)}>
         <Card style={styles.xFactorsCard}>
           <Pressable
             onPress={() => toggleCard("xFactors")}
@@ -1064,8 +1148,10 @@ export default function AnalysisScreen() {
             </View>
           )}
         </Card>
+        </Animated.View>
 
         {/* AI Analysis Card */}
+        <Animated.View style={getCardStyle(5)}>
         <Card style={styles.aiAnalysisCard}>
           <Pressable
             onPress={() => toggleCard("aiAnalysis")}
@@ -1086,7 +1172,7 @@ export default function AnalysisScreen() {
           {expandedCards.aiAnalysis && analysisResult?.aiAnalysis && (
             <View style={styles.aiAnalysisContent}>
               <View style={styles.aiMetricsContainer}>
-                {/* Confidence Score */}
+                {/* Confidence */}
                 <View style={styles.aiMetricBox}>
                   <View style={styles.aiIconBox}>
                     <Image
@@ -1095,11 +1181,8 @@ export default function AnalysisScreen() {
                       contentFit="contain"
                     />
                   </View>
-                  <View>
-                    <Text style={styles.aiMetricLabel}>
-                      {i18n.t("analysisConfidenceScore")}
-                    </Text>
-
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aiMetricLabel}>Confidence</Text>
                     {auth.currentUser || isDemo ? (
                       <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.confidenceScore}
@@ -1118,7 +1201,7 @@ export default function AnalysisScreen() {
                   </View>
                 </View>
 
-                {/* Betting Signal */}
+                {/* Signal */}
                 <View style={styles.aiMetricBox}>
                   <View style={styles.aiIconBox}>
                     <Image
@@ -1127,10 +1210,8 @@ export default function AnalysisScreen() {
                       contentFit="contain"
                     />
                   </View>
-                  <View>
-                    <Text style={styles.aiMetricLabel}>
-                      {i18n.t("analysisBettingSignal")}
-                    </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aiMetricLabel}>Signal</Text>
                     {auth.currentUser || isDemo ? (
                       <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.bettingSignal}
@@ -1172,6 +1253,7 @@ export default function AnalysisScreen() {
             </View>
           )}
         </Card>
+        </Animated.View>
       </ScrollView>
     );
   };
@@ -1248,15 +1330,16 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     alignSelf: "center",
     marginBottom: 0,
-    borderRadius: 35,
+    borderRadius: radii.xl,
     overflow: "hidden",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   image: {
     width: "100%",
     height: "100%",
-    borderRadius: 20,
-    objectFit: "cover",
+    borderRadius: radii.xl,
   },
   analysisContainer: {
     paddingTop: 20,
@@ -1306,22 +1389,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   analysisSection: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   sectionTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-    fontFamily: "Aeonik-Bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    marginBottom: spacing[2],
+    fontFamily: typography.fontFamily.bold,
   },
   sectionContent: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
   },
   errorContainer: {
     // padding: 20,
@@ -1336,55 +1420,60 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Regular",
   },
   card: {
-    backgroundColor: "#101010",
-    borderWidth: 0.2,
-    borderColor: "#505050",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+    borderRadius: radii.lg,
+    padding: spacing[4],
+    marginBottom: spacing[4],
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 15,
+    marginBottom: spacing[4],
   },
   cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
   },
   insightGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 15,
+    gap: spacing[4],
   },
   insightItem: {
     width: "48%",
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    padding: spacing[3],
     flexDirection: "column",
     alignItems: "flex-start",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   insightLabel: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginTop: 8,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    marginTop: spacing[2],
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   insightValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Bold",
-    marginTop: 4,
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.medium,
+    marginTop: spacing[1],
   },
   snapshotCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   snapshotHeader: {
     flexDirection: "row",
@@ -1392,14 +1481,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   snapshotTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
   },
   snapshotContent: {
-    marginTop: 20,
-    gap: 20,
+    marginTop: spacing[5],
+    gap: spacing[5],
   },
   snapshotRow: {
     flexDirection: "row",
@@ -1408,100 +1496,116 @@ const styles = StyleSheet.create({
   snapshotIconBox: {
     width: 48,
     height: 48,
-    backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 12,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   snapshotTextContainer: {
     flex: 1,
   },
   snapshotLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 8,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    marginBottom: spacing[2],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   snapshotValue: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
     lineHeight: 22,
   },
   performanceContainer: {
-    // justifyContent: "space-between",
-    // alignItems: "center",
-    gap: 5,
+    gap: spacing[1],
   },
   performanceText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
   },
   xFactorsCard: {
-    marginTop: 16,
-    padding: 20,
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   xFactorsContent: {
-    paddingVertical: 2,
+    paddingVertical: spacing[1],
     paddingHorizontal: 0,
   },
   xFactorsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: spacing[5],
   },
   xFactorsTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
   xFactorsInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
   xFactorItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing[3],
+    marginBottom: spacing[4],
+    padding: spacing[3],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   xFactorItemLast: {
     marginBottom: 0,
   },
   iconContainer: {
-    width: 45.11,
-    height: 44.17,
-    borderRadius: 12.62,
-    backgroundColor: "#161616",
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   xFactorIcon: {
-    width: 24,
-    height: 24,
+    width: 26,
+    height: 26,
   },
   xFactorTextContainer: {
     flex: 1,
     gap: 4,
   },
   xFactorLabel: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 11.42,
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   xFactorDetail: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 11.42,
-    color: "rgba(255, 255, 255, 0.8)",
-    lineHeight: 16,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.sm,
+    color: colors.mutedForeground,
+    lineHeight: 18,
   },
   aiAnalysisCard: {
-    marginTop: 16,
-    padding: 20,
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    ...shadows.cardGlow,
   },
   aiAnalysisHeader: {
     flexDirection: "row",
@@ -1509,10 +1613,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   aiAnalysisTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
   },
   aiAnalysisEmoji: {
     fontSize: 24,
@@ -1520,149 +1623,183 @@ const styles = StyleSheet.create({
   aiMetricsContainer: {
     width: "100%",
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    // marginBottom: 24,
-    gap: 10,
-    marginTop: 20,
+    gap: spacing[3],
+    marginTop: spacing[5],
   },
   aiMetricBox: {
     flex: 1,
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
     flexDirection: "row",
-    borderRadius: 16,
-
+    borderRadius: radii.lg,
     alignItems: "center",
-    // padding: 16,
-    gap: 10,
+    gap: spacing[2],
+    padding: spacing[2],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   aiIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(40, 40, 40, 0.95)",
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   aiMetricLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 10,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 4,
+    color: colors.primary,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[1],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   aiMetricValue: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-  },
-  aiBreakdownContainer: {
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 16,
-    paddingBottom: 16,
-  },
-  aiBreakdownTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 18,
-    textAlign: "center",
-  },
-  aiBreakdownText: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
     lineHeight: 18,
   },
+  aiBreakdownContainer: {
+    marginTop: spacing[2],
+  },
+  aiBreakdownTitle: {
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[4],
+    textAlign: "left",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  aiBreakdownText: {
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
+    lineHeight: 22,
+  },
   keyInsightsCard: {
-    padding: 20,
-    paddingVertical: 25,
-    marginTop: 16,
+    padding: spacing[5],
+    paddingVertical: spacing[6],
+    marginTop: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    ...shadows.cardGlow,
   },
   keyInsightsTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
     textAlign: "center",
-    marginBottom: 14,
-    fontFamily: "Aeonik-Medium",
+    marginBottom: spacing[4],
+    fontFamily: typography.fontFamily.medium,
   },
   matchSnapshotRow: {
     flexDirection: "row",
-    gap: 16,
-    marginTop: 16,
+    gap: spacing[4],
+    marginTop: spacing[4],
     marginBottom: 0,
   },
   teamSnapshotCard: {
     flex: 1,
     minHeight: 180,
-    padding: 16,
+    padding: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   teamHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing[3],
+    marginBottom: spacing[4],
+    paddingBottom: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
   },
   teamLogo: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
   },
   teamName: {
     flex: 1,
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.medium,
   },
   teamContent: {
-    gap: 8,
+    gap: spacing[3],
+  },
+  teamStatItem: {
+    marginBottom: spacing[3],
+    gap: spacing[1],
+  },
+  teamCard: {
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  teamCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    marginBottom: spacing[4],
+  },
+  teamCardTitle: {
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
   },
   teamSectionLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 2,
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[1],
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   teamSectionValue: {
-    color: "#FFFFFF",
-    fontSize: 11.2, // Reduced by 20% from 14px
-    fontFamily: "Aeonik-Regular",
-    lineHeight: 18.48, // Reduced by 20% from 23.1px (14 * 1.65)
+    color: colors.foreground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    lineHeight: 18,
   },
 
   metricBox: {
     width: 160,
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 16,
-    // padding: 16,
+    borderRadius: radii.lg,
     justifyContent: "center",
   },
   metricContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing[3],
   },
   metricIconBox: {
-    width: 50,
-    height: 50,
-    backgroundColor: "#212121",
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   metricTextContainer: {
     flex: 1,
   },
   metricLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    marginBottom: 4,
-    fontFamily: "Aeonik-Regular",
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: spacing[1],
   },
   metricValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
   },
   progressMetricsContainer: {
     flexDirection: "row",
@@ -1677,27 +1814,31 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   progressMetric: {
-    backgroundColor: "#212121",
-    borderRadius: 13,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    paddingRight: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    paddingRight: spacing[4],
     minHeight: 45,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   progressLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    marginBottom: 8,
-    fontFamily: "Aeonik-Regular",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    marginBottom: spacing[2],
+    fontFamily: typography.fontFamily.regular,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   progressBox: {
     width: "100%",
   },
   progressValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    marginBottom: 15,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    marginBottom: spacing[4],
+    fontFamily: typography.fontFamily.medium,
   },
   progressBar: {
     height: 5,
@@ -1717,10 +1858,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   percentageValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.bold,
   },
   progressBarContainer: {
     flexDirection: "row",
@@ -1749,14 +1889,13 @@ const styles = StyleSheet.create({
   },
   floatingButtonContainer: {
     position: "absolute",
-    backgroundColor: "#0C0C0C",
+    backgroundColor: colors.background,
     bottom: 0,
     paddingBottom: 60,
-    paddingTop: 20,
+    paddingTop: spacing[5],
     left: 0,
-
     right: 0,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing[5],
   },
   floatingButton: {
     shadowOpacity: 0.25,
@@ -1783,9 +1922,8 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   kIcon: {
-    width: 36,
-    height: 36,
-    resizeMode: "contain",
+    width: 24,
+    height: 24,
   },
   unlockText: {
     color: "#FF373A",
@@ -1799,14 +1937,33 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 4,
+    gap: spacing[3],
+    paddingHorizontal: spacing[1],
   },
   gridItem: {
     width: "47%",
     marginBottom: 0,
     minHeight: 80,
     justifyContent: "center",
+    padding: spacing[3],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
+  },
+  gridItemIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  gridItemLogo: {
+    width: 26,
+    height: 26,
   },
   // Shimmer Styles
   keyInsightsTitleShimmer: {

@@ -14,26 +14,18 @@ import {
 import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { GradientButton } from "../components/ui/GradientButton";
-import { GradientText } from "../components/ui/GradientText";
 import { Logo } from "../components/ui/Logo";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { useRevenueCatUser } from "./hooks/useRevenueCatUser";
-import { useRevenueCat } from "./providers/RevenueCatProvider";
 import { auth } from "../firebaseConfig";
-import { signOut } from "firebase/auth";
-import { MultilineText } from "@/components/ui/MultilineText";
-import { LinearGradient } from "expo-linear-gradient";
-import Purchases, { CustomerInfo } from "react-native-purchases";
+import Purchases from "react-native-purchases";
 import { usePaywallActions } from "./hooks/usePaywallActions";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
+import { Ionicons } from "@expo/vector-icons";
+import { LogoSpinner } from "../components/ui/LogoSpinner";
 import i18n from "../i18n";
 
-// Type for RevenueCat restore response
-interface RestorePurchasesResponse {
-  originalAppUserId?: string;
-  // Add other fields as needed
-}
-
-// Dummy data for features
+// Feature list for paywall
 const features = [
   {
     title: i18n.t("paywallFeatureAIAnalysis"),
@@ -205,7 +197,7 @@ export default function PaywallScreen() {
     return (
       <ScreenBackground hideBg>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00C2E0" />
+          <LogoSpinner size={96} />
         </View>
       </ScreenBackground>
     );
@@ -222,7 +214,7 @@ export default function PaywallScreen() {
 
             <View style={styles.taglineContainer}>
               <Text style={styles.tagline}>{i18n.t("paywallYourBest")}</Text>
-              <Text style={[styles.tagline, { color: "#ffffff" }]}>
+              <Text style={[styles.tagline, styles.taglineHighlight]}>
                 {i18n.t("paywallBackedByAI")}
               </Text>
             </View>
@@ -230,16 +222,11 @@ export default function PaywallScreen() {
 
           <View style={styles.features}>
             {features.map((feature, index) => (
-              <LinearGradient
-                colors={["#131313", "#1A1A1A"]}
-                style={styles.featureItemGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                key={index}
-              >
+              <View style={styles.featureCard} key={index}>
                 <View style={styles.featureItem}>
-                  <Text style={styles.checkmarkText}>✓</Text>
-
+                  <View style={styles.checkmarkContainer}>
+                    <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
+                  </View>
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>{feature.title}</Text>
                     <Text style={styles.featureDescription}>
@@ -247,7 +234,7 @@ export default function PaywallScreen() {
                     </Text>
                   </View>
                 </View>
-              </LinearGradient>
+              </View>
             ))}
           </View>
 
@@ -314,7 +301,7 @@ export default function PaywallScreen() {
             disabled={purchaseLoading || packages.length === 0}
           >
             {purchaseLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.primaryForeground} />
             ) : (
               i18n.t("paywallContinue")
             )}
@@ -369,172 +356,160 @@ export default function PaywallScreen() {
 
 const styles = StyleSheet.create({
   taglineContainer: {
-    marginTop: 30,
+    marginTop: spacing[8],
     gap: 0,
   },
   container: {
     flex: 1,
-    padding: 15,
-    paddingTop: 10,
-    paddingBottom: 40,
+    padding: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[10],
   },
   header: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: spacing[5],
   },
   tagline: {
-    fontSize: 30,
+    fontSize: typography.sizes["3xl"],
     textAlign: "center",
-    fontFamily: "Aeonik-Medium",
-    color: "#FFFFFF",
+    fontFamily: typography.fontFamily.medium,
+    color: colors.foreground,
   },
-  subTagline: {
-    fontSize: 32,
-    color: "#8E8E93",
-    textAlign: "center",
-    fontWeight: "600",
+  taglineHighlight: {
+    color: colors.foreground,
   },
   features: {
-    marginTop: 25,
-    marginBottom: 5,
+    marginTop: spacing[6],
+    marginBottom: spacing[2],
+    gap: spacing[3],
+  },
+  featureCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing[4],
+    paddingHorizontal: spacing[5],
   },
   featureItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
+    gap: spacing[4],
   },
-  featureItemGradient: {
-    borderRadius: 15,
-    borderWidth: 0.5,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    padding: 16,
-    paddingHorizontal: 25,
-    marginBottom: 15,
-  },
-  checkmark: {
-    width: 30,
-    height: 30,
-    borderRadius: 12,
-    // backgroundColor: "#007AFF",
+  checkmarkContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 15,
-    marginTop: 2,
-  },
-  checkmarkText: {
-    color: "#00C2E0",
-    fontSize: 24,
-    fontWeight: "bold",
   },
   featureText: {
     flex: 1,
   },
   featureTitle: {
-    color: "#FFFFFF",
-    fontSize: 17,
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
     marginBottom: 4,
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.medium,
   },
   featureDescription: {
-    color: "#FFFFFF",
-    opacity: 0.9,
+    color: colors.mutedForeground,
     lineHeight: 18,
-    fontSize: 14,
-    fontFamily: "Aeonik-Light",
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.light,
   },
   pricingContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 25,
-    gap: 10,
+    marginTop: spacing[6],
+    gap: spacing[3],
     marginBottom: 0,
   },
   planButton: {
     flex: 1,
-    backgroundColor: "rgba(30, 30, 30, 0.6)",
-    borderRadius: 18,
-    padding: 20,
-    paddingLeft: 30,
-    paddingVertical: 20,
-    marginHorizontal: 0,
-    borderWidth: 0.5,
-    borderColor: "#5B6169",
+    backgroundColor: colors.secondary,
+    borderRadius: borderRadius.xl,
+    padding: spacing[5],
+    paddingVertical: spacing[5],
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   selectedPlan: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.card,
+    borderColor: colors.primary,
   },
   planTitle: {
-    color: "#ffffff",
-    fontSize: 14,
+    color: colors.foreground,
+    fontSize: typography.sizes.xs,
     marginBottom: 4,
     marginTop: 0,
     letterSpacing: 1.5,
-    fontFamily: "Aeonik-Black",
+    fontFamily: typography.fontFamily.bold,
+    textTransform: "uppercase",
   },
   selectedPlanTitle: {
-    color: "#000000",
+    color: colors.primary,
   },
   priceContainer: {
     flexDirection: "row",
     alignItems: "baseline",
+    marginTop: spacing[2],
   },
   price: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.bold,
   },
   selectedPlanPrice: {
-    color: "#000000",
+    color: colors.primary,
   },
   interval: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
     marginLeft: 2,
   },
   selectedPlanInterval: {
-    color: "#000000",
-    fontFamily: "Aeonik-Regular",
-    fontSize: 14,
+    color: colors.primary,
   },
   popularBadge: {
     position: "absolute",
     top: -12,
     left: 0,
     right: 0,
-    marginHorizontal: 40,
+    marginHorizontal: spacing[8],
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#01B4DE",
-    borderRadius: 15,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
   },
   popularText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontFamily: "Aeonik-Light",
+    color: colors.primaryForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
   },
   continueButton: {
     width: "100%",
     marginBottom: 0,
-    marginTop: 15,
+    marginTop: spacing[4],
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 30,
+    marginTop: spacing[8],
   },
   footerLink: {
-    color: "#ffffff",
-    opacity: 0.5,
-    fontSize: 10,
-    padding: 8,
-    fontFamily: "Aeonik-Light",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    padding: spacing[2],
+    fontFamily: typography.fontFamily.light,
   },
   footerDivider: {
-    color: "#8E8E93",
+    color: colors.muted,
     marginHorizontal: 4,
   },
   loadingContainer: {
@@ -546,21 +521,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: spacing[5],
   },
   errorText: {
-    color: "#FF6B6B",
-    fontSize: 16,
+    color: colors.destructive,
+    fontSize: typography.sizes.base,
     textAlign: "center",
   },
   logoutContainer: {
     alignItems: "center",
-    paddingVertical: 16,
-    marginTop: 8,
+    paddingVertical: spacing[4],
+    marginTop: spacing[2],
   },
   logoutText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.regular,
   },
 });

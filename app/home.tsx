@@ -1,27 +1,23 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet, Image, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { GradientButton } from "../components/ui/GradientButton";
 import { Logo } from "../components/ui/Logo";
-import { TouchableOpacity } from "react-native-gesture-handler";
+import { IconButton } from "../components/ui/IconButton";
 import * as ImagePicker from "expo-image-picker";
 import { ImagePickerSheet } from "../components/ui/ImagePickerSheet";
-import { LinearGradient } from "expo-linear-gradient";
-import Octicons from "@expo/vector-icons/Octicons";
-import Feather from "@expo/vector-icons/Feather";
 import { SettingsBottomSheet } from "../components/ui/SettingsBottomSheet";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { useRevenueCatUser } from "./hooks/useRevenueCatUser";
 import { auth } from "../firebaseConfig";
-import APIService from "@/services/api";
 import * as ImageManipulator from "expo-image-manipulator";
-import RadialGradient from "react-native-radial-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as StoreReview from "expo-store-review";
 import { usePostHog } from "posthog-react-native";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
+import { LogoSpinner } from "../components/ui/LogoSpinner";
 import i18n from "../i18n";
-import { BorderButton } from "@/components/ui/BorderButton";
 
 const RATING_SHOWN_KEY = "@rating_shown";
 
@@ -173,8 +169,8 @@ export default function HomeScreen() {
 
   if (purchaseLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#00C2E0" />
+      <View style={styles.loadingContainer}>
+        <LogoSpinner size={96} />
       </View>
     );
   }
@@ -196,81 +192,65 @@ export default function HomeScreen() {
       <View style={styles.container}>
         {/* Top Bar */}
         <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.iconButton}
+          <IconButton
+            icon="menu"
             onPress={() => setIsSettingsVisible(true)}
-          >
-            <Image
-              source={require("../assets/images/menu2.png")}
-              style={styles.menuIcon}
-            />
-          </TouchableOpacity>
+            size={28}
+          />
 
           <View style={styles.logoContainer}>
             <Logo size="small" />
           </View>
 
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => {
-              console.log("history pressed");
-              router.push("/history");
-            }}
-          >
-            <Image
-              source={require("../assets/images/history2.png")}
-              style={styles.menuIcon}
-            />
-          </TouchableOpacity>
+          <IconButton
+            icon="time-outline"
+            onPress={() => router.push("/history")}
+            size={28}
+          />
         </View>
 
 
         {/* Two Buttons Container */}
         <View style={styles.bottomContainer}>
-          {/* Top Button - Scan a Bet */}
-          <View style={styles.scanButtonShadowInner}>
-            <GradientButton
-              onPress={() => {
-                if (!isSubscribed) {
-                  router.push("/paywall");
-                  return;
-                }
-                handleCameraPress();
-              }}
-              containerStyle={styles.scanButton}
-              colors={["#00C2E0", "#007B90"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-            >
-              <View style={styles.buttonContentRow}>
-                <Text style={styles.buttonText}>{i18n.t("imagePickerTakePhoto")} 🤳</Text>
-              </View>
-            </GradientButton>
-          </View>
+          {/* Top Button - Scan a Bet (Primary solid CTA) */}
+          <Pressable
+            onPress={() => {
+              if (!isSubscribed) {
+                router.push("/paywall");
+                return;
+              }
+              handleCameraPress();
+            }}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.primaryButtonPressed,
+            ]}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="scan" size={22} color={colors.primaryForeground} />
+              <Text style={styles.primaryButtonText}>{i18n.t("imagePickerTakePhoto")}</Text>
+            </View>
+          </Pressable>
 
-          {/* Bottom Button - Choose from Gallery */}
-          <View style={styles.libraryButtonShadow}>
-            <BorderButton
-              onPress={() => {
-                if (!isSubscribed) {
-                  router.push("/paywall");
-                  return;
-                }
-                handleGalleryPress();
-              }}
-              containerStyle={styles.libraryButton}
-              borderColor="rgba(0, 221, 255, 0.25)"
-              gradientColors={["#161616", "#0D0D0D"]}
-              start={{ x: 0, y: 1 }}
-              end={{ x: 0, y: 0 }}
-              opacity={1}
-              borderWidth={0.75}
-            >
-              <View style={styles.buttonContentRow}>
-                <Text style={styles.buttonText}>{i18n.t("imagePickerChooseFromLibrary")} 📚</Text>
-              </View>
-            </BorderButton>
-          </View>
+          {/* Bottom Button - Choose from Gallery (Glass style) */}
+          <Pressable
+            onPress={() => {
+              if (!isSubscribed) {
+                router.push("/paywall");
+                return;
+              }
+              handleGalleryPress();
+            }}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.secondaryButtonPressed,
+            ]}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="images-outline" size={22} color={colors.primary} />
+              <Text style={styles.secondaryButtonText}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
+            </View>
+          </Pressable>
         </View>
 
         <ImagePickerSheet
@@ -290,10 +270,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  menuIcon: {
-    width: 48,
-    height: 48,
-  },
   container: {
     flex: 1,
   },
@@ -301,16 +277,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  iconButton: {
-    width: 48,
-    height: 48,
-    // borderRadius: 25,
-    // backgroundColor: "rgba(255, 255, 255, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
   },
   logoContainer: {
     flex: 1,
@@ -342,49 +310,75 @@ const styles = StyleSheet.create({
     marginBottom: 55,
   },
   bottomContainer: {
-    padding: 16,
+    padding: spacing[4],
     paddingBottom: 50,
     position: "absolute",
     bottom: 30,
     width: "100%",
-    gap: 20,
+    gap: spacing[4],
   },
-  scanButtonShadowInner: {
-    // Drop shadow 1: X: 0, Y: 4, Blur: 20, Spread: 0, Color: #00C2E0 at 25% opacity
-    shadowColor: "#00C2E0",
+  // Primary CTA - Solid cyan with glow
+  primaryButton: {
+    height: 72,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    // Intense glow effect
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.20,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
-    borderRadius: 32,
+    elevation: 10,
   },
-  scanButton: {
+  primaryButtonPressed: {
+    transform: [{ scale: 0.97 }],
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+  },
+  primaryButtonText: {
+    color: colors.primaryForeground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
+    marginLeft: spacing[2],
+  },
+  // Secondary button - Glass style with cyan accent
+  secondaryButton: {
     height: 72,
-    borderRadius: 32,
-    overflow: "hidden", // Ensure gradient stays within bounds
+    borderRadius: borderRadius.full,
+    backgroundColor: "rgba(22, 26, 34, 0.85)",
+    borderWidth: 1,
+    borderColor: colors.rgba.primary30,
+    alignItems: "center",
+    justifyContent: "center",
+    // Subtle glow
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 5,
   },
-  libraryButtonShadow: {
-    // Drop shadow: X: 0, Y: 4, Blur: 16, Color: #00C2E0 at 18% opacity
-    shadowColor: "#00C2E0",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 16,
-    elevation: 4, // Android shadow
-    borderRadius: 32,
+  secondaryButtonPressed: {
+    transform: [{ scale: 0.97 }],
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+    borderColor: colors.rgba.primary50,
+    shadowOpacity: 0.25,
   },
-  libraryButton: {
-    height: 72,
-    borderRadius: 32,
-    overflow: "hidden", // Ensure gradient stays within bounds
+  secondaryButtonText: {
+    color: colors.foreground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.medium,
+    marginLeft: spacing[2],
   },
-  buttonContentRow: {
+  buttonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontFamily: "Aeonik-Medium",
-    textAlign: "center",
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.background,
   },
 });

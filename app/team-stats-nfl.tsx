@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
@@ -18,6 +18,8 @@ import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
+import { Ionicons } from "@expo/vector-icons";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -192,6 +194,53 @@ export default function TeamStatsNFLNew() {
     (params.selectedTeam as "team1" | "team2") || null
   );
 
+  // Card animation values (9 cards in team stats view)
+  const cardAnimations = useRef(
+    Array.from({ length: 9 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateCardsIn = useCallback(() => {
+    // Reset all animations
+    cardAnimations.forEach(anim => anim.setValue(0));
+
+    // Create staggered animations
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.parallel(animations).start();
+  }, [cardAnimations]);
+
+  const getCardStyle = useCallback((index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  }), [cardAnimations]);
+
+  // Trigger animation when team is selected and data is loaded
+  useEffect(() => {
+    if (selectedTeam && teamResult && !isLoading) {
+      animateCardsIn();
+    }
+  }, [selectedTeam, teamResult, isLoading, animateCardsIn]);
+
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
@@ -229,7 +278,8 @@ export default function TeamStatsNFLNew() {
     setError(null);
 
     try {
-      const userId = params.analysisId?.includes("Demo") || params.analysisId === "OT8KyNVdriQgnRi7Q5b6" || params.analysisId === "WxmvWHRNBCrULv7uuKeV"
+      const isDemo = params.isDemo === 'true';
+      const userId = isDemo
         ? "piWQIzwI9tNXrNTgb5dWTqAjUrj2"
         : auth.currentUser?.uid;
 
@@ -240,7 +290,9 @@ export default function TeamStatsNFLNew() {
       const { doc, getDoc } = await import("firebase/firestore");
       const { db } = await import("@/firebaseConfig");
 
-      const docRef = doc(db, "userAnalyses", userId, "analyses", params.analysisId);
+      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
+      const collection = isDemo ? "demoAnalysis" : "userAnalyses";
+      const docRef = doc(db, collection, userId, "analyses", params.analysisId);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
@@ -353,24 +405,15 @@ export default function TeamStatsNFLNew() {
             onPress={() => setSelectedTeam(team.key)}
             style={styles.selectionItem}
           >
-            <LinearGradient
-              colors={["#0D0D0D", "#161616"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.selectionGradient}
-            >
+            <View style={styles.selectionContent}>
               <Image
                 source={getNFLTeamLogo(team.name)}
                 style={styles.selectionLogo}
                 contentFit="contain"
               />
               <Text style={styles.selectionName}>{team.name}</Text>
-              <Image
-                source={require("../assets/images/icons/chevron.svg")}
-                style={styles.chevronIcon}
-                contentFit="contain"
-              />
-            </LinearGradient>
+              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
+            </View>
           </Pressable>
         ))}
         </ScrollView>
@@ -415,21 +458,23 @@ export default function TeamStatsNFLNew() {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
         {/* Top Card - Team Header */}
-        <Card style={styles.topCard}>
-          <View style={styles.teamHeader}>
-            <View style={styles.nameLogoRow}>
-              <Text style={styles.teamName}>{teamName}</Text>
-              <Image
-                source={getNFLTeamLogo(String(teamName))}
-                style={styles.teamLogo}
-                contentFit="contain"
-              />
+        <Animated.View style={getCardStyle(0)}>
+          <Card style={styles.topCard}>
+            <View style={styles.teamHeader}>
+              <View style={styles.nameLogoRow}>
+                <Text style={styles.teamName}>{teamName}</Text>
+                <Image
+                  source={getNFLTeamLogo(String(teamName))}
+                  style={styles.teamLogo}
+                  contentFit="contain"
+                />
+              </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Stats Row - Recent Form and Momentum */}
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, getCardStyle(1)]}>
           {/* Recent Form Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -452,118 +497,96 @@ export default function TeamStatsNFLNew() {
               />
             </View>
           </Card>
-        </View>
+        </Animated.View>
 
         {/* Core KPIs Card */}
-        <Card style={styles.coreKPIsCard}>
-          <View style={styles.coreKPIsContent}>
-            {/* Header */}
-            <View style={styles.coreKPIsHeader}>
-              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsCoreKPIs")}</Text>
-              <Pressable onPress={() => navigateToInfo("coreKPIs")}>
-                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(2)}>
+          <Card style={styles.coreKPIsCard}>
+            <View style={styles.coreKPIsContent}>
+              {/* Header */}
+              <View style={styles.coreKPIsHeader}>
+                <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsCoreKPIs")}</Text>
+                <Pressable onPress={() => navigateToInfo("coreKPIs")}>
+                  <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {/* First Row of KPIs */}
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/meter.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* First Row of KPIs */}
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="american-football-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{calc.pointsPerGame.toFixed(1)}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsPointsPerGame")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{calc.pointsPerGame.toFixed(1)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsPointsPerGame")}</Text>
+
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="locate-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{calc.opponentPointsPerGame.toFixed(1)}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsOpponentPPG")}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/target.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* Second Row of KPIs */}
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="send-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.offense.passing.yardsPerGame.toFixed(0)}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassingYards")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{calc.opponentPointsPerGame.toFixed(1)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsOpponentPPG")}</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Second Row of KPIs */}
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/shield.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.offense.passing.yardsPerGame.toFixed(0)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassingYards")}</Text>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="stats-chart-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{calc.totalYardsPerGame.toFixed(0)}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsTotalYards")}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/bars.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* Third Row of KPIs */}
+              <View style={[styles.kpiRow, styles.kpiRowLast]}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="footsteps-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.offense.rushing.yardsPerGame.toFixed(0)}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushingYards")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{calc.totalYardsPerGame.toFixed(0)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsTotalYards")}</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Third Row of KPIs */}
-            <View style={[styles.kpiRow, styles.kpiRowLast]}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/steps.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.offense.rushing.yardsPerGame.toFixed(0)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushingYards")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/double-sided-arrow.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>
-                    {calc.turnoverDifferential > 0 ? "+" : ""}{calc.turnoverDifferential.toFixed(1)}
-                  </Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsTurnoverDiff")}</Text>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="swap-horizontal-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>
+                      {calc.turnoverDifferential > 0 ? "+" : ""}{calc.turnoverDifferential.toFixed(1)}
+                    </Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsTurnoverDiff")}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Stats Row - 3rd DOWN and 4th DOWN */}
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
           {/* 3rd DOWN Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -583,10 +606,10 @@ export default function TeamStatsNFLNew() {
               <GradientProgressBar value={stats.offense.efficiency.fourthDownPct} maxValue={100} />
             </View>
           </Card>
-        </View>
+        </Animated.View>
 
         {/* Stats Row - HOME AVG and AWAY AVG */}
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, getCardStyle(4)]}>
           {/* HOME AVG Card */}
           <Card style={styles.statCardSmall}>
             <View style={styles.statContent}>
@@ -604,157 +627,129 @@ export default function TeamStatsNFLNew() {
               <Text style={styles.statDescription}>{i18n.t("teamStatsPointsPerGame")}</Text>
             </View>
           </Card>
-        </View>
+        </Animated.View>
 
         {/* Defensive Stats Card */}
-        <Card style={styles.coreKPIsCard}>
-          <View style={styles.coreKPIsContent}>
-            {/* Header */}
-            <View style={styles.coreKPIsHeader}>
-              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsDefensiveStats")}</Text>
-              <Pressable onPress={() => navigateToInfo("defensiveStats")}>
-                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(5)}>
+          <Card style={styles.coreKPIsCard}>
+            <View style={styles.coreKPIsContent}>
+              {/* Header */}
+              <View style={styles.coreKPIsHeader}>
+                <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsDefensiveStats")}</Text>
+                <Pressable onPress={() => navigateToInfo("defensiveStats")}>
+                  <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {/* First Row of Defensive Stats */}
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/shield.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* First Row of Defensive Stats */}
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="shield-checkmark-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.defense.passing.yardsAllowedPerGame.toFixed(0)} {i18n.t("teamStatsYards")}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassDef")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.defense.passing.yardsAllowedPerGame.toFixed(0)} {i18n.t("teamStatsYards")}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassDef")}</Text>
+
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="shield-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.defense.rushing.yardsAllowedPerGame.toFixed(0)} {i18n.t("teamStatsYards")}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushDef")}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/steps.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* Second Row of Defensive Stats */}
+              <View style={[styles.kpiRow, styles.kpiRowLast]}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="flash-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.defense.passing.sacks}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsSacks")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.defense.rushing.yardsAllowedPerGame.toFixed(0)} {i18n.t("teamStatsYards")}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushDef")}</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Second Row of Defensive Stats */}
-            <View style={[styles.kpiRow, styles.kpiRowLast]}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/bolt.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.defense.passing.sacks}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsSacks")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/interceptions.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.defense.passing.interceptions}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsInterceptions")}</Text>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="hand-left-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.defense.passing.interceptions}</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsInterceptions")}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
 
         {/* Advanced Metrics Card */}
-        <Card style={styles.coreKPIsCard}>
-          <View style={styles.coreKPIsContent}>
-            {/* Header */}
-            <View style={styles.coreKPIsHeader}>
-              <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsAdvancedMetrics")}</Text>
-              <Pressable onPress={() => navigateToInfo("advancedMetrics")}>
-                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
+        <Animated.View style={getCardStyle(6)}>
+          <Card style={styles.coreKPIsCard}>
+            <View style={styles.coreKPIsContent}>
+              {/* Header */}
+              <View style={styles.coreKPIsHeader}>
+                <Text style={styles.coreKPIsTitle}>{i18n.t("teamStatsAdvancedMetrics")}</Text>
+                <Pressable onPress={() => navigateToInfo("advancedMetrics")}>
+                  <Text style={styles.coreKPIsInfo}>ⓘ</Text>
+                </Pressable>
+              </View>
 
-            {/* First Row of Advanced Metrics */}
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/torch.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* First Row of Advanced Metrics */}
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="trophy-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.offense.passing.touchdowns} pg</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassingTDs")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.offense.passing.touchdowns} pg</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsPassingTDs")}</Text>
+
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="walk-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.offense.rushing.touchdowns} pg</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushingTDs")}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/steps.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
+              {/* Second Row of Advanced Metrics */}
+              <View style={[styles.kpiRow, styles.kpiRowLast]}>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="flag-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{Math.round(stats.offense.efficiency.penaltyYards / 6)} pg</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsPenaltyYards")}</Text>
+                  </View>
                 </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.offense.rushing.touchdowns} pg</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsRushingTDs")}</Text>
-                </View>
-              </View>
-            </View>
 
-            {/* Second Row of Advanced Metrics */}
-            <View style={[styles.kpiRow, styles.kpiRowLast]}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/flag.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{Math.round(stats.offense.efficiency.penaltyYards / 6)} pg</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsPenaltyYards")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Image
-                    source={require("../assets/images/icons/geo-tag.svg")}
-                    style={styles.kpiIcon}
-                    contentFit="contain"
-                  />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{stats.offense.rushing.yardsPerRush.toFixed(1)} pg</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("teamStatsYardsPerRush")}</Text>
+                <View style={styles.kpiItem}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="location-outline" size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.kpiTextContainer}>
+                    <Text style={styles.kpiValue}>{stats.offense.rushing.yardsPerRush.toFixed(1)} pg</Text>
+                    <Text style={styles.kpiLabel}>{i18n.t("teamStatsYardsPerRush")}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
-        </Card>
+          </Card>
+        </Animated.View>
         </ScrollView>
       </View>
     );
@@ -767,27 +762,22 @@ export default function TeamStatsNFLNew() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
         {/* Team Selection Items */}
         {[1, 2].map((index) => (
-          <Pressable key={index} style={styles.selectionItem}>
-            <LinearGradient
-              colors={["#0D0D0D", "#161616"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.selectionGradient}
-            >
+          <View key={index} style={styles.selectionItem}>
+            <View style={styles.selectionContent}>
               <ShimmerPlaceholder
                 style={styles.selectionLogoShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
               <ShimmerPlaceholder
                 style={styles.selectionNameShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
               <ShimmerPlaceholder
                 style={styles.chevronIconShimmer}
-                shimmerColors={["#919191", "#767676", "#919191"]}
+                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
               />
-            </LinearGradient>
-          </Pressable>
+            </View>
+          </View>
         ))}
       </ScrollView>
     </View>
@@ -845,31 +835,30 @@ const styles = StyleSheet.create({
   },
   selectionItem: {
     height: 85.87,
-    borderRadius: 14,
-    marginBottom: 16,
+    borderRadius: radii.xl,
+    marginBottom: spacing[4],
     overflow: "hidden",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
-  selectionGradient: {
+  selectionContent: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 22,
-    gap: 12,
+    paddingHorizontal: spacing[5],
+    gap: spacing[3],
   },
   selectionLogo: {
-    width: 58.11,
-    height: 38.28,
+    width: 58,
+    height: 40,
   },
   selectionName: {
     flex: 1,
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20,
-    color: "#FFFFFF",
-  },
-  chevronIcon: {
-    width: 24,
-    height: 24,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.lg,
+    color: colors.foreground,
   },
   backButton: {
     marginBottom: 16,
@@ -1036,16 +1025,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   iconContainer: {
-    width: 45.11,
-    height: 44.17,
-    borderRadius: 12.62,
-    backgroundColor: "#161616",
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
     justifyContent: "center",
     alignItems: "center",
-  },
-  kpiIcon: {
-    width: 24,
-    height: 24,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   kpiValue: {
     fontFamily: "Aeonik-Medium",
