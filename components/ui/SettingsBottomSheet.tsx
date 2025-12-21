@@ -266,11 +266,11 @@ export function SettingsBottomSheet({
   };
 
   const handlePrivacyPress = () => {
-    WebBrowser.openBrowserAsync("https://betaiapp.com/privacy.html");
+    WebBrowser.openBrowserAsync("https://betaiapp.com/privacy");
   };
 
   const handleTermsPress = () => {
-    WebBrowser.openBrowserAsync("https://betaiapp.com/terms.html");
+    WebBrowser.openBrowserAsync("https://betaiapp.com/terms");
   };
 
   const handleAction = (action: string) => {

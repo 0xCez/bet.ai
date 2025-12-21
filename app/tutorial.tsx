@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: spacing[3],
     marginTop: "auto",
-    marginBottom: spacing[5],
+    marginBottom: 50,
   },
   confettiContainer: {
     position: "absolute",

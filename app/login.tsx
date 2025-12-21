@@ -342,7 +342,7 @@ export default function LoginScreen() {
   return (
     <ScreenBackground hideBg>
       {/* Concentric circles background */}
-      <ConcentricCircles />
+      <ConcentricCircles rotate rotationDuration={45000} />
 
       <Animated.View style={[styles.header, logoAnimatedStyle]}>
         <Logo size="medium" />
@@ -413,13 +413,13 @@ export default function LoginScreen() {
             <Text style={styles.footerText}>{i18n.t("loginByContinuing")}</Text>
             <View style={styles.linksContainer}>
               <Link
-                href="https://betaiapp.com/privacy.html"
+                href="https://betaiapp.com/privacy"
                 style={styles.link}
               >
                 {i18n.t("loginPrivacyPolicy")}
               </Link>
               <Text style={styles.footerText}> & </Text>
-              <Link href="https://betaiapp.com/terms.html" style={styles.link}>
+              <Link href="https://betaiapp.com/terms" style={styles.link}>
                 {i18n.t("loginTermsAndConditions")}
               </Link>
             </View>

@@ -127,12 +127,23 @@ export default {
 
     // Paywall Screen
     paywallYourBest: "Vos meilleurs analye de",
-    paywallBackedByAI: "paris boostés par l’IA.",
-    paywallFeatureAIAnalysis: "Analyse IA des paris",
-    paywallFeatureAIAnalysisDesc: "Envoyez une capture et obtenez une analyse experte instantanée.",
-    paywallFeatureXFactors: "Facteurs décisifs",
-    paywallFeatureXFactorsDesc: "Blessures, arbitres, météo, fatigue... ce qui influence les cotes.",
-    paywallFeatureDebate: "Débattez vos choix avec l’IA",
+    paywallBackedByAI: "paris boostés par l'IA.",
+    // Feature cards - Page 1
+    paywallFeatureAIAnalysis: "Analyse IA des Matchs",
+    paywallFeatureAIAnalysisDesc: "Analyses IA approfondies avec scores de confiance, signaux de paris et insights stratégiques.",
+    paywallFeatureMarketIntel: "Intelligence Marché",
+    paywallFeatureMarketIntelDesc: "Comparaison des cotes en temps réel, meilleures lignes, valeur juste, et opportunités EV+ & arbitrage.",
+    paywallFeatureXFactors: "Détection des X-Facteurs",
+    paywallFeatureXFactorsDesc: "Variables cachées comme blessures, météo et fatigue de voyage qui impactent les résultats.",
+    // Feature cards - Page 2
+    paywallFeatureTeamStats: "Stats Équipe",
+    paywallFeatureTeamStatsDesc: "Métriques de performance complètes, historique des confrontations et indicateurs de momentum.",
+    paywallFeaturePlayerStats: "Stats Joueur",
+    paywallFeaturePlayerStatsDesc: "Forme individuelle des joueurs, matchups clés et notes d'impact.",
+    paywallFeatureExpertChat: "Chat IA Expert",
+    paywallFeatureExpertChatDesc: "Posez toutes vos questions sur le match à notre IA pour des conseils stratégiques instantanés.",
+    // Legacy keys (kept for compatibility)
+    paywallFeatureDebate: "Débattez vos choix avec l'IA",
     paywallFeatureDebateDesc: "Posez vos questions, demandez des détails, recevez des infos instantanées.",
     paywallYearly: "ANNUEL",
     paywallWeekly: "HEBDO",

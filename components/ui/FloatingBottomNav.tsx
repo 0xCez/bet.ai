@@ -285,8 +285,8 @@ const styles = StyleSheet.create({
   nextButtonContainer: {
     position: "absolute",
     bottom: 120,
-    left: spacing[5],
-    right: spacing[5],
+    left: 90,
+    right: 90,
     zIndex: 999,
     paddingHorizontal: spacing[4],
   },

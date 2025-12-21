@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { ConcentricCircles } from "../components/ui/ConcentricCircles";
 import CircularProgress from "react-native-circular-progress-indicator";
 import { GradientText } from "../components/ui/GradientText";
 import { colors, spacing, typography } from "../constants/designTokens";
@@ -96,7 +95,6 @@ export default function LoadingScreen() {
 
   return (
     <ScreenBackground hideBg>
-      <ConcentricCircles verticalPosition={0.45} />
       <View style={styles.container}>
         <View style={styles.progressContainer}>
           <CircularProgress

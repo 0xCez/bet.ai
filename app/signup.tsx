@@ -244,7 +244,13 @@ export default function SignupScreen() {
       // If on first slide, go back to welcome screen
       router.back();
     } else {
-      // If on any other slide, go to previous slide
+      // Remove current page from visited so animation re-triggers if user comes back
+      setVisitedPages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentPage);
+        return newSet;
+      });
+      // Go to previous slide
       pagerRef.current?.setPage(currentPage - 1);
     }
   };
@@ -354,7 +360,7 @@ export default function SignupScreen() {
     loadProgress();
   }, []);
 
-  const renderImageSlide = (slide: OnboardingSlide) => (
+  const renderImageSlide = (slide: OnboardingSlide, slideIndex: number) => (
     <View style={styles.slideContainer}>
       <View style={styles.headerContainer}>
         <MultilineText
@@ -378,14 +384,14 @@ export default function SignupScreen() {
       </View>
 
       {/* Custom animated component for slide 3 */}
-      {slide.useCustomComponent === "profitGrowthChart" && (
+      {slide.useCustomComponent === "profitGrowthChart" && visitedPages.has(slideIndex) && (
         <View style={styles.customComponentContainer}>
           <ProfitGrowthChart animate={true} />
         </View>
       )}
 
       {/* Custom animated component for slide 6 */}
-      {slide.useCustomComponent === "profitabilityComparisonChart" && (
+      {slide.useCustomComponent === "profitabilityComparisonChart" && visitedPages.has(slideIndex) && (
         <View style={styles.customComponentContainer}>
           <ProfitabilityComparisonChart animate={true} />
         </View>
@@ -407,7 +413,7 @@ export default function SignupScreen() {
       )}
 
       {/* Custom animated component for slide 8 (User Reviews) */}
-      {slide.useCustomComponent === "userReviewsCard" && (
+      {slide.useCustomComponent === "userReviewsCard" && visitedPages.has(slideIndex) && (
         <View style={styles.customComponentContainer}>
           <UserReviewsCard animate={true} />
         </View>
@@ -521,7 +527,7 @@ export default function SignupScreen() {
       >
         {slides.map((slide, index) => (
           <View key={slide.id} style={styles.page}>
-            {(slide.image || slide.useCustomComponent) ? renderImageSlide(slide) : renderQuestionSlide(slide, index)}
+            {(slide.image || slide.useCustomComponent) ? renderImageSlide(slide, index) : renderQuestionSlide(slide, index)}
           </View>
         ))}
       </PagerView>

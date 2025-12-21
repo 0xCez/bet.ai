@@ -1,5 +1,12 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, StyleSheet, Dimensions } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 import { colors } from "../../constants/designTokens";
 
@@ -26,6 +33,10 @@ interface ConcentricCirclesProps {
   verticalPosition?: number;
   /** Dash pattern for dashed lines [dashLength, gapLength] */
   dashPattern?: [number, number];
+  /** Enable slow rotation animation (default: false) */
+  rotate?: boolean;
+  /** Duration of one full rotation in ms (default: 60000 = 60 seconds) */
+  rotationDuration?: number;
 }
 
 export function ConcentricCircles({
@@ -33,13 +44,31 @@ export function ConcentricCircles({
   size = SCREEN_WIDTH * 1.05,
   innerColor = colors.primary,
   outerColor = colors.primary,
-  innerOpacity = 0.45,
-  outerOpacity = 0.06,
+  innerOpacity = 0.80,
+  outerOpacity = 0.08,
   strokeWidth = 1,
   gap,
   verticalPosition = 0.60,
   dashPattern = [10, 12],
+  rotate = false,
+  rotationDuration = 60000,
 }: ConcentricCirclesProps) {
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (rotate) {
+      rotation.value = withRepeat(
+        withTiming(360, { duration: rotationDuration, easing: Easing.linear }),
+        -1,
+        false
+      );
+    }
+  }, [rotate, rotationDuration]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
   const calculatedGap = gap || size / (circleCount * 2.3);
   const circles = [];
 
@@ -71,11 +100,21 @@ export function ConcentricCircles({
     );
   }
 
+  const svgContent = (
+    <Svg width={size} height={size} style={styles.svg}>
+      {circles}
+    </Svg>
+  );
+
   return (
     <View style={[styles.container, { top: `${verticalPosition * 100 - 50}%` }]} pointerEvents="none">
-      <Svg width={size} height={size} style={styles.svg}>
-        {circles}
-      </Svg>
+      {rotate ? (
+        <Animated.View style={animatedStyle}>
+          {svgContent}
+        </Animated.View>
+      ) : (
+        svgContent
+      )}
     </View>
   );
 }

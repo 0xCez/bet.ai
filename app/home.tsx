@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -17,12 +17,50 @@ import * as StoreReview from "expo-store-review";
 import { usePostHog } from "posthog-react-native";
 import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import { LogoSpinner } from "../components/ui/LogoSpinner";
+import { GradientOrb } from "../components/ui/GradientOrb";
+import { FloatingParticles } from "../components/ui/FloatingParticles";
 import i18n from "../i18n";
 
 const RATING_SHOWN_KEY = "@rating_shown";
 
 export default function HomeScreen() {
   const { isSubscribed, purchaseLoading } = useRevenueCatPurchases();
+
+  // Staggered animation values (4 elements: top bar, orb, scan button, gallery button)
+  const cardAnimations = useRef(
+    Array.from({ length: 4 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateIn = () => {
+    cardAnimations.forEach(anim => anim.setValue(0));
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+    Animated.parallel(animations).start();
+  };
+
+  const getAnimatedStyle = (index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  });
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const { linkUserToFirebase } = useRevenueCatUser();
@@ -33,6 +71,15 @@ export default function HomeScreen() {
       // router.push("/paywall");
     }
   }, [isSubscribed, purchaseLoading]);
+
+  // Trigger staggered animation when loading completes
+  const hasAnimatedRef = useRef(false);
+  useEffect(() => {
+    if (!purchaseLoading && !hasAnimatedRef.current) {
+      hasAnimatedRef.current = true;
+      setTimeout(animateIn, 100);
+    }
+  }, [purchaseLoading]);
 
   useEffect(() => {
     const user = auth.currentUser;
@@ -180,18 +227,13 @@ export default function HomeScreen() {
   // }
 
   return (
-    <ScreenBackground
-      hideBg={false}
-      backgroundImage={require("../assets/images/homepagebg.png")}
-      imageStyle={{
-        resizeMode: "cover",
-        height: "110%",
-        top: -20,
-      }}
-    >
+    <ScreenBackground hideBg>
+      {/* Option A: Floating particles around the orb */}
+      <FloatingParticles verticalPosition={0.50} />
+      <GradientOrb />
       <View style={styles.container}>
         {/* Top Bar */}
-        <View style={styles.topBar}>
+        <Animated.View style={[styles.topBar, getAnimatedStyle(0)]}>
           <IconButton
             icon="menu"
             onPress={() => setIsSettingsVisible(true)}
@@ -207,12 +249,13 @@ export default function HomeScreen() {
             onPress={() => router.push("/history")}
             size={28}
           />
-        </View>
+        </Animated.View>
 
 
         {/* Two Buttons Container */}
         <View style={styles.bottomContainer}>
           {/* Top Button - Scan a Bet (Primary solid CTA) */}
+          <Animated.View style={getAnimatedStyle(2)}>
           <Pressable
             onPress={() => {
               if (!isSubscribed) {
@@ -231,8 +274,10 @@ export default function HomeScreen() {
               <Text style={styles.primaryButtonText}>{i18n.t("imagePickerTakePhoto")}</Text>
             </View>
           </Pressable>
+          </Animated.View>
 
           {/* Bottom Button - Choose from Gallery (Glass style) */}
+          <Animated.View style={getAnimatedStyle(3)}>
           <Pressable
             onPress={() => {
               if (!isSubscribed) {
@@ -251,6 +296,7 @@ export default function HomeScreen() {
               <Text style={styles.secondaryButtonText}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
             </View>
           </Pressable>
+          </Animated.View>
         </View>
 
         <ImagePickerSheet

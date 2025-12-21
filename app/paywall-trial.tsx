@@ -120,7 +120,7 @@ export default function PaywallTrialScreen() {
             <Text style={styles.linkDivider}>|</Text>
             <TouchableOpacity
               onPress={() =>
-                Linking.openURL("https://betaiapp.com/privacy.html")
+                Linking.openURL("https://betaiapp.com/privacy")
               }
             >
               <Text style={styles.linkText}>
@@ -129,7 +129,7 @@ export default function PaywallTrialScreen() {
             </TouchableOpacity>
             <Text style={styles.linkDivider}>|</Text>
             <TouchableOpacity
-              onPress={() => Linking.openURL("https://betaiapp.com/terms.html")}
+              onPress={() => Linking.openURL("https://betaiapp.com/terms")}
             >
               <Text style={styles.linkText}>
                 {i18n.t("paywallTrialTermsOfService")}

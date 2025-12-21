@@ -68,54 +68,50 @@ export function UserReviewsCard({ animate = true }: UserReviewsCardProps) {
       return;
     }
 
-    // Reset animations
-    headerOpacity.setValue(0);
-    headerScale.setValue(0.8);
-    cardAnimations.forEach((anim) => {
-      anim.opacity.setValue(0);
-      anim.translateY.setValue(30);
-    });
+    // Small delay to ensure component is mounted before animating
+    const timer = setTimeout(() => {
+      // Animation sequence
+      const animationSequence = Animated.sequence([
+        // 1. Header (stars with laurels) appears with scale
+        Animated.parallel([
+          Animated.timing(headerOpacity, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.spring(headerScale, {
+            toValue: 1,
+            friction: 6,
+            tension: 100,
+            useNativeDriver: true,
+          }),
+        ]),
+        // 2. Cards appear sequentially
+        Animated.stagger(
+          200,
+          cardAnimations.map((anim) =>
+            Animated.parallel([
+              Animated.timing(anim.opacity, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+              }),
+              Animated.spring(anim.translateY, {
+                toValue: 0,
+                friction: 8,
+                tension: 100,
+                useNativeDriver: true,
+              }),
+            ])
+          )
+        ),
+      ]);
 
-    // Animation sequence
-    const animationSequence = Animated.sequence([
-      // 1. Header (stars with laurels) appears with scale
-      Animated.parallel([
-        Animated.timing(headerOpacity, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(headerScale, {
-          toValue: 1,
-          friction: 6,
-          tension: 100,
-          useNativeDriver: true,
-        }),
-      ]),
-      // 2. Cards appear sequentially
-      Animated.stagger(
-        200,
-        cardAnimations.map((anim) =>
-          Animated.parallel([
-            Animated.timing(anim.opacity, {
-              toValue: 1,
-              duration: 300,
-              useNativeDriver: true,
-            }),
-            Animated.spring(anim.translateY, {
-              toValue: 0,
-              friction: 8,
-              tension: 100,
-              useNativeDriver: true,
-            }),
-          ])
-        )
-      ),
-    ]);
-
-    animationSequence.start();
+      animationSequence.start();
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       headerOpacity.stopAnimation();
       headerScale.stopAnimation();
       cardAnimations.forEach((anim) => {

@@ -92,40 +92,34 @@ export function ProfitGrowthChart({ animate = true }: ProfitGrowthChartProps) {
       return;
     }
 
-    // Reset animations
-    lineProgress.setValue(0);
-    fillOpacity.setValue(0);
-    dotAnimations.forEach(anim => anim.setValue(0));
-    dollarScale.setValue(0);
-    titleOpacity.setValue(0);
-    descOpacity.setValue(0);
-
-    // Sequence of animations
-    const animationSequence = Animated.sequence([
+    // Small delay to ensure component is mounted before animating
+    const timer = setTimeout(() => {
+      // Sequence of animations (reduced by 40%)
+      const animationSequence = Animated.sequence([
       // 1. Title fade in
       Animated.timing(titleOpacity, {
         toValue: 1,
-        duration: 400,
+        duration: 120,
         useNativeDriver: true,
       }),
       // 2. Line drawing animation
       Animated.timing(lineProgress, {
         toValue: 1,
-        duration: 1200,
+        duration: 336,
         useNativeDriver: true,
       }),
       // 3. Fill gradient fade in
       Animated.timing(fillOpacity, {
         toValue: 1,
-        duration: 400,
+        duration: 120,
         useNativeDriver: true,
       }),
       // 4. Data points appear sequentially
-      Animated.stagger(200, dotAnimations.map(anim =>
+      Animated.stagger(48, dotAnimations.map(anim =>
         Animated.spring(anim, {
           toValue: 1,
           friction: 6,
-          tension: 100,
+          tension: 140,
           useNativeDriver: true,
         })
       )),
@@ -133,13 +127,13 @@ export function ProfitGrowthChart({ animate = true }: ProfitGrowthChartProps) {
       Animated.spring(dollarScale, {
         toValue: 1,
         friction: 5,
-        tension: 120,
+        tension: 160,
         useNativeDriver: true,
       }),
       // 6. Description fade in
       Animated.timing(descOpacity, {
         toValue: 1,
-        duration: 400,
+        duration: 96,
         useNativeDriver: true,
       }),
     ]);
@@ -160,12 +154,14 @@ export function ProfitGrowthChart({ animate = true }: ProfitGrowthChartProps) {
       ])
     );
 
-    // Run main sequence then start pulse
-    animationSequence.start(() => {
-      pulseAnimation.start();
-    });
+      // Run main sequence then start pulse
+      animationSequence.start(() => {
+        pulseAnimation.start();
+      });
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       lineProgress.stopAnimation();
       fillOpacity.stopAnimation();
       dotAnimations.forEach(anim => anim.stopAnimation());

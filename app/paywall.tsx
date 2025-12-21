@@ -21,23 +21,43 @@ import { auth } from "../firebaseConfig";
 import Purchases from "react-native-purchases";
 import { usePaywallActions } from "./hooks/usePaywallActions";
 import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
-import { Ionicons } from "@expo/vector-icons";
 import { LogoSpinner } from "../components/ui/LogoSpinner";
+import { FeatureCardCarousel } from "../components/ui/FeatureCardCarousel";
 import i18n from "../i18n";
 
-// Feature list for paywall
+// Feature list for paywall - 6 cards in 2 pages
 const features = [
+  // Page 1
   {
     title: i18n.t("paywallFeatureAIAnalysis"),
     description: i18n.t("paywallFeatureAIAnalysisDesc"),
+    icon: "ai-analysis" as const,
+  },
+  {
+    title: i18n.t("paywallFeatureMarketIntel"),
+    description: i18n.t("paywallFeatureMarketIntelDesc"),
+    icon: "market-intel" as const,
   },
   {
     title: i18n.t("paywallFeatureXFactors"),
     description: i18n.t("paywallFeatureXFactorsDesc"),
+    icon: "x-factors" as const,
+  },
+  // Page 2
+  {
+    title: i18n.t("paywallFeatureTeamStats"),
+    description: i18n.t("paywallFeatureTeamStatsDesc"),
+    icon: "team-stats" as const,
   },
   {
-    title: i18n.t("paywallFeatureDebate"),
-    description: i18n.t("paywallFeatureDebateDesc"),
+    title: i18n.t("paywallFeaturePlayerStats"),
+    description: i18n.t("paywallFeaturePlayerStatsDesc"),
+    icon: "player-stats" as const,
+  },
+  {
+    title: i18n.t("paywallFeatureExpertChat"),
+    description: i18n.t("paywallFeatureExpertChatDesc"),
+    icon: "expert-chat" as const,
   },
 ];
 
@@ -220,23 +240,7 @@ export default function PaywallScreen() {
             </View>
           </View>
 
-          <View style={styles.features}>
-            {features.map((feature, index) => (
-              <View style={styles.featureCard} key={index}>
-                <View style={styles.featureItem}>
-                  <View style={styles.checkmarkContainer}>
-                    <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
-                  </View>
-                  <View style={styles.featureText}>
-                    <Text style={styles.featureTitle}>{feature.title}</Text>
-                    <Text style={styles.featureDescription}>
-                      {feature.description}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
+          <FeatureCardCarousel features={features} />
 
           <View style={styles.pricingContainer}>
             {packages.map((pkg: any) => (
@@ -316,7 +320,7 @@ export default function PaywallScreen() {
             <Text style={styles.footerDivider}>|</Text>
             <TouchableOpacity
               onPress={() =>
-                Linking.openURL("https://betaiapp.com/privacy.html")
+                Linking.openURL("https://betaiapp.com/privacy")
               }
             >
               <Text style={styles.footerLink}>
@@ -325,7 +329,7 @@ export default function PaywallScreen() {
             </TouchableOpacity>
             <Text style={styles.footerDivider}>|</Text>
             <TouchableOpacity
-              onPress={() => Linking.openURL("https://betaiapp.com/terms.html")}
+              onPress={() => Linking.openURL("https://betaiapp.com/terms")}
             >
               <Text style={styles.footerLink}>
                 {i18n.t("paywallTermsOfService")}
@@ -377,47 +381,6 @@ const styles = StyleSheet.create({
   },
   taglineHighlight: {
     color: colors.foreground,
-  },
-  features: {
-    marginTop: spacing[6],
-    marginBottom: spacing[2],
-    gap: spacing[3],
-  },
-  featureCard: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    paddingHorizontal: spacing[5],
-  },
-  featureItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[4],
-  },
-  checkmarkContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  featureText: {
-    flex: 1,
-  },
-  featureTitle: {
-    color: colors.foreground,
-    fontSize: typography.sizes.base,
-    marginBottom: 4,
-    fontFamily: typography.fontFamily.medium,
-  },
-  featureDescription: {
-    color: colors.mutedForeground,
-    lineHeight: 18,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily.light,
   },
   pricingContainer: {
     flexDirection: "row",
@@ -500,7 +463,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: spacing[8],
+    marginTop: spacing[3],
   },
   footerLink: {
     color: colors.mutedForeground,

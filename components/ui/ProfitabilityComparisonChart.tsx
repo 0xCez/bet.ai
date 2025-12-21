@@ -88,57 +88,53 @@ export function ProfitabilityComparisonChart({ animate = true }: ProfitabilityCo
       return;
     }
 
-    // Reset
-    titleOpacity.setValue(0);
-    legendOpacity.setValue(0);
-    betaiLineProgress.setValue(0);
-    otherLineProgress.setValue(0);
-    betaiFillOpacity.setValue(0);
-    descOpacity.setValue(0);
-
-    const animationSequence = Animated.sequence([
-      // 1. Title fade in
-      Animated.timing(titleOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      // 2. Legend fade in
-      Animated.timing(legendOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      // 3. Both lines draw simultaneously
-      Animated.parallel([
-        Animated.timing(betaiLineProgress, {
+    // Small delay to ensure component is mounted before animating
+    const timer = setTimeout(() => {
+      const animationSequence = Animated.sequence([
+        // 1. Title fade in
+        Animated.timing(titleOpacity, {
           toValue: 1,
-          duration: 1200,
+          duration: 200,
           useNativeDriver: true,
         }),
-        Animated.timing(otherLineProgress, {
+        // 2. Legend fade in
+        Animated.timing(legendOpacity, {
           toValue: 1,
-          duration: 1200,
+          duration: 200,
           useNativeDriver: true,
         }),
-      ]),
-      // 4. Bet.AI fill fades in
-      Animated.timing(betaiFillOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      // 5. Description fade in
-      Animated.timing(descOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]);
+        // 3. Both lines draw simultaneously
+        Animated.parallel([
+          Animated.timing(betaiLineProgress, {
+            toValue: 1,
+            duration: 720,
+            useNativeDriver: true,
+          }),
+          Animated.timing(otherLineProgress, {
+            toValue: 1,
+            duration: 720,
+            useNativeDriver: true,
+          }),
+        ]),
+        // 4. Bet.AI fill fades in
+        Animated.timing(betaiFillOpacity, {
+          toValue: 1,
+          duration: 240,
+          useNativeDriver: true,
+        }),
+        // 5. Description fade in
+        Animated.timing(descOpacity, {
+          toValue: 1,
+          duration: 240,
+          useNativeDriver: true,
+        }),
+      ]);
 
-    animationSequence.start();
+      animationSequence.start();
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       titleOpacity.stopAnimation();
       legendOpacity.stopAnimation();
       betaiLineProgress.stopAnimation();
