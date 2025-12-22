@@ -1,25 +1,26 @@
-import React, { useState, useRef } from "react";
-import { View, StyleSheet, Dimensions, Image, Alert, Text } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, Dimensions, Image, Alert, Pressable, Animated } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Carousel, { ICarouselInstance } from "react-native-reanimated-carousel";
-import { GradientButton } from "../components/ui/GradientButton";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { Logo } from "../components/ui/Logo";
 import { updateAppState } from "../utils/appStorage";
-import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import i18n from "../i18n";
-import LottieView from "lottie-react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
+import { OnboardingSlide2Visual } from "../components/ui/OnboardingSlide2Visual";
+import { SharpsVsPublicChart, OddsMovementChart } from "../components/ui/OnboardingSlide3Visual";
+import { OnboardingSlide4Visual } from "../components/ui/OnboardingSlide4Visual";
+import { OnboardingSlide5Visual } from "../components/ui/OnboardingSlide5Visual";
+import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface OnboardingSlide {
   id: number;
   title: string;
   title2: string;
   description: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  image?: any;
+  image: any;
 }
 
 const slides: OnboardingSlide[] = [
@@ -28,14 +29,13 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide1Title'),
     title2: i18n.t('onboardingSlide1Title2'),
     description: i18n.t('onboardingSlide1Description'),
-    icon: "gift-outline",
+    image: require("../assets/images/onboarding/slide1.png"),
   },
   {
     id: 2,
     title: i18n.t('onboardingSlide2Title'),
     title2: i18n.t('onboardingSlide2Title2'),
     description: i18n.t('onboardingSlide2Description'),
-    icon: "camera-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide2-fr.png")
     : i18n.locale.startsWith("es")
@@ -47,7 +47,6 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide3Title'),
     title2: i18n.t('onboardingSlide3Title2'),
     description: i18n.t('onboardingSlide3Description'),
-    icon: "analytics-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide3-fr.png")
     : i18n.locale.startsWith("es")
@@ -59,7 +58,6 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide4Title'),
     title2: i18n.t('onboardingSlide4Title2'),
     description: i18n.t('onboardingSlide4Description'),
-    icon: "flash-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide4-fr.png")
     : i18n.locale.startsWith("es")
@@ -71,7 +69,6 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide5Title'),
     title2: i18n.t('onboardingSlide5Title2'),
     description: i18n.t('onboardingSlide5Description'),
-    icon: "trending-up-outline",
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide5-fr.png")
     : i18n.locale.startsWith("es")
@@ -83,6 +80,26 @@ const slides: OnboardingSlide[] = [
 export default function OnboardingScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const carouselRef = useRef<ICarouselInstance>(null);
+  const insets = useSafeAreaInsets();
+
+  // Entrance animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const isLastSlide = activeIndex === slides.length - 1;
 
@@ -120,25 +137,39 @@ export default function OnboardingScreen() {
 
   const renderSlide = ({ item }: { item: OnboardingSlide }) => (
     <View style={styles.slide}>
-      <View style={styles.contentContainer}>
-        {/* Icon in circular container */}
-        <View style={styles.iconCircle}>
-          <Ionicons name={item.icon} size={48} color={colors.primary} />
-        </View>
-
+      <Animated.View
+        style={[
+          styles.contentContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.titleHighlight}>{item.title2}</Text>
+          <Text style={styles.title}>{item.title2}</Text>
         </View>
-
         {item.id === 1 ? (
-          <LottieView
-            source={require("../assets/lottie/welcome.json")}
-            autoPlay
-            loop={true}
-            style={styles.lottieAnimation}
-          />
-        ) : item.image ? (
+          <OnboardingSlide1Visual isActive={activeIndex === 0} />
+        ) : item.id === 2 ? (
+          <OnboardingSlide2Visual isActive={activeIndex === 1} />
+        ) : item.id === 3 ? (
+          <View style={styles.slide3Container}>
+            <View style={styles.slide3ChartsWrapper}>
+              <View style={styles.sharpsChartPosition}>
+                <SharpsVsPublicChart isActive={activeIndex === 2} />
+              </View>
+              <View style={styles.oddsChartPosition}>
+                <OddsMovementChart isActive={activeIndex === 2} />
+              </View>
+            </View>
+          </View>
+        ) : item.id === 4 ? (
+          <OnboardingSlide4Visual isActive={activeIndex === 3} />
+        ) : item.id === 5 ? (
+          <OnboardingSlide5Visual isActive={activeIndex === 4} />
+        ) : (
           <View style={styles.imageContainer}>
             <Image
               source={item.image}
@@ -146,12 +177,12 @@ export default function OnboardingScreen() {
               resizeMode="contain"
             />
           </View>
-        ) : null}
+        )}
 
-        <View style={styles.descriptionContainer}>
+        <View style={styles.textContainer}>
           <Text style={styles.description}>{item.description}</Text>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 
@@ -169,171 +200,182 @@ export default function OnboardingScreen() {
     </View>
   );
 
+  // Calculate available height for carousel (between header and bottom)
+  const headerHeight = insets.top + 50; // safe area + logo + padding
+  const bottomHeight = Math.max(insets.bottom, 20) + 120; // safe area + dots + button
+  const carouselHeight = SCREEN_HEIGHT - headerHeight - bottomHeight;
+
   return (
-    <ScreenBackground hideBg>
-      <View style={styles.header}>
+    <View style={styles.screenContainer}>
+      {/* Header with Logo */}
+      <View style={[styles.header, { height: headerHeight, paddingTop: insets.top + 10 }]}>
         <Logo size="small" />
       </View>
 
-      <Carousel
-        ref={carouselRef}
-        loop={false}
-        width={SCREEN_WIDTH}
-        height={SCREEN_WIDTH * 1.9}
-        data={slides}
-        renderItem={renderSlide}
-        onSnapToItem={setActiveIndex}
-        mode="parallax"
-        modeConfig={{
-          parallaxScrollingScale: 0.9,
-          parallaxScrollingOffset: 30,
-        }}
-      />
-
-      <View style={styles.bottomContainer}>
-        {renderPaginationDots()}
-        <GradientButton onPress={handleNext}>{i18n.t('onboardingButtonNext')}</GradientButton>
+      {/* Carousel fills middle space */}
+      <View style={{ marginTop: headerHeight }}>
+        <Carousel
+          ref={carouselRef}
+          loop={false}
+          width={SCREEN_WIDTH}
+          height={carouselHeight}
+          data={slides}
+          renderItem={renderSlide}
+          onSnapToItem={setActiveIndex}
+          mode="parallax"
+          modeConfig={{
+            parallaxScrollingScale: 0.9,
+            parallaxScrollingOffset: 30,
+          }}
+        />
       </View>
-    </ScreenBackground>
+
+      {/* Bottom Container */}
+      <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
+        {renderPaginationDots()}
+        <Pressable
+          onPress={handleNext}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && styles.primaryButtonPressed,
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>
+            {i18n.t('onboardingButtonNext')}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   header: {
-    paddingHorizontal: spacing[5],
-    paddingTop: spacing[4],
+    position: "absolute",
+    left: 0,
+    right: 0,
     alignItems: "center",
+    zIndex: 10,
   },
   slide: {
     flex: 1,
+    justifyContent: "center",
   },
   contentContainer: {
-    flex: 1,
-    paddingHorizontal: spacing[5],
-    justifyContent: "flex-start",
-    paddingTop: spacing[6],
-    paddingBottom: 120,
+    paddingHorizontal: spacing[2],
     alignItems: "center",
-  },
-  iconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: borderRadius.full,
-    backgroundColor: "rgba(22, 26, 34, 0.9)",
-    borderWidth: 2,
-    borderColor: colors.rgba.primary50,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing[6],
-    // Strong glow effect
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
-    elevation: 12,
   },
   titleContainer: {
     alignItems: "center",
-    marginBottom: spacing[4],
+    marginBottom: spacing[5],
     width: "100%",
+    paddingHorizontal: 0,
   },
   title: {
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.sizes["2xl"],
-    color: colors.mutedForeground,
-    textAlign: "center",
-  },
-  titleHighlight: {
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.sizes["3xl"],
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 30,
     color: colors.foreground,
     textAlign: "center",
-    marginTop: spacing[1],
-  },
-  lottieAnimation: {
-    width: "100%",
-    height: "55%",
-    marginTop: spacing[4],
+    lineHeight: 38,
   },
   imageContainer: {
-    flex: 1,
+    width: SCREEN_WIDTH * 0.85,
+    height: SCREEN_HEIGHT * 0.45,
     justifyContent: "center",
     alignItems: "center",
+  },
+  slide3Container: {
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_HEIGHT * 0.50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  slide3ChartsWrapper: {
+    position: "relative",
     width: "100%",
-    marginTop: spacing[4],
-    paddingHorizontal: spacing[2],
-    // Glass card styling
-    backgroundColor: "rgba(22, 26, 34, 0.7)",
-    borderRadius: borderRadius["2xl"],
-    borderWidth: 1.5,
-    borderColor: colors.rgba.primary40,
-    overflow: "hidden",
-    // Subtle glow
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 6,
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sharpsChartPosition: {
+    position: "absolute",
+    top: 25,
+    left: -10,
+    zIndex: 1,
+  },
+  oddsChartPosition: {
+    position: "absolute",
+    bottom: 15,
+    right: -10,
+    zIndex: 2,
   },
   image: {
     width: "100%",
     height: "100%",
   },
-  descriptionContainer: {
-    marginTop: spacing[6],
+  textContainer: {
+    marginTop: spacing[4],
     alignItems: "center",
     width: "100%",
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[5],
-    backgroundColor: "rgba(22, 26, 34, 0.85)",
-    borderRadius: borderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.rgba.primary30,
-    // Glow effect
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
   },
   description: {
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.sizes.base,
-    color: colors.foreground,
+    fontSize: 18,
+    color: colors.mutedForeground,
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 26,
   },
   bottomContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: spacing[5],
-    paddingBottom: 34,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[2],
   },
   paginationContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: spacing[6],
+    marginBottom: spacing[5],
     width: "100%",
   },
   paginationDot: {
     width: 8,
     height: 8,
-    borderRadius: borderRadius.full,
+    borderRadius: 4,
     backgroundColor: colors.muted,
     marginHorizontal: 5,
   },
   paginationDotActive: {
     backgroundColor: colors.primary,
-    width: 28,
-    height: 10,
-    // Strong glow on active dot
+    width: 8,
+  },
+  // Primary CTA Button
+  primaryButton: {
+    height: 56,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  primaryButtonPressed: {
+    transform: [{ scale: 0.97 }],
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+  },
+  primaryButtonText: {
+    color: colors.primaryForeground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
   },
 });
