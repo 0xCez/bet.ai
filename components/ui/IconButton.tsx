@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, Pressable, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { colors, borderRadius } from "../../constants/designTokens";
 
 type IconName = "menu" | "time-outline" | "chevron-back" | "close";
@@ -18,9 +19,14 @@ export function IconButton({
   size = 24,
   style,
 }: IconButtonProps) {
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.container,
         pressed && styles.pressed,

@@ -4,46 +4,37 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Pressable,
   Animated,
 } from "react-native";
-import { Image } from "expo-image";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
 import { ScreenBackground } from "@/components/ui/ScreenBackground";
-import { Card } from "@/components/ui/Card";
-import { GradientProgressBar } from "@/components/ui/GradientProgressBar";
 import { FloatingBottomNav } from "@/components/ui/FloatingBottomNav";
 import { TopBar } from "@/components/ui/TopBar";
+import { TeamSelectorHeader } from "@/components/ui/TeamSelectorHeader";
+import { PlayerStatsCard } from "@/components/ui/PlayerStatsCard";
 import APIService from "@/services/api";
-import { usePageTransition } from "@/hooks/usePageTransition";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
-import i18n from "@/i18n";
 import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNFLTeamLogo } from "@/utils/teamLogos";
-import { useRouter } from "expo-router";
 import { usePageTracking } from "@/hooks/usePageTracking";
-import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
-import { Ionicons } from "@expo/vector-icons";
+import { colors, spacing, borderRadius as radii, typography, shimmerColors } from "../constants/designTokens";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
-// Static variables to persist player data between screen navigation
+// Static cache
 let cachedPlayerResult: PlayerStatsResult | null = null;
 let cachedParams: any = null;
 
-// Interface matching the backend player stats structure
+// Types
 interface PlayerStatsResult {
   sport: string;
   teams: {
     home: string;
     away: string;
-    logos: {
-      home: string;
-      away: string;
-    };
+    logos: { home: string; away: string };
   };
   playerStats: {
     team1: {
@@ -81,43 +72,16 @@ type PlayerStatsParams = {
   team1?: string;
   team2?: string;
   sport?: string;
-  team1_code?: string;
-  team2_code?: string;
   team1Logo?: string;
   team2Logo?: string;
   analysisId?: string;
-  selectedTeam?: string;
-  selectedPlayer?: string;
   isDemo?: string;
 };
 
-
-// Map position codes to full names
-const getPositionFullName = (position: string) => {
-  const positionMap: { [key: string]: string } = {
-    "QB": "Quarterback",
-    "RB": "Running Back",
-    "WR": "Wide Receiver",
-    "TE": "Tight End",
-    "OL": "Offensive Lineman",
-    "DL": "Defensive Lineman",
-    "LB": "Linebacker",
-    "CB": "Cornerback",
-    "S": "Safety",
-    "K": "Kicker",
-    "P": "Punter",
-  };
-
-  return positionMap[position] || position;
-};
-
-export default function PlayerStatsNBANew() {
+export default function PlayerStatsNFL() {
   const params = useLocalSearchParams<PlayerStatsParams>();
-  const router = useRouter();
-  const { animatedStyle } = usePageTransition(false);
   const { isSubscribed } = useRevenueCatPurchases();
 
-  // Track page views and time spent
   usePageTracking({
     pageName: 'player_stats_nfl',
     metadata: {
@@ -125,96 +89,59 @@ export default function PlayerStatsNBANew() {
       team2: params.team2,
       sport: params.sport,
       analysisId: params.analysisId,
-      selectedTeam: params.selectedTeam,
-      selectedPlayer: params.selectedPlayer,
       isDemo: params.isDemo === 'true',
     },
   });
 
-  // Check if we're navigating with the same params
+  // Check cache
   const isSameAnalysis =
     cachedParams?.team1 === params.team1 &&
     cachedParams?.team2 === params.team2 &&
     cachedParams?.sport === params.sport;
 
-  // Cache params for future comparison
   if (!isSameAnalysis) {
     cachedParams = { ...params };
   }
 
-  const hasInitializedRef = React.useRef(false);
+  const hasInitializedRef = useRef(false);
 
-  // Initialize state
-  const [isLoading, setIsLoading] = useState(
-    !isSameAnalysis || !cachedPlayerResult
-  );
+  // State
+  const [isLoading, setIsLoading] = useState(!isSameAnalysis || !cachedPlayerResult);
   const [playerResult, setPlayerResult] = useState<PlayerStatsResult | null>(
     isSameAnalysis && cachedPlayerResult ? cachedPlayerResult : null
   );
   const [error, setError] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(params.selectedTeam || null);
-  const [selectedPlayer, setSelectedPlayer] = useState<any | null>(
-    params.selectedPlayer ? JSON.parse(params.selectedPlayer) : null
-  );
+  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2">("team1");
+  const [expandedCards, setExpandedCards] = useState<{ [key: string]: boolean }>({});
 
-  // Card animation values (5 cards in player stats view)
-  const cardAnimations = useRef(
-    Array.from({ length: 5 }, () => new Animated.Value(0))
-  ).current;
+  // Animation - simple fade in for the content
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const animateCardsIn = useCallback(() => {
-    // Reset all animations
-    cardAnimations.forEach(anim => anim.setValue(0));
+  const animateIn = useCallback(() => {
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
-    // Create staggered animations
-    const animations = cardAnimations.map((anim, index) =>
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 350,
-        delay: 50 + index * 100,
-        useNativeDriver: true,
-      })
-    );
+  // Toggle card expansion
+  const toggleCard = (playerId: string) => {
+    setExpandedCards(prev => ({ ...prev, [playerId]: !prev[playerId] }));
+  };
 
-    Animated.parallel(animations).start();
-  }, [cardAnimations]);
-
-  const getCardStyle = useCallback((index: number) => ({
-    opacity: cardAnimations[index],
-    transform: [
-      {
-        translateX: cardAnimations[index].interpolate({
-          inputRange: [0, 1],
-          outputRange: [-30, 0],
-        }),
-      },
-      {
-        scale: cardAnimations[index].interpolate({
-          inputRange: [0, 1],
-          outputRange: [0.9, 1],
-        }),
-      },
-    ],
-  }), [cardAnimations]);
-
-  // Trigger animation when player is selected and data is loaded
-  useEffect(() => {
-    if (selectedPlayer && playerResult && !isLoading) {
-      animateCardsIn();
-    }
-  }, [selectedPlayer, playerResult, isLoading, animateCardsIn]);
-
+  // Fetch data
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
 
-    // Skip re-fetching if we're navigating back to the same analysis
     if (isSameAnalysis && cachedPlayerResult) {
       setIsLoading(false);
+      animateIn();
       return;
     }
 
-    // Reset cache when loading new analysis
     if (!isSameAnalysis) {
       cachedPlayerResult = null;
     }
@@ -232,9 +159,45 @@ export default function PlayerStatsNBANew() {
       setError("Missing team data. Please go back and try again.");
       setIsLoading(false);
     }
-  }, [params.team1, params.team2, params.sport, auth.currentUser, isSameAnalysis]);
+  }, [params.team1, params.team2, params.sport, isSameAnalysis]);
 
-  // Load player stats from Firestore (for history/demo mode)
+  const getPlayerStats = async () => {
+    if (playerResult) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (!params.sport) {
+        throw new Error("Sport parameter is required but missing");
+      }
+
+      const response = await APIService.getMarketIntelligence(
+        params.sport,
+        params.team1 || "",
+        params.team2 || ""
+      );
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      if (response.status === "error") {
+        throw new Error(response.message || "Failed to fetch player stats");
+      }
+
+      const playerData: PlayerStatsResult = response;
+      cachedPlayerResult = playerData;
+      setPlayerResult(playerData);
+      animateIn();
+    } catch (err: any) {
+      console.error("Error fetching player stats:", err);
+      setError(err.message || "Failed to load player statistics");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load from Firestore for demo/history mode
   const loadPlayerStatsFromFirestore = async () => {
     setIsLoading(true);
     setError(null);
@@ -249,394 +212,133 @@ export default function PlayerStatsNBANew() {
         throw new Error("User ID or Analysis ID missing");
       }
 
-      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
       const collection = isDemo ? "demoAnalysis" : "userAnalyses";
       const docRef = doc(db, collection, userId, "analyses", params.analysisId);
       const docSnap = await getDoc(docRef);
 
-      if (!docSnap.exists()) {
-        throw new Error("Analysis not found in history");
-      }
-
-      const data = docSnap.data();
-      const cachedAnalysis = data.analysis;
-
-      if (cachedAnalysis?.playerStats) {
-        const playerData: PlayerStatsResult = {
-          sport: data.sport || cachedAnalysis.sport,
-          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
-          playerStats: cachedAnalysis.playerStats,
-          timestamp: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          teamIds: cachedAnalysis.playerStats.team1?.teamId && cachedAnalysis.playerStats.team2?.teamId ?
-            { team1Id: cachedAnalysis.playerStats.team1.teamId, team2Id: cachedAnalysis.playerStats.team2.teamId } :
-            { team1Id: 0, team2Id: 0 }
-        };
-
-        setPlayerResult(playerData);
-        cachedPlayerResult = playerData;
-        console.log("✅ Loaded player stats from Firestore cache");
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.playerStats) {
+          const playerData: PlayerStatsResult = {
+            sport: data.sport || params.sport || "nfl",
+            teams: data.teams || { home: params.team1, away: params.team2, logos: {} },
+            playerStats: data.playerStats,
+            timestamp: data.timestamp || new Date().toISOString(),
+            teamIds: data.teamIds || { team1Id: 0, team2Id: 0 },
+          };
+          cachedPlayerResult = playerData;
+          setPlayerResult(playerData);
+          animateIn();
+        } else {
+          throw new Error("No player stats found in analysis");
+        }
       } else {
-        setError("Player stats not available for this analysis. This analysis was created before player stats were added.");
-        setIsLoading(false);
+        throw new Error("Analysis not found");
       }
-    } catch (err) {
-      console.error("Error loading player stats from Firestore:", err);
-      setError("Player stats unavailable for this analysis.");
+    } catch (err: any) {
+      console.error("Error loading from Firestore:", err);
+      setError(err.message || "Failed to load player statistics");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Main function to fetch player stats data
-  const getPlayerStats = async () => {
-    if (playerResult) return;
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      if (!params.sport) {
-        throw new Error("Sport parameter is required but missing");
-      }
-
-      const response = await APIService.getMarketIntelligence(
-        params.sport,
-        params.team1 || "",
-        params.team2 || "",
-        params.team1_code,
-        params.team2_code
-      );
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      if (response.status === "error") {
-        throw new Error(response.message || "Failed to fetch player stats");
-      }
-
-      const playerData: PlayerStatsResult = response;
-
-      setPlayerResult(playerData);
-      cachedPlayerResult = playerData;
-
-    } catch (err) {
-      console.error("Error in getPlayerStats:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to get player stats"
-      );
-    } finally {
-      setIsLoading(false);
-    }
+  // Get players for selected team
+  const getPlayers = () => {
+    if (!playerResult) return [];
+    const teamData = selectedTeam === "team1"
+      ? playerResult.playerStats.team1
+      : playerResult.playerStats.team2;
+    return teamData?.topPlayers || [];
   };
 
-  // Helper function to calculate total TDs
-  const calculateTotalTDs = (stats: any) => {
-    const passingTDs = stats.passingTouchdowns || 0;
-    const rushingTDs = stats.rushingTouchdowns || 0;
-    return passingTDs + rushingTDs;
-  };
-
-  // Helper function to calculate TD percentage
-  const calculateTDPercentage = (stats: any) => {
-    const totalTDs = calculateTotalTDs(stats);
-    const attempts = (stats.attempts || 0) + (stats.rushingAttempts || 0);
-    if (attempts === 0) return "0";
-    return ((totalTDs / attempts) * 100).toFixed(1);
-  };
-
-  // Navigate to info page
-  const navigateToInfo = (section: string) => {
-    router.push({
-      pathname: "/info",
-      params: {
-        section,
-        from: "player-stats-nfl",
-        team1: params.team1,
-        team2: params.team2,
-        sport: params.sport,
-        team1Logo: params.team1Logo,
-        team2Logo: params.team2Logo,
-        analysisId: params.analysisId,
-        selectedTeam: selectedTeam || undefined,
-        selectedPlayer: selectedPlayer ? JSON.stringify(selectedPlayer) : undefined,
-      },
-    });
-  };
-
-  // Render team selection screen
-  const renderTeamSelection = () => {
-    const teams = [
-      { name: params.team1 || "", key: "team1" },
-      { name: params.team2 || "", key: "team2" },
-    ];
-
-    return (
-      <View style={styles.container}>
-        <TopBar onBackPress={() => router.replace("/")} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {teams.map((team) => (
-          <Pressable
-            key={team.key}
-            onPress={() => setSelectedTeam(team.key)}
-            style={styles.selectionItem}
-          >
-            <View style={styles.selectionContent}>
-              <Image
-                source={getNFLTeamLogo(String(team.name))}
-                style={styles.selectionLogo}
-                contentFit="contain"
-              />
-              <Text style={styles.selectionName}>{team.name}</Text>
-              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
-            </View>
-          </Pressable>
-        ))}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // Render player selection screen
-  const renderPlayerSelection = () => {
-    if (!playerResult || !selectedTeam) return null;
-
-    const teamData = selectedTeam === "team1" ? playerResult.playerStats.team1 : playerResult.playerStats.team2;
-    const teamName = selectedTeam === "team1" ? params.team1 : params.team2;
-    const topPlayers = teamData.topPlayers || [];
-
-    return (
-      <View style={styles.container}>
-        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {topPlayers.map((player: any) => (
-          <Pressable
-            key={player.id}
-            onPress={() => setSelectedPlayer({ ...player, teamName })}
-            style={styles.selectionItem}
-          >
-            <View style={styles.selectionContent}>
-              <Image
-                source={getNFLTeamLogo(String(teamName || ""))}
-                style={styles.selectionLogo}
-                contentFit="contain"
-              />
-              <Text style={styles.selectionName}>{player.name}</Text>
-              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
-            </View>
-          </Pressable>
-        ))}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // Render player stats
-  const renderPlayerStats = () => {
-    if (!selectedPlayer) return null;
-
-    const player = selectedPlayer;
-    const stats = player.stats || {};
-    const qbRating = stats.qbRating || 0;
-    const maxQBRating = 158.3;
-    const totalTDs = calculateTotalTDs(stats);
-    const tdPercentage = parseFloat(calculateTDPercentage(stats));
-    const passYardsPerGame = stats.passingYardsPerGame || 0;
-    const passTDs = stats.passingTouchdowns || 0;
-    const rushYardsPerGame = stats.rushingYardsPerGame || 0;
-    const rushTDs = stats.rushingTouchdowns || 0;
-    const longestPass = stats.longestPass || 0;
-    const sacks = stats.sacks || 0;
-
-    return (
-      <View style={styles.container}>
-        <TopBar showBack={true} onBackPress={() => setSelectedPlayer(null)} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-
-        {/* Top Card - Player Header */}
-        <Animated.View style={getCardStyle(0)}>
-          <Card style={styles.topCard}>
-            <View style={styles.playerHeader}>
-              <View style={styles.nameLogoRow}>
-                <Text style={styles.playerName}>{player.name}</Text>
-                <Image
-                  source={getNFLTeamLogo(String(player.teamName || ""))}
-                  style={styles.teamLogo}
-                  contentFit="contain"
-                />
-              </View>
-            </View>
-          </Card>
-        </Animated.View>
-
-        {/* Stats Row - QB Rating and Total TDs */}
-        <Animated.View style={[styles.statsRow, getCardStyle(1)]}>
-          {/* QB Rating Card */}
-          <Card style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Text style={styles.statLabel}>{i18n.t("playerStatsQBRating")}</Text>
-              <Text style={styles.statValue}>{qbRating.toFixed(1)}</Text>
-              <Text style={styles.statDescription}>
-                {i18n.t("playerStatsRankedOn")} {maxQBRating} {i18n.t("playerStatsPoints")}
-              </Text>
-              <GradientProgressBar value={qbRating} maxValue={maxQBRating} />
-            </View>
-          </Card>
-
-          {/* Total TDs Card */}
-          <Card style={styles.statCard}>
-            <View style={styles.statContent}>
-              <Text style={styles.statLabel}>{i18n.t("playerStatsTotalTDs")}</Text>
-              <Text style={styles.statValue}>{totalTDs}</Text>
-              <Text style={styles.statDescription}>
-                {tdPercentage}% {i18n.t("playerStatsAcrossAllAttempts")}
-              </Text>
-              <GradientProgressBar value={tdPercentage} maxValue={100} />
-            </View>
-          </Card>
-        </Animated.View>
-
-        {/* Core KPIs Card */}
-        <Animated.View style={getCardStyle(2)}>
-          <Card style={styles.coreKPIsCard}>
-          <View style={styles.coreKPIsContent}>
-            {/* Header */}
-            <View style={styles.coreKPIsHeader}>
-              <Text style={styles.coreKPIsTitle}>{i18n.t("playerStatsCoreKPIs")}</Text>
-              <Pressable onPress={() => navigateToInfo("coreKPIs")}>
-                <Text style={styles.coreKPIsInfo}>ⓘ</Text>
-              </Pressable>
-            </View>
-
-            {/* First Row of KPIs */}
-            <View style={styles.kpiRow}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="american-football-outline" size={24} color={colors.primary} />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{passYardsPerGame.toFixed(1)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsPassYardsPerGame")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="locate-outline" size={24} color={colors.primary} />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{passTDs}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsPassTDs")}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Second Row of KPIs */}
-            <View style={[styles.kpiRow, styles.kpiRowLast]}>
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="flash-outline" size={24} color={colors.primary} />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{rushYardsPerGame.toFixed(1)}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsRushYardsPerGame")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiItem}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="footsteps-outline" size={24} color={colors.primary} />
-                </View>
-                <View style={styles.kpiTextContainer}>
-                  <Text style={styles.kpiValue}>{rushTDs}</Text>
-                  <Text style={styles.kpiLabel}>{i18n.t("playerStatsRushTDs")}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </Card>
-        </Animated.View>
-
-        {/* Stats Row - Longest Pass and Sacks Taken */}
-        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
-          {/* Longest Pass Card */}
-          <Card style={styles.statCardSmall}>
-            <View style={styles.statContent}>
-              <Text style={styles.statLabel}>{i18n.t("playerStatsLongestPass")}</Text>
-              <Text style={styles.statValue}>{longestPass}</Text>
-              <Text style={styles.statDescription}>{i18n.t("playerStatsYards")}</Text>
-            </View>
-          </Card>
-
-          {/* Sacks Taken Card */}
-          <Card style={styles.statCardSmall}>
-            <View style={styles.statContent}>
-              <Text style={styles.statLabel}>{i18n.t("playerStatsSacksTaken")}</Text>
-              <Text style={styles.statValue}>{sacks}</Text>
-              <Text style={styles.statDescription}>{i18n.t("playerStatsOnAllSeason")}</Text>
-            </View>
-          </Card>
-        </Animated.View>
-        </ScrollView>
-      </View>
-    );
-  };
-
-  // Main render logic
-  const renderContent = () => {
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      );
-    }
-
-    if (selectedPlayer) {
-      return renderPlayerStats();
-    }
-
-    if (selectedTeam) {
-      return renderPlayerSelection();
-    }
-
-    return renderTeamSelection();
-  };
-
-  // Shimmer rendering
+  // Render loading shimmer
   const renderShimmer = () => (
-    <View style={styles.container}>
-      <TopBar onBackPress={() => router.replace("/")} />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {/* Team Selection Items */}
-        {[1, 2].map((index) => (
-          <View key={index} style={styles.selectionItem}>
-            <View style={styles.selectionContent}>
-              <ShimmerPlaceholder
-                style={styles.selectionLogoShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
-              />
-              <ShimmerPlaceholder
-                style={styles.selectionNameShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
-              />
-              <ShimmerPlaceholder
-                style={styles.chevronIconShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
-              />
-            </View>
+    <View style={styles.shimmerContainer}>
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={styles.shimmerCard}>
+          <ShimmerPlaceholder
+            style={styles.shimmerAvatar}
+            shimmerColors={shimmerColors}
+          />
+          <View style={styles.shimmerContent}>
+            <ShimmerPlaceholder
+              style={styles.shimmerTitle}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.shimmerSubtitle}
+              shimmerColors={shimmerColors}
+            />
           </View>
-        ))}
-      </ScrollView>
+        </View>
+      ))}
     </View>
   );
 
+  // Main content
+  const players = getPlayers();
+
   return (
     <ScreenBackground hideBg>
-      <Animated.View style={[styles.mainContainer, animatedStyle]}>
-        {isLoading ? renderShimmer() : renderContent()}
-      </Animated.View>
+      <TopBar showBack={true} />
 
-      {/* Floating Bottom Nav */}
+      {/* Sticky Team Selector Header */}
+      <TeamSelectorHeader
+        team1Name={params.team1 || ""}
+        team2Name={params.team2 || ""}
+        team1Logo={getNFLTeamLogo(params.team1 || "")}
+        team2Logo={getNFLTeamLogo(params.team2 || "")}
+        activeTeam={selectedTeam}
+        onTeamChange={(team) => {
+          setSelectedTeam(team);
+          setExpandedCards({}); // Reset expanded cards when switching teams
+          animateIn(); // Animate cards when switching teams
+        }}
+        sticky
+      />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Content */}
+        {isLoading ? (
+          renderShimmer()
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : players.length > 0 ? (
+          <Animated.View style={{ opacity: fadeAnim }}>
+            {players.map((player) => (
+              <PlayerStatsCard
+                key={player.id}
+                player={{
+                  name: player.name,
+                  position: player.position,
+                  stats: player.stats,
+                }}
+                sport="nfl"
+                teamLogo={getNFLTeamLogo(
+                  selectedTeam === "team1" ? params.team1 || "" : params.team2 || ""
+                )}
+                isExpanded={expandedCards[player.id] || false}
+                onToggle={() => toggleCard(player.id)}
+              />
+            ))}
+          </Animated.View>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No player stats available</Text>
+          </View>
+        )}
+
+        {/* Bottom spacing for nav */}
+        <View style={{ height: 120 }} />
+      </ScrollView>
+
       <FloatingBottomNav
         activeTab="players"
         analysisData={{
@@ -655,283 +357,62 @@ export default function PlayerStatsNBANew() {
 }
 
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
   scrollView: {
     flex: 1,
   },
-  contentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 120,
+  scrollContent: {
+    padding: spacing[4],
   },
   shimmerContainer: {
-    width: "100%",
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    gap: spacing[3],
   },
-  shimmerGroup: {
-    width: "100%",
-    marginBottom: 20,
-    borderRadius: 12,
-    borderWidth: 0.3,
-    borderColor: "#888888",
-    overflow: "hidden",
+  shimmerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    padding: spacing[4],
+    borderRadius: radii.lg,
+    gap: spacing[3],
   },
-  gradientContainer: {
-    width: "100%",
-    padding: 15,
-    opacity: 0.6,
-    gap: 8,
+  shimmerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
-  shimmerLine: {
-    height: 20,
-    borderRadius: 15,
-    marginBottom: 0,
-    width: "100%",
+  shimmerContent: {
+    flex: 1,
+    gap: spacing[2],
+  },
+  shimmerTitle: {
+    width: "60%",
+    height: 16,
+    borderRadius: radii.sm,
+  },
+  shimmerSubtitle: {
+    width: "40%",
+    height: 12,
+    borderRadius: radii.sm,
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: spacing[8],
   },
   errorText: {
-    color: "#FF5252",
-    fontSize: 16,
+    color: colors.destructive,
+    fontSize: typography.sizes.base,
     textAlign: "center",
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
   },
-  selectionTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 28,
-    color: "#FFFFFF",
-    marginBottom: 24,
-  },
-  selectionItem: {
-    height: 85.87,
-    borderRadius: radii.xl,
-    marginBottom: spacing[4],
-    overflow: "hidden",
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: "rgba(0, 215, 215, 0.1)",
-  },
-  selectionContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing[5],
-    gap: spacing[3],
-  },
-  selectionLogo: {
-    width: 58,
-    height: 40,
-  },
-  selectionName: {
-    flex: 1,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.sizes.lg,
-    color: colors.foreground,
-  },
-  backButton: {
-    marginBottom: 16,
-  },
-  backButtonText: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16,
-    color: "#00C2E0",
-  },
-  topCard: {
-    height: 85.87,
-  },
-  playerHeader: {
-    flex: 1,
+  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 13.44,
-    paddingHorizontal: 22,
-    gap: 4,
+    paddingVertical: spacing[12],
   },
-  nameLogoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  playerName: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20,
-    color: "#FFFFFF",
-  },
-  teamLogo: {
-    width: 58.11,
-    height: 38.28,
-  },
-  position: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 13.44,
-    color: "#FFFFFF",
-    opacity: 0.8,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 16,
-  },
-  statCard: {
-    flex: 1,
-    height: 132.55,
-  },
-  statCardSmall: {
-    flex: 1,
-    height: 117.1,
-  },
-  statContent: {
-    flex: 1,
-    paddingVertical: 20.15,
-    paddingHorizontal: 21.83,
-    gap: 8,
-  },
-  statLabel: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 13.44,
-    color: "#FFFFFF",
-    opacity: 0.6,
-  },
-  statValue: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 26.87,
-    color: "#FFFFFF",
-  },
-  statDescription: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 11.42,
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  coreKPIsCard: {
-    marginTop: 16,
-  },
-  coreKPIsContent: {
-    paddingVertical: 22,
-    paddingHorizontal: 0,
-  },
-  coreKPIsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 31.91,
-    marginBottom: 20,
-  },
-  coreKPIsTitle: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
-  },
-  coreKPIsInfo: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 16.79,
-    color: "#00C2E0",
-  },
-  kpiRow: {
-    flexDirection: "row",
-    paddingHorizontal: 20.15,
-    gap: 20,
-    marginBottom: 16,
-  },
-  kpiRowLast: {
-    marginBottom: 0,
-  },
-  kpiItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  kpiTextContainer: {
-    flex: 1,
-    gap: 4,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.secondary,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 215, 215, 0.1)",
-  },
-  kpiValue: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 20.15,
-    color: "#FFFFFF",
-  },
-  kpiLabel: {
-    fontFamily: "Aeonik-Light",
-    fontSize: 11.42,
-    color: "#FFFFFF",
-  },
-  // Shimmer Styles
-  selectionLogoShimmer: {
-    width: 58.11,
-    height: 38.28,
-  },
-  selectionNameShimmer: {
-    height: 20,
-    borderRadius: 8,
-    width: "60%",
-    marginLeft: 12,
-  },
-  chevronIconShimmer: {
-    width: 24,
-    height: 24,
-  },
-  statLabelShimmer: {
-    height: 13,
-    borderRadius: 5,
-    width: "70%",
-  },
-  statValueShimmer: {
-    height: 27,
-    borderRadius: 10,
-    width: "50%",
-  },
-  statDescriptionShimmer: {
-    height: 11,
-    borderRadius: 4,
-    width: "80%",
-    marginBottom: 4,
-  },
-  progressBarShimmer: {
-    height: 5,
-    borderRadius: 20,
-    width: "100%",
-  },
-  coreKPIsTitleShimmer: {
-    height: 20,
-    borderRadius: 8,
-    width: "50%",
-  },
-  coreKPIsInfoShimmer: {
-    height: 17,
-    borderRadius: 6,
-    width: 20,
-  },
-  kpiValueShimmer: {
-    height: 20,
-    borderRadius: 6,
-    width: "60%",
-  },
-  kpiLabelShimmer: {
-    height: 11,
-    borderRadius: 4,
-    width: "70%",
-    marginTop: 4,
+  emptyText: {
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.mutedForeground,
   },
 });

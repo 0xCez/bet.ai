@@ -7,6 +7,7 @@ import {
   Pressable,
   ViewStyle,
   Animated,
+  Easing,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
@@ -42,7 +43,10 @@ import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import * as Progress from "react-native-progress";
 import i18n from "../i18n";
-import { colors, spacing, borderRadius as radii, typography, shadows } from "../constants/designTokens";
+import { colors, spacing, borderRadius as radii, typography, shadows, shimmerColors } from "../constants/designTokens";
+import { useDemoTooltip } from "../contexts/DemoTooltipContext";
+// TODO: Image transition - commented out for now, will finish later
+// import { useImageTransition } from "../contexts/ImageTransitionContext";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -253,6 +257,12 @@ export default function AnalysisScreen() {
   const analysisId = params.analysisId;
   const isDemo = params.isDemo === "true";
 
+  // Demo tooltip system
+  const { showTooltip, setIsDemo: setDemoMode } = useDemoTooltip();
+  // TODO: Image transition - commented out for now, will finish later
+  // const { isTransitioning, completeTransition } = useImageTransition();
+  const demoTooltipShownRef = useRef(false);
+
   const [showUnlockMessage, setShowUnlockMessage] = useState(false);
   const hasInitializedRef = React.useRef(false);
   const hasAnalysisSaved = React.useRef(false);
@@ -334,18 +344,12 @@ export default function AnalysisScreen() {
   });
 
   const toggleCard = (cardName: "snapshot" | "xFactors" | "aiAnalysis") => {
-    try {
-      console.log(`Toggling card: ${cardName}, current state:`, expandedCards[cardName]);
-      const newExpandedCards = {
-        ...expandedCards,
-        [cardName]: !expandedCards[cardName],
-      };
-      console.log(`New expanded cards state:`, newExpandedCards);
-      setExpandedCards(newExpandedCards);
-      cachedExpandedCards = newExpandedCards; // Update cached state
-    } catch (error) {
-      console.error(`Error toggling card ${cardName}:`, error);
-    }
+    const newExpandedCards = {
+      ...expandedCards,
+      [cardName]: !expandedCards[cardName],
+    };
+    setExpandedCards(newExpandedCards);
+    cachedExpandedCards = newExpandedCards;
   };
 
   const getTeamLogo = (teamName: string, sport?: string) => {
@@ -420,6 +424,27 @@ export default function AnalysisScreen() {
       setIsLoading(false);
     }
   }, [analysisId, imageUri, auth.currentUser, isSameAnalysis]);
+
+  // Show demo tooltip when analysis loads in demo mode
+  useEffect(() => {
+    if (isDemo && !isLoading && analysisResult && !demoTooltipShownRef.current) {
+      demoTooltipShownRef.current = true;
+      setDemoMode(true);
+
+      // Show welcome tooltip after a short delay
+      const timer = setTimeout(() => {
+        showTooltip("welcome");
+      }, 800);
+
+      return () => clearTimeout(timer);
+    }
+
+    // Reset demo mode when leaving
+    if (!isDemo) {
+      setDemoMode(false);
+      demoTooltipShownRef.current = false;
+    }
+  }, [isDemo, isLoading, analysisResult]);
 
   // --- Function to fetch analysis data by ID ---
   const fetchAnalysisById = async (userId: string, docId: string) => {
@@ -669,7 +694,7 @@ export default function AnalysisScreen() {
       <View style={styles.imageContainer}>
         <ShimmerPlaceholder
           style={styles.image}
-          shimmerColors={["#919191", "#767676", "#919191"]}
+          shimmerColors={shimmerColors}
         />
       </View>
 
@@ -677,7 +702,7 @@ export default function AnalysisScreen() {
       <Card style={styles.keyInsightsCard}>
         <ShimmerPlaceholder
           style={styles.keyInsightsTitleShimmer}
-          shimmerColors={["#919191", "#767676", "#919191"]}
+          shimmerColors={shimmerColors}
         />
 
         <View style={styles.gridContainer}>
@@ -687,16 +712,16 @@ export default function AnalysisScreen() {
               <View style={styles.metricContent}>
                 <ShimmerPlaceholder
                   style={styles.kIcon}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={shimmerColors}
                 />
                 <View style={styles.metricTextContainer}>
                   <ShimmerPlaceholder
                     style={styles.metricValueShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={shimmerColors}
                   />
                   <ShimmerPlaceholder
                     style={styles.metricLabelShimmer}
-                    shimmerColors={["#919191", "#767676", "#919191"]}
+                    shimmerColors={shimmerColors}
                   />
                 </View>
               </View>
@@ -712,30 +737,30 @@ export default function AnalysisScreen() {
           <View style={styles.teamHeader}>
             <ShimmerPlaceholder
               style={styles.teamLogo}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamNameShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
           </View>
           <View style={styles.teamContent}>
             <ShimmerPlaceholder
               style={styles.teamSectionLabelShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamSectionValueShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
 
             <ShimmerPlaceholder
               style={styles.teamSectionLabelShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamSectionValueShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
           </View>
         </Card>
@@ -745,30 +770,30 @@ export default function AnalysisScreen() {
           <View style={styles.teamHeader}>
             <ShimmerPlaceholder
               style={styles.teamLogo}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamNameShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
           </View>
           <View style={styles.teamContent}>
             <ShimmerPlaceholder
               style={styles.teamSectionLabelShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamSectionValueShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
 
             <ShimmerPlaceholder
               style={styles.teamSectionLabelShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.teamSectionValueShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
           </View>
         </Card>
@@ -781,11 +806,11 @@ export default function AnalysisScreen() {
           <View style={styles.xFactorsHeader}>
             <ShimmerPlaceholder
               style={styles.xFactorsTitleShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.xFactorsInfoShimmer}
-              shimmerColors={["#919191", "#767676", "#919191"]}
+              shimmerColors={shimmerColors}
             />
           </View>
 
@@ -795,17 +820,17 @@ export default function AnalysisScreen() {
               <View style={styles.iconContainer}>
                 <ShimmerPlaceholder
                   style={styles.xFactorIcon}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={shimmerColors}
                 />
               </View>
               <View style={styles.xFactorTextContainer}>
                 <ShimmerPlaceholder
                   style={styles.xFactorLabelShimmer}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={shimmerColors}
                 />
                 <ShimmerPlaceholder
                   style={styles.xFactorDetailShimmer}
-                  shimmerColors={["#919191", "#767676", "#919191"]}
+                  shimmerColors={shimmerColors}
                 />
               </View>
             </View>
@@ -818,11 +843,11 @@ export default function AnalysisScreen() {
         <View style={[styles.aiAnalysisHeader, styles.collapsedHeader]}>
           <ShimmerPlaceholder
             style={styles.aiAnalysisTitleShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
             style={styles.aiChevronShimmer}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={shimmerColors}
           />
         </View>
       </Card>

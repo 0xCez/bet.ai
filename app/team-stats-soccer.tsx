@@ -26,8 +26,9 @@ import { doc, getDoc } from "firebase/firestore";
 import { getSoccerTeamLogo } from "@/utils/teamLogos";
 import { useRouter } from "expo-router";
 import { usePageTracking } from "@/hooks/usePageTracking";
-import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
+import { colors, spacing, borderRadius as radii, typography, shimmerColors } from "../constants/designTokens";
 import { Ionicons } from "@expo/vector-icons";
+import { TeamSelectorHeader } from "@/components/ui/TeamSelectorHeader";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -166,8 +167,8 @@ export default function TeamStatsSoccerNew() {
     isSameAnalysis && cachedTeamResult ? cachedTeamResult : null
   );
   const [error, setError] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2" | null>(
-    (params.selectedTeam as "team1" | "team2") || null
+  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2">(
+    (params.selectedTeam as "team1" | "team2") || "team1"
   );
 
   // Card animation values (7 cards in team stats view)
@@ -355,38 +356,6 @@ export default function TeamStatsSoccerNew() {
     });
   };
 
-  // Render team selection screen
-  const renderTeamSelection = () => {
-    const teams = [
-      { name: params.team1 || "", key: "team1" as "team1" | "team2" },
-      { name: params.team2 || "", key: "team2" as "team1" | "team2" },
-    ];
-
-    return (
-      <View style={styles.container}>
-        <TopBar onBackPress={() => router.replace("/")} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {teams.map((team) => (
-          <Pressable
-            key={team.key}
-            onPress={() => setSelectedTeam(team.key)}
-            style={styles.selectionItem}
-          >
-            <View style={styles.selectionContent}>
-              <Image
-                source={getSoccerTeamLogo(team.name)}
-                style={styles.selectionLogo}
-                contentFit="contain"
-              />
-              <Text style={styles.selectionName}>{team.name}</Text>
-              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
-            </View>
-          </Pressable>
-        ))}
-        </ScrollView>
-      </View>
-    );
-  };
 
   // Render team stats
   const renderTeamStats = () => {
@@ -399,7 +368,16 @@ export default function TeamStatsSoccerNew() {
     if (!teamData || !teamData.stats) {
       return (
         <View style={styles.container}>
-          <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+          <TopBar showBack={true} />
+          <TeamSelectorHeader
+            team1Name={params.team1 || ""}
+            team2Name={params.team2 || ""}
+            team1Logo={getSoccerTeamLogo(params.team1 || "")}
+            team2Logo={getSoccerTeamLogo(params.team2 || "")}
+            activeTeam={selectedTeam}
+            onTeamChange={setSelectedTeam}
+            sticky
+          />
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
             <Card style={styles.topCard}>
               <View style={styles.teamHeader}>
@@ -433,27 +411,23 @@ export default function TeamStatsSoccerNew() {
 
   return (
       <View style={styles.container}>
-        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <TopBar showBack={true} />
+
+        {/* Sticky Team Selector Header */}
+        <TeamSelectorHeader
+          team1Name={params.team1 || ""}
+          team2Name={params.team2 || ""}
+          team1Logo={getSoccerTeamLogo(params.team1 || "")}
+          team2Logo={getSoccerTeamLogo(params.team2 || "")}
+          activeTeam={selectedTeam}
+          onTeamChange={setSelectedTeam}
+          sticky
+        />
+
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
-        {/* Top Card - Team Header */}
-        <Animated.View style={getCardStyle(0)}>
-          <Card style={styles.topCard}>
-            <View style={styles.teamHeader}>
-              <View style={styles.nameLogoRow}>
-                <Text style={styles.teamName}>{teamName}</Text>
-                <Image
-                  source={getSoccerTeamLogo(String(teamName))}
-                  style={styles.teamLogo}
-                  contentFit="contain"
-                />
-              </View>
-            </View>
-          </Card>
-        </Animated.View>
-
         {/* Stats Row - Recent Form and Momentum */}
-        <Animated.View style={[styles.statsRow, getCardStyle(1)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(0)]}>
           {/* Season Record Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -481,7 +455,7 @@ export default function TeamStatsSoccerNew() {
         </Animated.View>
 
         {/* Core KPIs Card */}
-        <Animated.View style={getCardStyle(2)}>
+        <Animated.View style={getCardStyle(1)}>
           <Card style={styles.coreKPIsCard}>
             <View style={styles.coreKPIsContent}>
             {/* Header */}
@@ -569,7 +543,7 @@ export default function TeamStatsSoccerNew() {
         </Animated.View>
 
         {/* Stats Row - Clean Sheets and Failed to Score */}
-        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(2)]}>
           {/* Clean Sheets Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -592,7 +566,7 @@ export default function TeamStatsSoccerNew() {
         </Animated.View>
 
         {/* Stats Row - Goal Timing and Most Used Form */}
-        <Animated.View style={[styles.statsRow, getCardStyle(4)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
           {/* Goal Timing Card */}
           <Card style={styles.statCardSmall}>
             <View style={styles.statContent}>
@@ -615,7 +589,7 @@ export default function TeamStatsSoccerNew() {
         </Animated.View>
 
         {/* Advanced Metrics Card */}
-        <Animated.View style={getCardStyle(5)}>
+        <Animated.View style={getCardStyle(4)}>
           <Card style={styles.coreKPIsCard}>
           <View style={styles.coreKPIsContent}>
             {/* Header */}
@@ -690,15 +664,15 @@ export default function TeamStatsSoccerNew() {
             <View style={styles.selectionContent}>
               <ShimmerPlaceholder
                 style={styles.selectionLogoShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
               <ShimmerPlaceholder
                 style={styles.selectionNameShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
               <ShimmerPlaceholder
                 style={styles.chevronIconShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
             </View>
           </View>
@@ -717,11 +691,7 @@ export default function TeamStatsSoccerNew() {
       );
     }
 
-    if (selectedTeam) {
-      return renderTeamStats();
-    }
-
-    return renderTeamSelection();
+    return renderTeamStats();
   };
 
   return (
@@ -877,7 +847,7 @@ const styles = StyleSheet.create({
   },
   statCardSmall: {
     flex: 1,
-    height: 117.1,
+    height: 132.55,
   },
   statContent: {
     flex: 1,

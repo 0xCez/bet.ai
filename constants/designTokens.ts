@@ -290,6 +290,12 @@ export const animation = {
 } as const;
 
 // =============================================================================
+// SHIMMER
+// =============================================================================
+
+export const shimmerColors = ['#272E3A', '#3A4555', '#272E3A'] as const;
+
+// =============================================================================
 // COMPONENT SIZES
 // =============================================================================
 
@@ -338,6 +344,7 @@ export default {
   glass,
   buttonStyles,
   animation,
+  shimmerColors,
   componentSizes,
   getTrendColor,
   getTrendBackground,

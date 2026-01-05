@@ -1,26 +1,38 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
-import Svg, { Path } from "react-native-svg";
-import { BorderButton } from "./BorderButton";
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import i18n from "@/i18n";
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, withDelay, Easing } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+  withSpring,
+  interpolateColor,
+  Easing,
+  interpolate,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 import { colors, spacing, borderRadius, typography } from "../../constants/designTokens";
 
-// BotIcon component using the bot.svg path
-const BotIcon: React.FC<{ size?: number; color?: string }> = ({ size = 22, color = "#ffffff" }) => (
-  <Svg width={size} height={size} viewBox="0 0 59 48" fill="none">
-    <Path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M29.3333 0C28.1593 5.1652e-05 27.0181 0.387473 26.0868 1.10218C25.1554 1.81689 24.4858 2.81895 24.182 3.95295C23.8781 5.08695 23.9569 6.28953 24.4062 7.37418C24.8554 8.45883 25.65 9.36494 26.6667 9.952V13.3333H18.6667C10.1333 13.3333 8 20.4453 8 24V42.6667C8 44.4453 9.06667 48 13.3333 48H16V37.3333C16 36.6261 16.281 35.9478 16.781 35.4477C17.2811 34.9476 17.9594 34.6667 18.6667 34.6667H40C40.7072 34.6667 41.3855 34.9476 41.8856 35.4477C42.3857 35.9478 42.6667 36.6261 42.6667 37.3333V48H45.3333C49.6 48 50.6667 44.4453 50.6667 42.6667V24C50.6667 15.4667 43.5547 13.3333 40 13.3333H32V9.952C33.0167 9.36494 33.8113 8.45883 34.2605 7.37418C34.7098 6.28953 34.7886 5.08695 34.4847 3.95295C34.1808 2.81895 33.5113 1.81689 32.5799 1.10218C31.6485 0.387473 30.5073 5.1652e-05 29.3333 0ZM37.3333 48V40H32V48H37.3333ZM26.6667 48V40H21.3333V48H26.6667ZM53.3333 40V26.6667C55.112 26.6667 58.6667 27.7333 58.6667 32V34.6667C58.6667 36.4453 57.6 40 53.3333 40ZM5.33333 26.6667V40C1.06667 40 0 36.4453 0 34.6667V32C0 27.7333 3.55467 26.6667 5.33333 26.6667ZM21.3333 24C20.6261 24 19.9478 24.281 19.4477 24.781C18.9476 25.2811 18.6667 25.9594 18.6667 26.6667C18.6667 27.3739 18.9476 28.0522 19.4477 28.5523C19.9478 29.0524 20.6261 29.3333 21.3333 29.3333H21.336C22.0432 29.3333 22.7215 29.0524 23.2216 28.5523C23.7217 28.0522 24.0027 27.3739 24.0027 26.6667C24.0027 25.9594 23.7217 25.2811 23.2216 24.781C22.7215 24.281 22.0432 24 21.336 24H21.3333ZM34.6667 26.6667C34.6667 25.9594 34.9476 25.2811 35.4477 24.781C35.9478 24.281 36.6261 24 37.3333 24H37.336C38.0432 24 38.7215 24.281 39.2216 24.781C39.7217 25.2811 40.0027 25.9594 40.0027 26.6667C40.0027 27.3739 39.7217 28.0522 39.2216 28.5523C38.7215 29.0524 38.0432 29.3333 37.336 29.3333H37.3333C36.6261 29.3333 35.9478 29.0524 35.4477 28.5523C34.9476 28.0522 34.6667 27.3739 34.6667 26.6667Z"
-      fill={color}
-    />
-  </Svg>
-);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Track if the Next button has been shown during this demo session
+// This persists across component remounts so the button stays visible once shown
+let demoNextButtonShown = false;
+
+// Reset function to be called when starting a new demo session
+export const resetDemoNextButton = () => {
+  demoNextButtonShown = false;
+};
 
 interface FloatingBottomNavProps {
-  activeTab: "insight" | "market" | "teams" | "players" | "expert";
+  activeTab: "insight" | "market" | "teams" | "players" | "props" | "expert";
   analysisData?: {
     team1?: string;
     team2?: string;
@@ -30,8 +42,82 @@ interface FloatingBottomNavProps {
     analysisId?: string;
     isDemo?: boolean;
   };
-  isSubscribed?: boolean; // For demo "Next" button logic
+  isSubscribed?: boolean;
 }
+
+// Tab configuration with icons
+const TAB_CONFIG = [
+  { key: "insight", label: "Insight", icon: "bulb-outline" as const, activeIcon: "bulb" as const },
+  { key: "market", label: "Market", icon: "trending-up-outline" as const, activeIcon: "trending-up" as const },
+  { key: "teams", label: "Teams", icon: "shield-outline" as const, activeIcon: "shield" as const },
+  { key: "players", label: "Players", icon: "person-outline" as const, activeIcon: "person" as const },
+  // { key: "props", label: "Props", icon: "stats-chart-outline" as const, activeIcon: "stats-chart" as const },
+  { key: "expert", label: "Expert", icon: "chatbubble-ellipses-outline" as const, activeIcon: "chatbubble-ellipses" as const },
+];
+
+// Individual nav item component
+const NavItem: React.FC<{
+  tabKey: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  isActive: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}> = ({ label, icon, activeIcon, isActive, onPress, disabled }) => {
+  const scale = useSharedValue(1);
+  const progress = useSharedValue(isActive ? 1 : 0);
+
+  React.useEffect(() => {
+    progress.value = withTiming(isActive ? 1 : 0, { duration: 250 });
+  }, [isActive]);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const animatedTextStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.mutedForeground, colors.foreground]
+    ),
+    opacity: 0.7 + progress.value * 0.3,
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.9, { damping: 15, stiffness: 400 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+  };
+
+  const handlePress = () => {
+    if (disabled) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+
+  return (
+    <AnimatedPressable
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={disabled}
+      style={[styles.navItem, animatedContainerStyle]}
+    >
+      <Ionicons
+        name={isActive ? activeIcon : icon}
+        size={24}
+        color={isActive ? colors.primary : colors.mutedForeground}
+      />
+      <Animated.Text style={[styles.navItemLabel, animatedTextStyle]}>
+        {label}
+      </Animated.Text>
+    </AnimatedPressable>
+  );
+};
 
 export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   activeTab,
@@ -39,39 +125,57 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   isSubscribed,
 }) => {
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  // Initialize from persisted state so button stays visible across tab navigations
+  const [showNextButton, setShowNextButton] = React.useState(demoNextButtonShown);
 
-  // Use Reanimated for smooth animations
-  const shakeX = useSharedValue(0);
-  const glowOpacity = useSharedValue(0.5);
-  const glowRadius = useSharedValue(10);
+  // Demo mode animations
+  const glowOpacity = useSharedValue(0.3);
+  const glowRadius = useSharedValue(15);
   const scaleValue = useSharedValue(1);
+  // Start at 1 if already shown, otherwise 0
+  const nextButtonOpacity = useSharedValue(demoNextButtonShown ? 1 : 0);
+  // Shimmer animation for the CTA button
+  const shimmerPosition = useSharedValue(-1);
+  const buttonGlowPulse = useSharedValue(1);
 
-  // Start animations when in demo mode - synced timing for rhythm
+  // Delay showing the Next button by 5 seconds in demo mode (only on first mount)
   React.useEffect(() => {
-    if (analysisData?.isDemo) {
-      const shakeDuration = 400; // 80ms * 5 = 400ms for shake sequence
-      const pauseDuration = 2000;
-      const totalCycleDuration = shakeDuration + pauseDuration; // 2400ms total
+    if (analysisData?.isDemo && !demoNextButtonShown) {
+      const timer = setTimeout(() => {
+        demoNextButtonShown = true; // Persist across remounts
+        setShowNextButton(true);
+        nextButtonOpacity.value = withTiming(1, { duration: 300 });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [analysisData?.isDemo]);
 
-      // Shake animation with pause - quick shakes then pause
-      shakeX.value = withRepeat(
+  React.useEffect(() => {
+    if (analysisData?.isDemo && showNextButton) {
+      // Shimmer sweep animation
+      shimmerPosition.value = withRepeat(
         withSequence(
-          withTiming(3, { duration: 80 }),
-          withTiming(-3, { duration: 80 }),
-          withTiming(3, { duration: 80 }),
-          withTiming(-3, { duration: 80 }),
-          withTiming(0, { duration: 80 }),
-          withDelay(pauseDuration, withTiming(0, { duration: 0 }))
+          withDelay(2000, withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) })),
+          withTiming(-1, { duration: 0 })
         ),
         -1,
         false
       );
 
-      // Glow pulse animation - synced to match shake rhythm (one full pulse per cycle)
+      // Subtle glow pulse
+      buttonGlowPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.02, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        true
+      );
+
       glowOpacity.value = withRepeat(
         withSequence(
-          withTiming(0.9, { duration: totalCycleDuration / 2 }), // 1200ms
-          withTiming(0.5, { duration: totalCycleDuration / 2 })  // 1200ms
+          withTiming(0.6, { duration: 1500 }),
+          withTiming(0.3, { duration: 1500 })
         ),
         -1,
         true
@@ -79,49 +183,43 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
 
       glowRadius.value = withRepeat(
         withSequence(
-          withTiming(20, { duration: totalCycleDuration / 2 }), // 1200ms - stronger glow
-          withTiming(10, { duration: totalCycleDuration / 2 })  // 1200ms
+          withTiming(25, { duration: 1500 }),
+          withTiming(15, { duration: 1500 })
         ),
         -1,
         true
       );
     }
-  }, [analysisData?.isDemo]);
+  }, [analysisData?.isDemo, showNextButton]);
 
-  // Animated styles for Next button
-  const nextButtonAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: shakeX.value }],
-      shadowColor: "#00C2E0",
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: glowOpacity.value,
-      shadowRadius: glowRadius.value,
-      elevation: glowRadius.value, // Android shadow
-    };
-  });
+  const nextButtonAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: nextButtonOpacity.value,
+    transform: [{ scale: buttonGlowPulse.value }],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: glowOpacity.value,
+    shadowRadius: glowRadius.value,
+    elevation: glowRadius.value,
+  }));
 
-  // Nav bar scale animation style
-  const navBarAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scaleValue.value }],
-    };
-  });
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(shimmerPosition.value, [-1, 1], [-150, 350]) }],
+  }));
+
+  const navBarAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scaleValue.value }],
+  }));
 
   const navigateToTab = (tab: string) => {
-    if (tab === activeTab || isTransitioning) return; // Don't navigate if already on the tab or transitioning
+    if (tab === activeTab || isTransitioning) return;
 
-    // Start transition animation
     setIsTransitioning(true);
-
-    // Scale down animation using Reanimated
     scaleValue.value = withSequence(
-      withTiming(0.95, { duration: 150 }),
+      withTiming(0.97, { duration: 100 }),
       withTiming(1, { duration: 150 })
     );
 
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, 300);
+    setTimeout(() => setIsTransitioning(false), 250);
 
     const baseParams = {
       team1: analysisData?.team1 || "",
@@ -130,152 +228,123 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
       team1Logo: analysisData?.team1Logo || "",
       team2Logo: analysisData?.team2Logo || "",
       analysisId: analysisData?.analysisId || "",
-      isDemo: analysisData?.isDemo ? "true" : undefined, // Include isDemo for demo mode
+      isDemo: analysisData?.isDemo ? "true" : undefined,
     };
 
-    // Add slight delay for animation to be visible
     setTimeout(() => {
       const sportLower = (analysisData?.sport || "").toLowerCase();
       const isSoccer = sportLower.startsWith("soccer");
-      const isNFL = sportLower.includes("nfl");
+      const isNBA = sportLower === "nba";
+
       switch (tab) {
         case "insight":
-          // Navigate back to analysis page with analysisId if available
           if (analysisData?.analysisId) {
             router.push({
               pathname: "/analysis",
               params: {
                 analysisId: analysisData.analysisId,
-                isDemo: analysisData.isDemo ? "true" : undefined
-              }
+                isDemo: analysisData.isDemo ? "true" : undefined,
+              },
             });
           } else {
-            // Fallback: Navigate back (for when there's no analysisId)
             router.back();
           }
           break;
         case "market":
-          router.push({
-            pathname: "/market-intel",
-            params: baseParams,
-          });
+          router.push({ pathname: "/market-intel", params: baseParams });
           break;
         case "teams":
-          // Route to sport-specific team stats page
-          const isNBA = sportLower === "nba";
-          const teamStatsPath = isSoccer ? "/team-stats-soccer" :
-                               isNBA ? "/team-stats-nba" :
-                               "/team-stats-nfl"; // Default to NFL
-          router.push({
-            pathname: teamStatsPath,
-            params: baseParams,
-          });
+          const teamStatsPath = isSoccer
+            ? "/team-stats-soccer"
+            : isNBA
+            ? "/team-stats-nba"
+            : "/team-stats-nfl";
+          router.push({ pathname: teamStatsPath, params: baseParams });
           break;
         case "players":
-          // Route to sport-specific player stats page
-          const isNBAPlayers = sportLower === "nba";
-          const playerStatsPath = isSoccer ? "/player-stats-soccer" :
-                                 isNBAPlayers ? "/player-stats-nba" :
-                                 "/player-stats-nfl"; // Default to NFL
-          router.push({
-            pathname: playerStatsPath,
-            params: baseParams,
-          });
+          const playerStatsPath = isSoccer
+            ? "/player-stats-soccer"
+            : isNBA
+            ? "/player-stats-nba"
+            : "/player-stats-nfl";
+          router.push({ pathname: playerStatsPath, params: baseParams });
+          break;
+        case "props":
+          router.push({ pathname: "/player-props" as any, params: baseParams });
           break;
         case "expert":
-          router.push({
-            pathname: "/chat",
-            params: baseParams,
-          });
+          router.push({ pathname: "/chat", params: baseParams });
           break;
       }
-    }, 100); // Small delay for animation
+    }, 80);
   };
-
-  // Helper function to get icon source - using your PNG icons with hover states
-  const getIconSource = (tabKey: string, isActive: boolean) => {
-    switch (tabKey) {
-      case "insight":
-        return isActive
-          ? require("../../assets/images/insight_hov.png")
-          : require("../../assets/images/insight.png");
-      case "market":
-        return isActive
-          ? require("../../assets/images/market_hov.png")
-          : require("../../assets/images/market.png");
-      case "teams":
-        return isActive
-          ? require("../../assets/images/teams_hov.png")
-          : require("../../assets/images/teams.png");
-      case "players":
-        return isActive
-          ? require("../../assets/images/players_hov.png")
-          : require("../../assets/images/players.png");
-      default:
-        return require("../../assets/images/logo.png");
-    }
-  };
-
-  const tabs = [
-    { key: "insight", label: "Insight" },
-    { key: "market", label: "Market" },
-    { key: "teams", label: "Teams" },
-    { key: "players", label: "Players" },
-    { key: "expert", label: "Expert" },
-  ];
 
   return (
     <>
-      {/* Demo Next Button - Positioned above nav bar in demo mode */}
-      {analysisData?.isDemo && (
+      {/* Demo Next Button - appears after 5s delay */}
+      {analysisData?.isDemo && showNextButton && (
         <Animated.View style={[styles.nextButtonContainer, nextButtonAnimatedStyle]}>
-          <BorderButton
+          <TouchableOpacity
             onPress={() => {
-              // TODO: Restore original logic after paywall work is done
-              // if (isSubscribed) {
-              //   router.push("/login");
-              // } else {
-              //   router.push("/paywall");
-              // }
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               router.push("/paywall");
             }}
-            containerStyle={styles.nextButton}
-            borderColor="rgba(0, 215, 215, 0.3)"
-            backgroundColor={colors.card}
-            borderWidth={1}
+            activeOpacity={0.9}
+            style={styles.nextButton}
           >
-            <Text style={styles.nextButtonText}>{i18n.t("analysisNext")}</Text>
-          </BorderButton>
+            <LinearGradient
+              colors={[colors.primary, '#00B8B8', colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+
+            {/* Shimmer overlay */}
+            <Animated.View style={[styles.shimmerOverlay, shimmerStyle]}>
+              <LinearGradient
+                colors={['transparent', 'rgba(255, 255, 255, 0.3)', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.shimmerGradient}
+              />
+            </Animated.View>
+
+            <View style={styles.nextButtonContent}>
+              <Ionicons name="lock-open" size={18} color={colors.primaryForeground} />
+              <Text style={styles.nextButtonText}>{i18n.t("demoUnlockAccess")}</Text>
+            </View>
+          </TouchableOpacity>
         </Animated.View>
       )}
 
-      {/* Floating Bottom Nav Bar - Original positioning restored */}
+      {/* Floating Bottom Nav Bar */}
       <Animated.View style={[styles.floatingContainer, navBarAnimatedStyle]}>
-        <View style={styles.navContainer}>
-          {tabs.map((tab) => {
-            const isActive = tab.key === activeTab;
-            const color = isActive ? colors.primary : colors.mutedForeground;
-
-            return (
-              <Pressable
-                key={tab.key}
-                style={[styles.tabItem, isTransitioning && styles.tabItemDisabled]}
-                onPress={() => navigateToTab(tab.key)}
-                disabled={isTransitioning}
-              >
-                {tab.key === "expert" ? (
-                  <BotIcon size={22} color={isActive ? colors.primary : colors.mutedForeground} />
-                ) : (
-                  <Image
-                    source={getIconSource(tab.key, isActive)}
-                    style={[styles.tabIcon, !isActive && styles.inactiveIcon]}
+        {/* Gradient border wrapper */}
+        <LinearGradient
+          colors={["rgba(0, 215, 215, 0.25)", "rgba(0, 215, 215, 0.05)", "rgba(0, 215, 215, 0.15)"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientBorder}
+        >
+          <View style={styles.navContainer}>
+            <BlurView intensity={40} tint="dark" style={styles.blurContainer}>
+              <View style={styles.navContent}>
+                {TAB_CONFIG.map((tab) => (
+                  <NavItem
+                    key={tab.key}
+                    tabKey={tab.key}
+                    label={tab.label}
+                    icon={tab.icon}
+                    activeIcon={tab.activeIcon}
+                    isActive={tab.key === activeTab}
+                    onPress={() => navigateToTab(tab.key)}
+                    disabled={isTransitioning}
                   />
-                )}
-                <Text style={[styles.tabLabel, { color }]}>{tab.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+                ))}
+              </View>
+            </BlurView>
+          </View>
+        </LinearGradient>
       </Animated.View>
     </>
   );
@@ -284,65 +353,84 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
 const styles = StyleSheet.create({
   nextButtonContainer: {
     position: "absolute",
-    bottom: 120,
-    left: 90,
-    right: 90,
+    bottom: 115,
+    left: spacing[10],
+    right: spacing[10],
     zIndex: 999,
-    paddingHorizontal: spacing[4],
   },
   nextButton: {
-    height: 56,
+    height: 52,
     borderRadius: borderRadius.full,
     overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  shimmerOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 100,
+    zIndex: 1,
+  },
+  shimmerGradient: {
+    flex: 1,
+    width: "100%",
+  },
+  nextButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
+    zIndex: 2,
   },
   nextButtonText: {
-    color: colors.foreground,
-    fontSize: typography.sizes.lg,
-    fontFamily: typography.fontFamily.medium,
-    textAlign: "center",
+    color: colors.primaryForeground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.semibold,
   },
   floatingContainer: {
     position: "absolute",
-    bottom: 30,
-    left: spacing[4],
-    right: spacing[4],
+    bottom: 28,
+    left: spacing[3],
+    right: spacing[3],
     zIndex: 1000,
   },
+  gradientBorder: {
+    borderRadius: 26,
+    padding: 1,
+    // Outer glow
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
   navContainer: {
+    borderRadius: 25,
+    overflow: "hidden",
+  },
+  blurContainer: {
+    overflow: "hidden",
+  },
+  navContent: {
     flexDirection: "row",
-    backgroundColor: colors.card, // #161A22
-    borderRadius: borderRadius.full,
-    padding: spacing[3],
-    justifyContent: "space-evenly",
+    backgroundColor: "rgba(22, 26, 34, 0.88)",
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[1],
+    justifyContent: "space-around",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 215, 215, 0.15)",
-    // Subtle glow effect
-    shadowColor: "rgba(0, 200, 255, 1)",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  tabItem: {
+  navItem: {
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: spacing[1],
-    paddingHorizontal: spacing[2],
-    flex: 1,
+    paddingHorizontal: spacing[1] + 2,
+    minWidth: 50,
   },
-  tabItemDisabled: {
-    opacity: 0.5,
-  },
-  tabIcon: {
-    width: 22,
-    height: 22,
-    marginBottom: spacing[1],
-  },
-  inactiveIcon: {
-    opacity: 0.7,
-  },
-  tabLabel: {
-    fontSize: 13, // slightly larger than xs (12)
+  navItemLabel: {
+    fontSize: 11,
     fontFamily: typography.fontFamily.medium,
+    marginTop: 4,
+    letterSpacing: 0.2,
   },
 });

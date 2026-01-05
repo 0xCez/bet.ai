@@ -1,21 +1,47 @@
-import React from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 interface GradientProgressBarProps {
   value: number;
   maxValue: number;
-  colors?: string[];
-  colorStops?: number[];
+  colors?: readonly [string, string, ...string[]];
+  animated?: boolean;
+  animationDuration?: number;
+  animationDelay?: number;
+  animationKey?: string | number; // Key to trigger re-animation
 }
 
 export function GradientProgressBar({
   value,
   maxValue,
-  colors = ["#00DDFF", "#0BFF13"],
-  colorStops = [1, 0.7],
+  colors = ["#00DDFF", "#0BFF13"] as const,
+  animated = true,
+  animationDuration = 800,
+  animationDelay = 0,
+  animationKey,
 }: GradientProgressBarProps) {
   const percentage = Math.min((value / maxValue) * 100, 100);
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (animated) {
+      animatedValue.setValue(0);
+      Animated.timing(animatedValue, {
+        toValue: percentage,
+        duration: animationDuration,
+        delay: animationDelay,
+        useNativeDriver: false, // Can't use native driver for left position
+      }).start();
+    } else {
+      animatedValue.setValue(percentage);
+    }
+  }, [percentage, animated, animationDuration, animationDelay, animationKey]);
+
+  const indicatorPosition = animatedValue.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
 
   return (
     <View style={styles.wrapper}>
@@ -28,11 +54,11 @@ export function GradientProgressBar({
           locations={[0, 1]}
         />
       </View>
-      <View
+      <Animated.View
         style={[
           styles.indicator,
           {
-            left: `${percentage}%`,
+            left: indicatorPosition,
           },
         ]}
       />
@@ -66,4 +92,3 @@ const styles = StyleSheet.create({
     marginTop: -3.755,
   },
 });
-

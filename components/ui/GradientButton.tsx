@@ -8,6 +8,7 @@ import {
   TextStyle,
   TouchableOpacityProps,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { colors, shadows, borderRadius as radii, typography } from "../../constants/designTokens";
 
 interface GradientButtonProps extends TouchableOpacityProps {
@@ -27,10 +28,16 @@ export function GradientButton({
   height = 55,
   variant = 'primary',
   disabled,
+  onPress,
   ...props
 }: GradientButtonProps) {
   // Use pill style border radius if variant is pill
   const finalBorderRadius = variant === 'pill' ? radii.full : borderRadius;
+
+  const handlePress = (e: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress?.(e);
+  };
 
   return (
     <TouchableOpacity
@@ -43,6 +50,7 @@ export function GradientButton({
       ]}
       activeOpacity={0.9}
       disabled={disabled}
+      onPress={handlePress}
       {...props}
     >
       <View style={styles.contentContainer}>

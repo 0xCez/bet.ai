@@ -25,7 +25,8 @@ import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import { usePageTracking } from "@/hooks/usePageTracking";
-import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
+import { Ionicons } from "@expo/vector-icons";
+import { colors, spacing, borderRadius as radii, typography, shimmerColors } from "../constants/designTokens";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -231,6 +232,7 @@ export default function MarketIntelNew() {
   );
   const [error, setError] = useState<string | null>(null);
   const [cooldownMessage, setCooldownMessage] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   // Card animation values (9 cards in market intel view)
@@ -446,11 +448,7 @@ export default function MarketIntelNew() {
       return;
     }
 
-    // Clear cached data to force fresh fetch
-    setMarketResult(null);
-    cachedMarketResult = null;
-
-    setIsLoading(true);
+    setIsRefreshing(true);
     setError(null);
 
     try {
@@ -490,7 +488,7 @@ export default function MarketIntelNew() {
       console.error("Error in refreshMarketIntelligence:", err);
       setError(err instanceof Error ? err.message : "Failed to get fresh market intelligence");
     } finally {
-      setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -519,7 +517,7 @@ export default function MarketIntelNew() {
         <View style={styles.marketHeader}>
           <ShimmerPlaceholder
             style={styles.marketTitleShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
         </View>
       </Card>
@@ -531,11 +529,11 @@ export default function MarketIntelNew() {
           <View style={styles.bestLinesHeader}>
             <ShimmerPlaceholder
               style={styles.bestLinesTitleShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.bestLinesInfoShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
           </View>
 
@@ -545,16 +543,16 @@ export default function MarketIntelNew() {
               <View key={index} style={styles.lineItem}>
                 <ShimmerPlaceholder
                   style={styles.bookmakerLogo}
-                  shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                  shimmerColors={shimmerColors}
                 />
                 <View style={styles.lineTextContainer}>
                   <ShimmerPlaceholder
                     style={styles.lineBigTextShimmer}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                   <ShimmerPlaceholder
                     style={styles.lineSmallTextShimmer}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                 </View>
               </View>
@@ -570,11 +568,11 @@ export default function MarketIntelNew() {
           <View style={styles.consensusLinesHeader}>
             <ShimmerPlaceholder
               style={styles.consensusLinesTitleShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
             <ShimmerPlaceholder
               style={styles.consensusLinesInfoShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
           </View>
 
@@ -587,7 +585,7 @@ export default function MarketIntelNew() {
                 <View key={index} style={styles.dataColumn}>
                   <ShimmerPlaceholder
                     style={styles.columnHeaderTextShimmer}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                 </View>
               ))}
@@ -599,11 +597,11 @@ export default function MarketIntelNew() {
                 <View style={styles.teamColumn}>
                   <ShimmerPlaceholder
                     style={styles.teamLogo}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                   <ShimmerPlaceholder
                     style={styles.teamNameShimmer}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                 </View>
                 {[1, 2, 3].map((colIndex) => (
@@ -611,12 +609,12 @@ export default function MarketIntelNew() {
                     <View style={styles.dataCell}>
                       <ShimmerPlaceholder
                         style={styles.dataValueShimmer}
-                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                        shimmerColors={shimmerColors}
                       />
                       {colIndex !== 3 && (
                         <ShimmerPlaceholder
                           style={styles.dataSecondaryShimmer}
-                          shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                          shimmerColors={shimmerColors}
                         />
                       )}
                     </View>
@@ -634,11 +632,11 @@ export default function MarketIntelNew() {
         <View style={styles.publicSharpHeader}>
           <ShimmerPlaceholder
             style={styles.publicSharpTitleShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
             style={styles.publicSharpInfoShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
         </View>
 
@@ -649,7 +647,7 @@ export default function MarketIntelNew() {
               <View key={index} style={[styles.publicSharpRow, index === 2 && styles.publicSharpRowBordered]}>
                 <ShimmerPlaceholder
                   style={styles.publicSharpTextShimmer}
-                  shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                  shimmerColors={shimmerColors}
                 />
               </View>
             ))}
@@ -659,7 +657,7 @@ export default function MarketIntelNew() {
           <View style={styles.publicSharpRight}>
             <ShimmerPlaceholder
               style={styles.gaugeShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
           </View>
         </View>
@@ -671,11 +669,11 @@ export default function MarketIntelNew() {
         <View style={styles.marketEfficiencyHeader}>
           <ShimmerPlaceholder
             style={styles.marketEfficiencyTitleShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
             style={styles.marketEfficiencyInfoShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
         </View>
 
@@ -684,16 +682,16 @@ export default function MarketIntelNew() {
           <View style={styles.progressBarContainer}>
             <ShimmerPlaceholder
               style={styles.progressBarShimmer}
-              shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+              shimmerColors={shimmerColors}
             />
             <View style={styles.progressBarLabels}>
               <ShimmerPlaceholder
                 style={styles.progressBarLabelShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
               <ShimmerPlaceholder
                 style={styles.progressBarLabelShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
             </View>
           </View>
@@ -701,7 +699,7 @@ export default function MarketIntelNew() {
           {/* Description */}
           <ShimmerPlaceholder
             style={styles.marketEfficiencyDescriptionShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
         </View>
       </Card>
@@ -712,11 +710,11 @@ export default function MarketIntelNew() {
         <View style={styles.oddsTableHeader}>
           <ShimmerPlaceholder
             style={styles.oddsTableTitleShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
             style={styles.oddsTableInfoShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
         </View>
 
@@ -727,7 +725,7 @@ export default function MarketIntelNew() {
               <ShimmerPlaceholder
                 key={index}
                 style={[styles.oddsTableColumnHeaderShimmer, index === 3 && styles.oddsTableColumnHeaderCellLast]}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
             ))}
           </View>
@@ -735,7 +733,7 @@ export default function MarketIntelNew() {
           {/* Team Name */}
           <ShimmerPlaceholder
             style={styles.oddsTableTeamNameShimmer}
-            shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+            shimmerColors={shimmerColors}
           />
 
           {/* Bookmaker Rows */}
@@ -745,22 +743,22 @@ export default function MarketIntelNew() {
                 <View key={colIndex} style={[styles.oddsTableCell, colIndex === 3 && styles.oddsTableCellLast]}>
                   <ShimmerPlaceholder
                     style={styles.oddsTableLogo}
-                    shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                    shimmerColors={shimmerColors}
                   />
                   {colIndex === 1 ? (
                     <ShimmerPlaceholder
                       style={styles.oddsTableValueShimmer}
-                      shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                      shimmerColors={shimmerColors}
                     />
                   ) : (
                     <View style={styles.oddsTableMultiValue}>
                       <ShimmerPlaceholder
                         style={styles.oddsTableValueShimmer}
-                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                        shimmerColors={shimmerColors}
                       />
                       <ShimmerPlaceholder
                         style={styles.oddsTableValueShimmer}
-                        shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                        shimmerColors={shimmerColors}
                       />
                     </View>
                   )}
@@ -775,7 +773,7 @@ export default function MarketIntelNew() {
       <View style={styles.buttonContainer}>
         <ShimmerPlaceholder
           style={styles.freshOddsButtonShimmer}
-          shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+          shimmerColors={shimmerColors}
         />
       </View>
     </ScrollView>
@@ -1664,12 +1662,21 @@ export default function MarketIntelNew() {
         {/* Get Fresh Odds Button */}
         <View style={styles.buttonContainer}>
           <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
-            <Pressable style={styles.freshOddsButton} onPress={refreshMarketIntelligence}>
-              <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
+            <Pressable
+              style={[styles.freshOddsButton, isRefreshing && styles.freshOddsButtonDisabled]}
+              onPress={refreshMarketIntelligence}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <Text style={styles.freshOddsButtonText}>Refreshing...</Text>
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={16} color={colors.primaryForeground} />
+                  <Text style={styles.freshOddsButtonText}>{i18n.t("marketIntelFreshOdds")}</Text>
+                </>
+              )}
             </Pressable>
           </Animated.View>
-
-          {/* Cooldown Message */}
           {cooldownMessage && (
             <Text style={styles.cooldownMessage}>{cooldownMessage}</Text>
           )}
@@ -2138,12 +2145,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing[5],
   },
   freshOddsButton: {
-    width: 176,
-    height: 44,
-    backgroundColor: colors.primary,
-    borderRadius: radii.full,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[3],
+    borderRadius: radii.full,
+    minWidth: 160,
+  },
+  freshOddsButtonDisabled: {
+    opacity: 0.6,
   },
   freshOddsButtonText: {
     fontFamily: typography.fontFamily.medium,

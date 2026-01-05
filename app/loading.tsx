@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -6,6 +6,7 @@ import CircularProgress from "react-native-circular-progress-indicator";
 import { GradientText } from "../components/ui/GradientText";
 import { colors, spacing, typography } from "../constants/designTokens";
 import i18n from "../i18n";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 interface LoadingState {
   threshold: number;
@@ -25,6 +26,16 @@ export default function LoadingScreen() {
     description1: i18n.t("loadingAnalyzingDesc1"),
     description2: i18n.t("loadingAnalyzingDesc2"),
   });
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTracked = useRef(false);
+
+  // Track loading screen viewed on mount
+  useEffect(() => {
+    if (!hasTracked.current) {
+      trackFunnelStep('loading_viewed');
+      hasTracked.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     // Create loading states with i18n translations

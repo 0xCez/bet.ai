@@ -18,6 +18,11 @@ import i18n from "../i18n";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { RevenueCatProvider } from "./providers/RevenueCatProvider";
+import { DemoTooltipProvider } from "../contexts/DemoTooltipContext";
+import { DemoTooltipRenderer } from "../components/ui/DemoTooltip";
+// TODO: Image transition - commented out for now, will finish later
+// import { ImageTransitionProvider } from "../contexts/ImageTransitionContext";
+// import { TransitionImageOverlay } from "../components/ui/TransitionImageOverlay";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -59,15 +64,18 @@ export default function RootLayout() {
       }}
     >
       <RevenueCatProvider>
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={styles.container}>
-            <ThemeProvider
-              value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-            >
-              <Slot />
-            </ThemeProvider>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
+        <DemoTooltipProvider>
+          <SafeAreaProvider>
+            <GestureHandlerRootView style={styles.container}>
+              <ThemeProvider
+                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+              >
+                <Slot />
+                <DemoTooltipRenderer />
+              </ThemeProvider>
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </DemoTooltipProvider>
       </RevenueCatProvider>
     </PostHogProvider>
   );

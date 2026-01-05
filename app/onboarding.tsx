@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, Dimensions, Image, Alert, Pressable, Animated } from "react-native";
+import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Carousel, { ICarouselInstance } from "react-native-reanimated-carousel";
@@ -12,6 +13,7 @@ import { SharpsVsPublicChart, OddsMovementChart } from "../components/ui/Onboard
 import { OnboardingSlide4Visual } from "../components/ui/OnboardingSlide4Visual";
 import { OnboardingSlide5Visual } from "../components/ui/OnboardingSlide5Visual";
 import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -81,6 +83,16 @@ export default function OnboardingScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const carouselRef = useRef<ICarouselInstance>(null);
   const insets = useSafeAreaInsets();
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTrackedStart = useRef(false);
+
+  // Track carousel started on mount
+  useEffect(() => {
+    if (!hasTrackedStart.current) {
+      trackFunnelStep('carousel_started');
+      hasTrackedStart.current = true;
+    }
+  }, []);
 
   // Entrance animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -104,6 +116,7 @@ export default function OnboardingScreen() {
   const isLastSlide = activeIndex === slides.length - 1;
 
   const handleNext = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isLastSlide) {
       handleOnboardingComplete();
       return;
@@ -114,6 +127,10 @@ export default function OnboardingScreen() {
   const handleOnboardingComplete = async () => {
     try {
       console.log("Starting onboarding completion...");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Track carousel completed
+      trackFunnelStep('carousel_completed');
 
       // Save onboarding completion state
       await updateAppState({

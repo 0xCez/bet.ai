@@ -23,6 +23,7 @@ import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import { usePageTransition } from "../hooks/usePageTransition";
 import i18n from "../i18n";
+import { shimmerColors } from "../constants/designTokens";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -333,11 +334,11 @@ export default function SoccerMarketIntelScreen() {
         >
           <ShimmerPlaceholder
             style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
             style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            shimmerColors={shimmerColors}
           />
         </LinearGradient>
       </View>

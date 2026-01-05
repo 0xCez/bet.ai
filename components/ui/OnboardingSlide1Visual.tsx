@@ -275,9 +275,13 @@ function ProbabilityBadge({ x, y, delay, isActive, text, arrowDirection }: Proba
 
 interface OnboardingSlide1VisualProps {
   isActive?: boolean;
+  /** Scale factor for the visual (default: 1) */
+  scale?: number;
+  /** Opacity override (default: 1) */
+  opacity?: number;
 }
 
-export function OnboardingSlide1Visual({ isActive = false }: OnboardingSlide1VisualProps) {
+export function OnboardingSlide1Visual({ isActive = false, scale = 1, opacity = 1 }: OnboardingSlide1VisualProps) {
   // Animation values
   const frameOpacity = useSharedValue(0);
   const focusProgress = useSharedValue(0);
@@ -329,7 +333,7 @@ export function OnboardingSlide1Visual({ isActive = false }: OnboardingSlide1Vis
   const detectionsVisible = isActive;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { transform: [{ scale }], opacity }]}>
       <Animated.View style={[styles.viewfinderFrame, frameAnimatedStyle]}>
         {/* Sportsbook image */}
         <View style={styles.imageContainer}>

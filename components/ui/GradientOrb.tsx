@@ -40,31 +40,31 @@ export function GradientOrb({
 
   useEffect(() => {
     if (pulse) {
-      // Stronger breathing scale animation
+      // Stronger breathing scale animation (slowed ~10%)
       scale.value = withRepeat(
         withSequence(
-          withTiming(1.2, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+          withTiming(1.2, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
         true
       );
 
-      // Stronger opacity pulse
+      // Stronger opacity pulse (slowed ~10%)
       glowOpacity.value = withRepeat(
         withSequence(
-          withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-          withTiming(opacity - 0.2, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+          withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+          withTiming(opacity - 0.2, { duration: 2200, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
         true
       );
 
-      // Outer glow pulsing separately for extra effect
+      // Outer glow pulsing separately for extra effect (slowed ~10%)
       glowScale.value = withRepeat(
         withSequence(
-          withTiming(1.3, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
+          withTiming(1.3, { duration: 2750, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 2750, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
         true

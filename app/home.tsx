@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -68,7 +69,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!purchaseLoading && !isSubscribed) {
-      // router.push("/paywall");
+      router.replace("/tutorial");
     }
   }, [isSubscribed, purchaseLoading]);
 
@@ -172,6 +173,12 @@ export default function HomeScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const compressedUri = await compressImage(result.assets[0].uri);
+        // Track analysis creation
+        posthog?.capture('analysis_created', {
+          source: 'camera',
+          userId: auth.currentUser?.uid || null,
+          timestamp: new Date().toISOString(),
+        });
         router.push({
           pathname: "/analysis",
           params: { imageUri: compressedUri },
@@ -203,6 +210,12 @@ export default function HomeScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const compressedUri = await compressImage(result.assets[0].uri);
+        // Track analysis creation
+        posthog?.capture('analysis_created', {
+          source: 'gallery',
+          userId: auth.currentUser?.uid || null,
+          timestamp: new Date().toISOString(),
+        });
         router.push({
           pathname: "/analysis",
           params: { imageUri: compressedUri },
@@ -222,9 +235,14 @@ export default function HomeScreen() {
     );
   }
 
-  // if (!isSubscribed) {
-  //   return null;
-  // }
+  // Prevent any flash of home content for unsubscribed users
+  if (!isSubscribed) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LogoSpinner size={96} />
+      </View>
+    );
+  }
 
   return (
     <ScreenBackground hideBg>
@@ -258,6 +276,7 @@ export default function HomeScreen() {
           <Animated.View style={getAnimatedStyle(2)}>
           <Pressable
             onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               if (!isSubscribed) {
                 router.push("/paywall");
                 return;
@@ -280,6 +299,7 @@ export default function HomeScreen() {
           <Animated.View style={getAnimatedStyle(3)}>
           <Pressable
             onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               if (!isSubscribed) {
                 router.push("/paywall");
                 return;

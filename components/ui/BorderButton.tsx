@@ -8,6 +8,7 @@ import {
   TextStyle,
   TouchableOpacityProps,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { colors, borderRadius as radii, typography } from "../../constants/designTokens";
 
 interface BorderButtonProps extends TouchableOpacityProps {
@@ -31,8 +32,14 @@ export function BorderButton({
   height = 58,
   children,
   disabled,
+  onPress,
   ...props
 }: BorderButtonProps) {
+  const handlePress = (e: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress?.(e);
+  };
+
   return (
     <TouchableOpacity
       style={[
@@ -43,6 +50,7 @@ export function BorderButton({
       ]}
       activeOpacity={0.8}
       disabled={disabled}
+      onPress={handlePress}
       {...props}
     >
       <View style={styles.contentContainer}>

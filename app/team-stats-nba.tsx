@@ -26,8 +26,9 @@ import { doc, getDoc } from "firebase/firestore";
 import { getNBATeamLogo } from "@/utils/teamLogos";
 import { useRouter } from "expo-router";
 import { usePageTracking } from "@/hooks/usePageTracking";
-import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
+import { colors, spacing, borderRadius as radii, typography, shimmerColors } from "../constants/designTokens";
 import { Ionicons } from "@expo/vector-icons";
+import { TeamSelectorHeader } from "@/components/ui/TeamSelectorHeader";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -163,8 +164,8 @@ export default function TeamStatsNBANew() {
     isSameAnalysis && cachedTeamResult ? cachedTeamResult : null
   );
   const [error, setError] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2" | null>(
-    (params.selectedTeam as "team1" | "team2") || null
+  const [selectedTeam, setSelectedTeam] = useState<"team1" | "team2">(
+    (params.selectedTeam as "team1" | "team2") || "team1"
   );
 
   // Card animation values (8 cards in team stats view)
@@ -355,38 +356,6 @@ export default function TeamStatsNBANew() {
     });
   };
 
-  // Render team selection screen
-  const renderTeamSelection = () => {
-    const teams = [
-      { name: params.team1 || "", key: "team1" as "team1" | "team2" },
-      { name: params.team2 || "", key: "team2" as "team1" | "team2" },
-    ];
-
-    return (
-      <View style={styles.container}>
-        <TopBar onBackPress={() => router.replace("/")} />
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {teams.map((team) => (
-          <Pressable
-            key={team.key}
-            onPress={() => setSelectedTeam(team.key)}
-            style={styles.selectionItem}
-          >
-            <View style={styles.selectionContent}>
-              <Image
-                source={getNBATeamLogo(team.name)}
-                style={styles.selectionLogo}
-                contentFit="contain"
-              />
-              <Text style={styles.selectionName}>{team.name}</Text>
-              <Ionicons name="chevron-forward" size={24} color={colors.mutedForeground} />
-            </View>
-          </Pressable>
-        ))}
-        </ScrollView>
-      </View>
-    );
-  };
 
   // Render team stats
   const renderTeamStats = () => {
@@ -399,7 +368,16 @@ export default function TeamStatsNBANew() {
     if (!teamData || !teamData.stats) {
       return (
         <View style={styles.container}>
-          <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+          <TopBar showBack={true} />
+          <TeamSelectorHeader
+            team1Name={params.team1 || ""}
+            team2Name={params.team2 || ""}
+            team1Logo={getNBATeamLogo(params.team1 || "")}
+            team2Logo={getNBATeamLogo(params.team2 || "")}
+            activeTeam={selectedTeam}
+            onTeamChange={setSelectedTeam}
+            sticky
+          />
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
             <Card style={styles.topCard}>
               <View style={styles.teamHeader}>
@@ -425,27 +403,23 @@ export default function TeamStatsNBANew() {
 
   return (
       <View style={styles.container}>
-        <TopBar showBack={true} onBackPress={() => setSelectedTeam(null)} />
+        <TopBar showBack={true} />
+
+        {/* Sticky Team Selector Header */}
+        <TeamSelectorHeader
+          team1Name={params.team1 || ""}
+          team2Name={params.team2 || ""}
+          team1Logo={getNBATeamLogo(params.team1 || "")}
+          team2Logo={getNBATeamLogo(params.team2 || "")}
+          activeTeam={selectedTeam}
+          onTeamChange={setSelectedTeam}
+          sticky
+        />
+
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
 
-        {/* Top Card - Team Header */}
-        <Animated.View style={getCardStyle(0)}>
-          <Card style={styles.topCard}>
-            <View style={styles.teamHeader}>
-              <View style={styles.nameLogoRow}>
-                <Text style={styles.teamName}>{teamName}</Text>
-                <Image
-                  source={getNBATeamLogo(String(teamName))}
-                  style={styles.teamLogo}
-                  contentFit="contain"
-                />
-              </View>
-            </View>
-          </Card>
-        </Animated.View>
-
         {/* Stats Row - Recent Form and Momentum */}
-        <Animated.View style={[styles.statsRow, getCardStyle(1)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(0)]}>
           {/* Recent Form Card */}
           <Card style={styles.statCard}>
             <View style={styles.statContent}>
@@ -471,7 +445,7 @@ export default function TeamStatsNBANew() {
         </Animated.View>
 
         {/* Core KPIs Card */}
-        <Animated.View style={getCardStyle(2)}>
+        <Animated.View style={getCardStyle(1)}>
           <Card style={styles.coreKPIsCard}>
           <View style={styles.coreKPIsContent}>
             {/* Header */}
@@ -555,7 +529,7 @@ export default function TeamStatsNBANew() {
         </Animated.View>
 
         {/* Stats Row - HOME AVG and AWAY AVG */}
-        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(2)]}>
           {/* HOME AVG Card */}
           <Card style={styles.statCardSmall}>
             <View style={styles.statContent}>
@@ -578,7 +552,7 @@ export default function TeamStatsNBANew() {
         </Animated.View>
 
         {/* Stats Row - STEALS and BLOCKS */}
-        <Animated.View style={[styles.statsRow, getCardStyle(4)]}>
+        <Animated.View style={[styles.statsRow, getCardStyle(3)]}>
           {/* STEALS Card */}
           <Card style={styles.statCardSmall}>
             <View style={styles.statContent}>
@@ -599,7 +573,7 @@ export default function TeamStatsNBANew() {
         </Animated.View>
 
         {/* Advanced Metrics Card */}
-        <Animated.View style={getCardStyle(5)}>
+        <Animated.View style={getCardStyle(4)}>
           <Card style={styles.coreKPIsCard}>
           <View style={styles.coreKPIsContent}>
             {/* Header */}
@@ -701,15 +675,15 @@ export default function TeamStatsNBANew() {
             <View style={styles.selectionContent}>
               <ShimmerPlaceholder
                 style={styles.selectionLogoShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
               <ShimmerPlaceholder
                 style={styles.selectionNameShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
               <ShimmerPlaceholder
                 style={styles.chevronIconShimmer}
-                shimmerColors={["#272E3A", "#3A4555", "#272E3A"]}
+                shimmerColors={shimmerColors}
               />
             </View>
           </View>
@@ -728,11 +702,7 @@ export default function TeamStatsNBANew() {
       );
     }
 
-    if (selectedTeam) {
-      return renderTeamStats();
-    }
-
-    return renderTeamSelection();
+    return renderTeamStats();
   };
 
   return (

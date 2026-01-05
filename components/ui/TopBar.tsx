@@ -1,6 +1,6 @@
 import React from "react";
 import { View, StyleSheet, Text } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import { Logo } from "./Logo";
 import { IconButton } from "./IconButton";
 import { colors, spacing, typography } from "../../constants/designTokens";
@@ -13,8 +13,20 @@ interface TopBarProps {
 
 export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
-  const handleBackPress = onBackPress || (() => router.back());
+  // Simple back navigation logic:
+  // - History → Home
+  // - Everything else (analysis pages) → History
+  const getDefaultBackNavigation = () => {
+    if (pathname === '/history') {
+      router.replace('/home');
+    } else {
+      router.replace('/history');
+    }
+  };
+
+  const handleBackPress = onBackPress || getDefaultBackNavigation;
 
   return (
     <View style={styles.container}>

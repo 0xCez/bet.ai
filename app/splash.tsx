@@ -15,8 +15,8 @@ import { colors } from "../constants/designTokens";
 
 SplashScreen.preventAutoHideAsync();
 
-// Minimum time to show splash (2 full animation loops @ 2400ms each + buffer)
-const MIN_SPLASH_DURATION = 5500;
+// Minimum time to show splash (1 animation loop + small buffer)
+const MIN_SPLASH_DURATION = 2000;
 
 export default function SplashPage() {
   const router = useRouter();

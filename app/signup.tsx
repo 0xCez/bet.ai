@@ -7,6 +7,7 @@ import {
   ScrollView,
   Animated,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 
 // Animated wrapper - only handles animation, doesn't care about children content
 const AnimatedOptionWrapper = ({ children, animValue }: { children: React.ReactNode; animValue: Animated.Value }) => {
@@ -38,7 +39,7 @@ import { ProfitabilityComparisonChart } from "../components/ui/ProfitabilityComp
 import { UserReviewsCard } from "../components/ui/UserReviewsCard";
 import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import * as StoreReview from "expo-store-review";
-import { usePostHog } from "posthog-react-native";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 import i18n from "../i18n";
 
 // Define the type for the onboarding slides
@@ -150,7 +151,8 @@ export default function SignupScreen() {
     [key: number]: string | string[];
   }>({});
   const [isRatingVisible, setIsRatingVisible] = useState(false);
-  const posthog = usePostHog();
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTrackedStart = useRef(false);
 
   // Animated progress bar
   const progressAnim = useRef(new Animated.Value(1 / slides.length)).current;
@@ -183,10 +185,15 @@ export default function SignupScreen() {
     });
   };
 
-  // Animate first page on mount
+  // Animate first page on mount and track signup started
   useEffect(() => {
     if (slides[0].options) {
       setTimeout(() => animatePageOptions(0), 100);
+    }
+    // Track signup started
+    if (!hasTrackedStart.current) {
+      trackFunnelStep('signup_started');
+      hasTrackedStart.current = true;
     }
   }, []);
 
@@ -209,16 +216,6 @@ export default function SignupScreen() {
       useNativeDriver: false,
     }).start();
 
-    // Track step change with PostHog
-    const currentSlide = slides[newPage];
-    await posthog?.capture("signup_step_changed", {
-      step_number: newPage + 1,
-      total_steps: slides.length,
-      step_type: currentSlide.question1 ? "question" : "info",
-      step_title: currentSlide.title1 || currentSlide.question1,
-      selected_options: selectedOptions[currentSlide.id],
-    });
-
     // Show store review prompt when slide 8 is reached
     if (newPage === 7) {
       // Index 7 corresponds to slide 8
@@ -240,6 +237,7 @@ export default function SignupScreen() {
   };
 
   const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (currentPage === 0) {
       // If on first slide, go back to welcome screen
       router.back();
@@ -256,6 +254,7 @@ export default function SignupScreen() {
   };
 
   const handleOptionSelect = async (slideId: number, option: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     let newSelectedOptions;
 
     // Special handling for sports selection (slide 7)
@@ -278,18 +277,6 @@ export default function SignupScreen() {
     }
 
     setSelectedOptions(newSelectedOptions);
-
-    // Track option selection with PostHog
-    const currentSlide = slides[slideId - 1];
-    await posthog?.capture("signup_option_selected", {
-      step_number: slideId,
-      step_type: "question",
-      step_title: currentSlide.question1,
-      selected_option: option,
-      is_sports_selection: slideId === 7,
-      total_sports_selected:
-        slideId === 7 ? newSelectedOptions[slideId].length : undefined,
-    });
 
     try {
       await updateAppState({
@@ -320,19 +307,15 @@ export default function SignupScreen() {
 
   const handleSignupComplete = async () => {
     try {
-      // Track signup completion with PostHog
-      await posthog?.capture("signup_completed", {
-        total_steps_completed: slides.length,
-        selected_answers: selectedOptions,
-      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Track signup completion
+      trackFunnelStep('signup_completed');
 
       // Store all the final answers and mark signup as complete
       console.log("[Signup] Saving completion status:");
       await updateAppState({
         signupComplete: true,
       });
-
-      // console.log("[Signup] Completion status saved:", selectedOptions);
 
       router.push("/loading");
     } catch (error) {
@@ -487,6 +470,7 @@ export default function SignupScreen() {
           <View style={styles.fixedNextButtonContainer}>
             <GradientButton
               onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 if (currentPage < slides.length - 1) {
                   pagerRef.current?.setPage(currentPage + 1);
                 }
@@ -537,6 +521,7 @@ export default function SignupScreen() {
         <BlurView intensity={0} tint="dark" style={styles.bottomContainer}>
           <GradientButton
             onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               if (currentPage < slides.length - 1) {
                 pagerRef.current?.setPage(currentPage + 1);
               } else {

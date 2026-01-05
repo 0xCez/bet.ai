@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Image,
   Platform,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Link, router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import Icon from "react-native-vector-icons/FontAwesome";
@@ -27,6 +28,7 @@ import Animated, {
 import i18n from "../i18n";
 import { MultilineText } from "@/components/ui/MultilineText";
 import { colors, spacing, typography } from "../constants/designTokens";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 // Conditionally import GoogleSignin only on Android
 const GoogleSignin =
@@ -88,6 +90,8 @@ export default function LoginScreen() {
   const { linkUserToFirebase } = useRevenueCatUser();
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
   const [isAppleLoading, setIsAppleLoading] = React.useState(false);
+  const { trackFunnelStep, linkAuthenticatedUser } = useOnboardingAnalytics();
+  const hasTrackedView = useRef(false);
 
   // Animation values
   const logoOpacity = useSharedValue(0);
@@ -97,8 +101,14 @@ export default function LoginScreen() {
   const buttonsOpacity = useSharedValue(0);
   const buttonsTranslateY = useSharedValue(20);
 
-  // Start entrance animations
+  // Start entrance animations and track login viewed
   useEffect(() => {
+    // Track login screen viewed
+    if (!hasTrackedView.current) {
+      trackFunnelStep('login_viewed');
+      hasTrackedView.current = true;
+    }
+
     const timingConfig = {
       duration: 600,
       easing: Easing.out(Easing.cubic),
@@ -143,8 +153,9 @@ export default function LoginScreen() {
       "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
   });
 
-  const handleAuthSuccess = async (firebaseUser: any) => {
+  const handleAuthSuccess = async (firebaseUser: any, method: 'apple' | 'google') => {
     try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Save user data to Firestore and storage
       await saveUserData(firebaseUser);
 
@@ -153,6 +164,10 @@ export default function LoginScreen() {
       if (!result.success) {
         console.error("Failed to link RevenueCat user:", result.error);
       }
+
+      // Track login success and link authenticated user for analytics
+      trackFunnelStep('login_success', { method });
+      await linkAuthenticatedUser(firebaseUser.uid, firebaseUser.email);
 
       // Navigate to home
       router.replace("/home");
@@ -189,7 +204,7 @@ export default function LoginScreen() {
 
       signInWithCredential(auth, credential)
         .then((result) => {
-          handleAuthSuccess(result.user);
+          handleAuthSuccess(result.user, 'google');
         })
         .catch((error) => {
           console.error("Error with Google sign in:", error);
@@ -246,7 +261,7 @@ export default function LoginScreen() {
       console.log("Firebase sign-in successful");
 
       // Handle successful authentication
-      await handleAuthSuccess(result.user);
+      await handleAuthSuccess(result.user, 'google');
     } catch (error: any) {
       console.error("Android Google Sign-In error:", JSON.stringify(error));
 
@@ -275,6 +290,7 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       setIsGoogleLoading(true);
 
@@ -296,6 +312,7 @@ export default function LoginScreen() {
   };
 
   const handleAppleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       setIsAppleLoading(true);
       const nonce = Math.random().toString(36).substring(2, 10);
@@ -321,7 +338,7 @@ export default function LoginScreen() {
         });
 
         const result = await signInWithCredential(auth, credential);
-        await handleAuthSuccess(result.user);
+        await handleAuthSuccess(result.user, 'apple');
       } else {
         // No identity token received
         console.error("No identity token received from Apple");

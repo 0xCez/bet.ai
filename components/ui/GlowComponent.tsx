@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Text, Dimensions, Image, Platform, StyleProp, ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle, withRepeat, withTiming, useSharedValue, withSequence } from 'react-native-reanimated';
-const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
+import { View, StyleSheet, Image, Platform, StyleProp, ViewStyle } from "react-native";
+import Animated, { useAnimatedStyle, withRepeat, withTiming, useSharedValue, withSequence, Easing } from 'react-native-reanimated';
+import { colors, borderRadius } from '../../constants/designTokens';
 
 interface GlowComponentProps {
   imageUri?: string;
@@ -18,8 +18,8 @@ export default function GlowComponent({ imageUri, imageSource, style, pulse = tr
     if (pulse) {
       shadowOpacity.value = withRepeat(
         withSequence(
-          withTiming(1.0, { duration: 1500 }),
-          withTiming(0.3, { duration: 1500 })
+          withTiming(0.9, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.4, { duration: 1800, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
         true
@@ -27,8 +27,8 @@ export default function GlowComponent({ imageUri, imageSource, style, pulse = tr
 
       shadowRadius.value = withRepeat(
         withSequence(
-          withTiming(12, { duration: 1500 }),
-          withTiming(3, { duration: 1500 })
+          withTiming(18, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(8, { duration: 1800, easing: Easing.inOut(Easing.ease) })
         ),
         -1,
         true
@@ -82,13 +82,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: '#00A7CC',
+        shadowColor: colors.primary,
         shadowOffset: {
           width: 0,
           height: 0,
         },
-        shadowOpacity: 0.8,
-        shadowRadius: 10,
+        shadowOpacity: 0.6,
+        shadowRadius: 15,
       },
       android: {
         elevation: 12,
@@ -100,13 +100,13 @@ const styles = StyleSheet.create({
     height: '100%',
     ...Platform.select({
       ios: {
-        shadowColor: '#00C2E0',
+        shadowColor: colors.primary,
         shadowOffset: {
           width: 0,
           height: 0,
         },
-        shadowOpacity: 0.9,
-        shadowRadius: 6,
+        shadowOpacity: 0.8,
+        shadowRadius: 8,
       },
       android: {
         elevation: 8,
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     height: '100%',
-    borderRadius: 33,
+    borderRadius: borderRadius.xl,
     overflow: 'hidden',
     backgroundColor: 'transparent',
     position: 'relative',
@@ -124,12 +124,5 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
 });
