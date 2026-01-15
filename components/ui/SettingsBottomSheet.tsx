@@ -18,6 +18,7 @@ import { auth } from "../../firebaseConfig";
 import { deleteUser, signOut } from "firebase/auth";
 import { updateAppState } from "../../utils/appStorage";
 import * as WebBrowser from "expo-web-browser";
+import * as Haptics from "expo-haptics";
 import { useRevenueCatPurchases } from "../../app/hooks/useRevenueCatPurchases";
 import { useRevenueCat } from "../../app/providers/RevenueCatProvider";
 import i18n from "../../i18n";
@@ -274,6 +275,12 @@ export function SettingsBottomSheet({
   };
 
   const handleAction = (action: string) => {
+    // Trigger haptic feedback on menu item press
+    if (action === "delete" || action === "logout") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     switch (action) {
       case "contact":
         handleContactPress();

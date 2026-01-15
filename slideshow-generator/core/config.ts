@@ -37,7 +37,7 @@ export const config: Config = {
   },
   // TheOddsAPI - Live betting odds
   theOddsApi: {
-    apiKey: 'cffccdd07d04d837bf5e98201938dbe0',
+    apiKey: 'c47264a2786aad2554daec3a87b1ce2a',
     baseUrl: 'https://api.the-odds-api.com/v4',
   },
 };

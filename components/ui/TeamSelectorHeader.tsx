@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import { colors, spacing, borderRadius, typography } from "../../constants/designTokens";
 
 interface TeamSelectorHeaderProps {
@@ -40,7 +41,10 @@ export const TeamSelectorHeader: React.FC<TeamSelectorHeaderProps> = ({
             styles.teamTab,
             activeTeam === "team1" && styles.teamTabActive,
           ]}
-          onPress={() => onTeamChange("team1")}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onTeamChange("team1");
+          }}
         >
           <Image source={team1Logo} style={styles.teamLogo} contentFit="contain" />
           <Text
@@ -60,7 +64,10 @@ export const TeamSelectorHeader: React.FC<TeamSelectorHeaderProps> = ({
             styles.teamTab,
             activeTeam === "team2" && styles.teamTabActive,
           ]}
-          onPress={() => onTeamChange("team2")}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onTeamChange("team2");
+          }}
         >
           <Image source={team2Logo} style={styles.teamLogo} contentFit="contain" />
           <Text

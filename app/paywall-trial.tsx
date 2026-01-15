@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Linking,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { GradientButton } from "../components/ui/GradientButton";
@@ -45,11 +46,13 @@ export default function PaywallTrialScreen() {
   };
 
   const handlePurchase = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       setIsLoading(true);
       const result = await handlePromotionalOffer(selectedPackage);
 
       if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.push("/login");
       }
     } finally {
@@ -58,6 +61,7 @@ export default function PaywallTrialScreen() {
   };
 
   const handleClose = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.back();
   };
 

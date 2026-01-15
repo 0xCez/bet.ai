@@ -238,7 +238,12 @@ export default function OnboardingScreen() {
           height={carouselHeight}
           data={slides}
           renderItem={renderSlide}
-          onSnapToItem={setActiveIndex}
+          onSnapToItem={(index) => {
+            if (index !== activeIndex) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            setActiveIndex(index);
+          }}
           mode="parallax"
           modeConfig={{
             parallaxScrollingScale: 0.9,

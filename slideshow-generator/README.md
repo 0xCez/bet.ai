@@ -145,7 +145,7 @@ For production, set these in your `.env.local`:
 ```env
 STATPAL_API_KEY=39ac2518-b037-4c2c-97af-8176590e886e
 API_SPORTS_KEY=77fea40da4ce95b70120be298555b660
-ODDS_API_KEY=cffccdd07d04d837bf5e98201938dbe0
+ODDS_API_KEY=c47264a2786aad2554daec3a87b1ce2a
 ```
 
 ## Prop Types Analyzed

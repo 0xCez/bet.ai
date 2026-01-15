@@ -1,5 +1,15 @@
 [
   {
+    "id": 44,
+    "name": "Burnley",
+    "code": "BUR",
+    "country": "England",
+    "logo": "https://media.api-sports.io/football/teams/44.png",
+    "venue_name": "Turf Moor",
+    "city": "Burnley",
+    "address": "Harry Potts Way"
+  },
+  {
     "id": 33,
     "name": "Manchester United",
     "code": "MUN",
@@ -47,7 +57,8 @@
     "logo": "https://media.api-sports.io/football/teams/39.png",
     "venue_name": "Molineux Stadium",
     "city": "Wolverhampton, West Midlands",
-    "address": "Waterloo Road"
+    "address": "Waterloo Road",
+    "aliases": ["Wolverhampton Wanderers", "Wolverhampton"]
   },
   {
     "id": 40,

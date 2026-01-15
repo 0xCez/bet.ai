@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import { colors, borderRadius } from "../../constants/designTokens";
 
 export interface AnalysisHistoryItemProps {
@@ -28,7 +29,10 @@ export function AnalysisHistoryItem({
   isDeleting,
 }: AnalysisHistoryItemProps) {
   return (
-    <Pressable style={styles.container} onPress={onPress}>
+    <Pressable style={styles.container} onPress={() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
+    }}>
       <View style={styles.imageContainer}>
         {imageUrl ? (
           <Image
@@ -49,6 +53,7 @@ export function AnalysisHistoryItem({
             ]}
             onPress={(e) => {
               e.stopPropagation();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               onDelete();
             }}
             disabled={isDeleting}

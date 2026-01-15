@@ -8,6 +8,11 @@ const fs = require("fs");
 const path = require("path");
 require('dotenv').config();
 
+// Re-export preCacheTopGames functions from separate file
+const { preCacheTopGames, preCacheTopGamesScheduled } = require('./preCacheTopGames');
+exports.preCacheTopGames = preCacheTopGames;
+exports.preCacheTopGamesScheduled = preCacheTopGamesScheduled;
+
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
@@ -795,6 +800,27 @@ async function findTeamIds(sport, team1Name, team1Code, team2Name, team2Code, so
                     }
                 }
 
+
+                // Alias matching (for teams with alternate names like Wolves/Wolverhampton Wanderers)
+                if (team.aliases && Array.isArray(team.aliases)) {
+                    for (const alias of team.aliases) {
+                        const normalizedAlias = normalize(alias);
+                        // Exact alias match gets high score
+                        if (normalizedAlias === normalizedSearchName) {
+                            score += 50; // Strong bonus for exact alias match
+                        }
+                        // Partial alias containment
+                        if (normalizedAlias.includes(normalizedSearchName) ||
+                            normalizedSearchName.includes(normalizedAlias)) {
+                            score += 20;
+                        }
+                        // String similarity with alias
+                        const aliasSimilarity = stringSimilarity.compareTwoStrings(normalizedSearchName, normalizedAlias);
+                        if (aliasSimilarity > 0.7) {
+                            score += aliasSimilarity * 30;
+                        }
+                    }
+                }
 
                 // 3. City matching (only for soccer teams)
                 if (normalizedSport === 'soccer' && team.city) {
@@ -2099,7 +2125,21 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en') {
         return null;
       }
 
-      // Check if cache is still valid (not expired) and language matches
+      // Check if this is a pre-cached entry (has expiresAt field)
+      if (cachedData.preCached && cachedData.expiresAt) {
+        const expiresAt = new Date(cachedData.expiresAt).getTime();
+        if (now < expiresAt && cachedData.language === locale) {
+          console.log(`✅ Pre-cache HIT for ${cacheKey}, expires: ${cachedData.expiresAt}`);
+          const analysisData = cachedData.analysis;
+          analysisData.language = cachedData.language;
+          return analysisData;
+        } else {
+          console.log(`Pre-cache expired for ${cacheKey}, expiresAt: ${cachedData.expiresAt}`);
+          return null;
+        }
+      }
+
+      // Check if cache is still valid (not expired) and language matches (regular cache)
       if (now - timestamp < CACHE_EXPIRY_TIME && cachedData.language === locale) {
         console.log(`Cache hit for ${cacheKey}, language match, returning cached data`);
         // Attach the language to the analysis object for later checking
@@ -3146,7 +3186,63 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
       });
     }
 
-    // Test Market Intelligence, Team Stats, Player Stats, and Game Data
+    // Check if we have pre-cached analysis for this match (for replay content)
+    const cachedAnalysis = await checkCacheForMatch(normalizedSport, team1Id, team2Id, userLocale);
+
+    if (cachedAnalysis && cachedAnalysis.marketIntelligence) {
+      console.log(`📦 Cache HIT for marketIntelligence: ${normalizedSport} ${team1Id} vs ${team2Id}`);
+
+      // Fetch fresh team stats, player stats, and game data (these don't go stale like odds)
+      const [teamStats, playerStats, gameData] = await Promise.all([
+        getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
+        getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
+        getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode)
+      ]);
+
+      // Use cached market intelligence but fresh stats
+      // IMPORTANT: Reformat cached marketIntelligence to match expected structure
+      const cachedMI = cachedAnalysis.marketIntelligence || {};
+      const response = {
+        sport,
+        teams: {
+          home: team1,
+          away: team2,
+          logos: { home: "", away: "" }
+        },
+        // Reformat to match the structure the frontend expects (flatten evAnalysis)
+        marketIntelligence: {
+          bestLines: cachedMI.bestLines || null,
+          sharpMeter: cachedMI.sharpMeter || null,
+          vigAnalysis: cachedMI.vigAnalysis || cachedMI.evAnalysis?.vigAnalysis || null,
+          evOpportunities: cachedMI.evOpportunities || cachedMI.evAnalysis?.uiOpportunities || null,
+          fairValue: cachedMI.fairValue || cachedMI.evAnalysis?.fairValue || null,
+          sharpConsensus: cachedMI.sharpConsensus || cachedMI.evAnalysis?.sharpConsensus || null,
+          marketTightness: cachedMI.marketTightness || null,
+          oddsTable: cachedMI.oddsTable || null,
+          error: cachedMI.error || null,
+          availableEvents: cachedMI.availableEvents || null
+        },
+        teamStats: enhanceTeamStatsWithGameData(teamStats, gameData),
+        playerStats,
+        gameData,
+        keyInsightsNew: cachedAnalysis.keyInsightsNew || calculateKeyInsightsNew(
+          cachedMI,
+          enhanceTeamStatsWithGameData(teamStats, gameData),
+          team1,
+          team2,
+          sport
+        ),
+        timestamp: new Date().toISOString(),
+        teamIds: { team1Id, team2Id },
+        fromCache: true // Flag to indicate this used cached market data
+      };
+
+      return res.status(200).json(response);
+    }
+
+    console.log(`📡 Cache MISS for marketIntelligence: ${normalizedSport} ${team1Id} vs ${team2Id} - fetching live`);
+
+    // No cache hit - fetch everything fresh from APIs
     const [marketIntelligence, teamStats, playerStats, gameData] = await Promise.all([
       getMarketIntelligenceDataTest(sport_type_odds, team1, team2, userLocale),
       getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
