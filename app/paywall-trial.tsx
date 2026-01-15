@@ -7,12 +7,14 @@ import {
   ActivityIndicator,
   Linking,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { GradientButton } from "../components/ui/GradientButton";
+import { IconButton } from "../components/ui/IconButton";
 import LottieView from "lottie-react-native";
 import { usePaywallActions } from "./hooks/usePaywallActions";
-import { Image } from "expo-image";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import i18n from "../i18n";
 
 export default function PaywallTrialScreen() {
@@ -44,11 +46,13 @@ export default function PaywallTrialScreen() {
   };
 
   const handlePurchase = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       setIsLoading(true);
       const result = await handlePromotionalOffer(selectedPackage);
 
       if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.push("/login");
       }
     } finally {
@@ -57,28 +61,16 @@ export default function PaywallTrialScreen() {
   };
 
   const handleClose = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.back();
   };
 
   return (
-    <ScreenBackground
-      hideBg={false}
-      imageStyle={{
-        width: "100%",
-        height: "100%",
-        resizeMode: "cover",
-        marginTop: 40,
-      }}
-      backgroundImage={require("../assets/images/giftbg.png")}
-    >
+    <ScreenBackground hideBg>
       <View style={styles.container}>
-        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-          <Image
-            source={require("../assets/images/close.png")}
-            style={styles.backIcon}
-            contentFit="contain"
-          />
-        </TouchableOpacity>
+        <View style={styles.closeButtonContainer}>
+          <IconButton icon="close" onPress={handleClose} size={28} />
+        </View>
 
         <View style={styles.header}>
           <View style={styles.tagContainer}>
@@ -117,7 +109,7 @@ export default function PaywallTrialScreen() {
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.primaryForeground} />
             ) : (
               i18n.t("paywallTrialContinue")
             )}
@@ -132,7 +124,7 @@ export default function PaywallTrialScreen() {
             <Text style={styles.linkDivider}>|</Text>
             <TouchableOpacity
               onPress={() =>
-                Linking.openURL("https://betaiapp.com/privacy.html")
+                Linking.openURL("https://betaiapp.com/privacy")
               }
             >
               <Text style={styles.linkText}>
@@ -141,7 +133,7 @@ export default function PaywallTrialScreen() {
             </TouchableOpacity>
             <Text style={styles.linkDivider}>|</Text>
             <TouchableOpacity
-              onPress={() => Linking.openURL("https://betaiapp.com/terms.html")}
+              onPress={() => Linking.openURL("https://betaiapp.com/terms")}
             >
               <Text style={styles.linkText}>
                 {i18n.t("paywallTrialTermsOfService")}
@@ -155,106 +147,91 @@ export default function PaywallTrialScreen() {
 }
 
 const styles = StyleSheet.create({
-  backIcon: {
-    width: 40,
-    height: 40,
-  },
   container: {
     flex: 1,
-    paddingVertical: 20,
-    paddingHorizontal: 15,
+    paddingVertical: spacing[5],
+    paddingHorizontal: spacing[4],
     paddingTop: 0,
   },
-  closeButton: {
+  closeButtonContainer: {
     width: "100%",
-    height: 40,
     alignItems: "flex-end",
-    justifyContent: "flex-end",
-  },
-  closeButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+    paddingTop: spacing[2],
   },
   header: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: spacing[5],
   },
   tagContainer: {
-    backgroundColor: "#070707",
-
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-    borderRadius: 30,
-    marginBottom: 38,
-    borderWidth: 0.5,
-    borderColor: "#7C7C7C",
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing[6],
+    paddingVertical: spacing[3],
+    borderRadius: borderRadius.full,
+    marginBottom: spacing[8],
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
   tag: {
-    color: "#FFFFFF",
-    fontSize: 19,
-    fontFamily: "Aeonik-Bold",
+    color: colors.primary,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
   },
   title: {
-    fontSize: 18,
-    color: "#FFFFFF",
+    fontSize: typography.sizes.lg,
+    color: colors.mutedForeground,
     textAlign: "center",
-    fontFamily: "Aeonik-Bold",
-    marginBottom: 28,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[6],
   },
   subtitle: {
-    fontSize: 34,
-    color: "#FFFFFF",
+    fontSize: typography.sizes["4xl"],
+    color: colors.foreground,
     textAlign: "center",
-    fontFamily: "Aeonik-Bold",
+    fontFamily: typography.fontFamily.bold,
   },
   giftContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  lottie: {
-    width: 200,
-    height: 200,
-  },
   footer: {
     alignItems: "center",
     marginTop: 0,
   },
   noChargeText: {
-    fontSize: 20,
-    color: "#FFFFFF",
-    fontFamily: "Aeonik-Bold",
-    marginBottom: 14,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
+    fontFamily: typography.fontFamily.bold,
+    marginBottom: spacing[3],
   },
   priceText: {
-    fontSize: 17,
-    color: "rgba(255, 255, 255, 0.6)",
-    fontFamily: "Aeonik-RegularItalic",
-    marginBottom: 32,
+    fontSize: typography.sizes.base,
+    color: colors.mutedForeground,
+    fontFamily: typography.fontFamily.light,
+    marginBottom: spacing[8],
   },
   priceHighlight: {
-    color: "#00C2E0",
-    fontFamily: "Aeonik-RegularItalic",
+    color: colors.primary,
+    fontFamily: typography.fontFamily.medium,
   },
   continueButton: {
     width: "100%",
-    marginBottom: 26,
+    marginBottom: spacing[6],
   },
   links: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 15,
+    marginBottom: spacing[4],
   },
   linkText: {
-    color: "#ffffff",
-    opacity: 0.5,
-    fontSize: 10,
-    padding: 8,
-    fontFamily: "Aeonik-Light",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    padding: spacing[2],
+    fontFamily: typography.fontFamily.light,
   },
   linkDivider: {
-    color: "rgba(255, 255, 255, 0.3)",
+    color: colors.muted,
     marginHorizontal: 4,
   },
 });

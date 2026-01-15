@@ -1,0 +1,4541 @@
+{
+    "sport": "nfl",
+    "teams": {
+        "home": "Baltimore Ravens",
+        "away": "Los Angeles Rams",
+        "logos": {
+            "home": "",
+            "away": ""
+        }
+    },
+    "marketIntelligence": {},
+    "teamStats": {
+        "team1": {
+            "teamId": 5,
+            "stats": {
+                "team": "Baltimore Ravens",
+                "season": "2025",
+                "offense": {
+                    "passing": {
+                        "yardsPerGame": 183,
+                        "totalYards": 1,
+                        "touchdowns": 10,
+                        "completions": 163,
+                        "attempts": 112,
+                        "completionPct": 0,
+                        "interceptions": 5,
+                        "sacks": 20,
+                        "sackedYards": 142
+                    },
+                    "rushing": {
+                        "yardsPerGame": 126.2,
+                        "totalYards": 757,
+                        "touchdowns": 6,
+                        "attempts": 142,
+                        "yardsPerRush": 5.3,
+                        "fumbles": 9,
+                        "fumblesLost": 5
+                    },
+                    "efficiency": {
+                        "thirdDownPct": 40.58,
+                        "fourthDownPct": 33.33,
+                        "totalFirstDowns": 103,
+                        "penaltyYards": 274,
+                        "penalties": 38
+                    }
+                },
+                "defense": {
+                    "passing": {
+                        "yardsAllowedPerGame": 246.7,
+                        "touchdownsAllowed": 14,
+                        "interceptions": 1,
+                        "sacks": 8
+                    },
+                    "rushing": {
+                        "yardsAllowedPerGame": 134.3,
+                        "touchdownsAllowed": 9,
+                        "fumblesRecovered": 2
+                    }
+                },
+                "specialTeams": {
+                    "fieldGoals": {
+                        "made": 9,
+                        "attempts": 10,
+                        "percentage": "90.0"
+                    }
+                },
+                "calculated": {
+                    "totalYardsPerGame": 309.2,
+                    "turnoverDifferential": -7,
+                    "pointsPerGame": 25.4,
+                    "opponentPointsPerGame": 25.1,
+                    "homeAverage": 30.3,
+                    "awayAverage": 21.6,
+                    "recentForm": "1-5",
+                    "momentum": "4L"
+                }
+            },
+            "error": null
+        },
+        "team2": {
+            "teamId": 31,
+            "stats": {
+                "team": "Los Angeles Rams",
+                "season": "2025",
+                "offense": {
+                    "passing": {
+                        "yardsPerGame": 256.7,
+                        "totalYards": 1,
+                        "touchdowns": 17,
+                        "completions": 243,
+                        "attempts": 160,
+                        "completionPct": 0,
+                        "interceptions": 2,
+                        "sacks": 11,
+                        "sackedYards": 69
+                    },
+                    "rushing": {
+                        "yardsPerGame": 103.4,
+                        "totalYards": 724,
+                        "touchdowns": 4,
+                        "attempts": 175,
+                        "yardsPerRush": 4.1,
+                        "fumbles": 8,
+                        "fumblesLost": 5
+                    },
+                    "efficiency": {
+                        "thirdDownPct": 37.66,
+                        "fourthDownPct": 66.67,
+                        "totalFirstDowns": 154,
+                        "penaltyYards": 314,
+                        "penalties": 38
+                    }
+                },
+                "defense": {
+                    "passing": {
+                        "yardsAllowedPerGame": 208.3,
+                        "touchdownsAllowed": 8,
+                        "interceptions": 4,
+                        "sacks": 26
+                    },
+                    "rushing": {
+                        "yardsAllowedPerGame": 105.9,
+                        "touchdownsAllowed": 2,
+                        "fumblesRecovered": 6
+                    }
+                },
+                "specialTeams": {
+                    "fieldGoals": {
+                        "made": 10,
+                        "attempts": 14,
+                        "percentage": "71.4"
+                    }
+                },
+                "calculated": {
+                    "totalYardsPerGame": 360.1,
+                    "turnoverDifferential": 3,
+                    "pointsPerGame": 24.8,
+                    "opponentPointsPerGame": 17,
+                    "homeAverage": 25.6,
+                    "awayAverage": 23.8,
+                    "recentForm": "5-1",
+                    "momentum": "3W"
+                }
+            },
+            "error": null
+        }
+    },
+    "playerStats": {
+        "team1": {
+            "teamId": 5,
+            "allPlayers": [
+                {
+                    "completion_pct": "71.6",
+                    "completions": "68",
+                    "id": "3917886",
+                    "interceptions": "1",
+                    "interceptions_pct": "",
+                    "longest_pass": "41",
+                    "name": "Lamar Jackson",
+                    "passing_attempts": "95",
+                    "passing_touchdowns": "10",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "130.5",
+                    "rank": "1",
+                    "sacked_yards_lost": "103",
+                    "sacks": "15",
+                    "yards": "869",
+                    "yards_per_game": "217.3",
+                    "yards_per_pass_avg": "9.1"
+                },
+                {
+                    "completion_pct": "65.4",
+                    "completions": "34",
+                    "id": "2974014",
+                    "interceptions": "4",
+                    "interceptions_pct": "",
+                    "longest_pass": "56",
+                    "name": "Cooper Rush",
+                    "passing_attempts": "52",
+                    "passing_touchdowns": "0",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "48.8",
+                    "rank": "2",
+                    "sacked_yards_lost": "16",
+                    "sacks": "1",
+                    "yards": "303",
+                    "yards_per_game": "75.8",
+                    "yards_per_pass_avg": "5.8"
+                },
+                {
+                    "completion_pct": "66.7",
+                    "completions": "10",
+                    "id": "4037170",
+                    "interceptions": "0",
+                    "interceptions_pct": "",
+                    "longest_pass": "18",
+                    "name": "Tyler Huntley",
+                    "passing_attempts": "15",
+                    "passing_touchdowns": "0",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "76.5",
+                    "rank": "3",
+                    "sacked_yards_lost": "23",
+                    "sacks": "4",
+                    "yards": "68",
+                    "yards_per_game": "68.0",
+                    "yards_per_pass_avg": "4.5"
+                },
+                {
+                    "completion_pct": "0.0",
+                    "completions": "0",
+                    "id": "3044577",
+                    "interceptions": "0",
+                    "interceptions_pct": "",
+                    "longest_pass": "0",
+                    "name": "Derrick Henry",
+                    "passing_attempts": "1",
+                    "passing_touchdowns": "0",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "39.6",
+                    "rank": "4",
+                    "sacked_yards_lost": "0",
+                    "sacks": "0",
+                    "yards": "0",
+                    "yards_per_game": "0.0",
+                    "yards_per_pass_avg": "0.0"
+                },
+                {
+                    "fumbles": "3",
+                    "fumbles_lost": "2",
+                    "id": "3044577",
+                    "longest_rush": "49",
+                    "name": "Derrick Henry",
+                    "over_20_yards": "4",
+                    "rank": "1",
+                    "rushing_attempts": "88",
+                    "rushing_first_downs": "20",
+                    "rushing_touchdowns": "4",
+                    "yards": "439",
+                    "yards_per_game": "73.2",
+                    "yards_per_rush_avg": "5.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "3917886",
+                    "longest_rush": "19",
+                    "name": "Lamar Jackson",
+                    "over_20_yards": "0",
+                    "rank": "2",
+                    "rushing_attempts": "21",
+                    "rushing_first_downs": "10",
+                    "rushing_touchdowns": "1",
+                    "yards": "166",
+                    "yards_per_game": "41.5",
+                    "yards_per_rush_avg": "7.9"
+                },
+                {
+                    "fumbles": "1",
+                    "fumbles_lost": "0",
+                    "id": "4039940",
+                    "longest_rush": "71",
+                    "name": "Justice Hill",
+                    "over_20_yards": "1",
+                    "rank": "3",
+                    "rushing_attempts": "15",
+                    "rushing_first_downs": "3",
+                    "rushing_touchdowns": "1",
+                    "yards": "88",
+                    "yards_per_game": "14.7",
+                    "yards_per_rush_avg": "5.9"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4037170",
+                    "longest_rush": "19",
+                    "name": "Tyler Huntley",
+                    "over_20_yards": "0",
+                    "rank": "4",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "2",
+                    "rushing_touchdowns": "0",
+                    "yards": "39",
+                    "yards_per_game": "39.0",
+                    "yards_per_rush_avg": "13.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4431114",
+                    "longest_rush": "8",
+                    "name": "Zay Flowers",
+                    "over_20_yards": "0",
+                    "rank": "5",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "12",
+                    "yards_per_game": "2.0",
+                    "yards_per_rush_avg": "4.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4597833",
+                    "longest_rush": "6",
+                    "name": "Keaton Mitchell",
+                    "over_20_yards": "0",
+                    "rank": "6",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "1",
+                    "rushing_touchdowns": "0",
+                    "yards": "8",
+                    "yards_per_game": "4.0",
+                    "yards_per_rush_avg": "2.7"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4691512",
+                    "longest_rush": "5",
+                    "name": "Rasheen Ali",
+                    "over_20_yards": "0",
+                    "rank": "7",
+                    "rushing_attempts": "1",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "5",
+                    "yards_per_game": "0.8",
+                    "yards_per_rush_avg": "5.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "3117864",
+                    "longest_rush": "2",
+                    "name": "Mark Andrews",
+                    "over_20_yards": "0",
+                    "rank": "8",
+                    "rushing_attempts": "4",
+                    "rushing_first_downs": "2",
+                    "rushing_touchdowns": "0",
+                    "yards": "4",
+                    "yards_per_game": "0.7",
+                    "yards_per_rush_avg": "1.0"
+                },
+                {
+                    "fumbles": "1",
+                    "fumbles_lost": "1",
+                    "id": "2974014",
+                    "longest_rush": "0",
+                    "name": "Cooper Rush",
+                    "over_20_yards": "0",
+                    "rank": "9",
+                    "rushing_attempts": "4",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "-4",
+                    "yards_per_game": "-1.0",
+                    "yards_per_rush_avg": "-1.0"
+                },
+                {
+                    "fumbles": "1",
+                    "fumbles_lost": "1",
+                    "id": "4431114",
+                    "longest_reception": "56",
+                    "name": "Zay Flowers",
+                    "over_20_yards": "6",
+                    "rank": "1",
+                    "receiving_first_downs": "16",
+                    "receiving_targets": "46",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "423",
+                    "receptions": "34",
+                    "yards_after_catch": "204",
+                    "yards_per_game": "70.5",
+                    "yards_per_reception_avg": "12.4"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "17294",
+                    "longest_reception": "41",
+                    "name": "DeAndre Hopkins",
+                    "over_20_yards": "4",
+                    "rank": "2",
+                    "receiving_first_downs": "8",
+                    "receiving_targets": "13",
+                    "receiving_touchdowns": "2",
+                    "receiving_yards": "178",
+                    "receptions": "9",
+                    "yards_after_catch": "29",
+                    "yards_per_game": "29.7",
+                    "yards_per_reception_avg": "19.8"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "3117864",
+                    "longest_reception": "27",
+                    "name": "Mark Andrews",
+                    "over_20_yards": "1",
+                    "rank": "3",
+                    "receiving_first_downs": "10",
+                    "receiving_targets": "27",
+                    "receiving_touchdowns": "2",
+                    "receiving_yards": "174",
+                    "receptions": "21",
+                    "yards_after_catch": "40",
+                    "yards_per_game": "29.0",
+                    "yards_per_reception_avg": "8.3"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4039940",
+                    "longest_reception": "37",
+                    "name": "Justice Hill",
+                    "over_20_yards": "1",
+                    "rank": "4",
+                    "receiving_first_downs": "4",
+                    "receiving_targets": "23",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "144",
+                    "receptions": "18",
+                    "yards_after_catch": "159",
+                    "yards_per_game": "24.0",
+                    "yards_per_reception_avg": "8.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4362438",
+                    "longest_reception": "24",
+                    "name": "Rashod Bateman",
+                    "over_20_yards": "2",
+                    "rank": "5",
+                    "receiving_first_downs": "7",
+                    "receiving_targets": "21",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "120",
+                    "receptions": "11",
+                    "yards_after_catch": "23",
+                    "yards_per_game": "20.0",
+                    "yards_per_reception_avg": "10.9"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4698381",
+                    "longest_reception": "34",
+                    "name": "Devontez Walker",
+                    "over_20_yards": "2",
+                    "rank": "6",
+                    "receiving_first_downs": "3",
+                    "receiving_targets": "3",
+                    "receiving_touchdowns": "2",
+                    "receiving_yards": "60",
+                    "receptions": "3",
+                    "yards_after_catch": "2",
+                    "yards_per_game": "12.0",
+                    "yards_per_reception_avg": "20.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "3044577",
+                    "longest_reception": "13",
+                    "name": "Derrick Henry",
+                    "over_20_yards": "0",
+                    "rank": "7",
+                    "receiving_first_downs": "1",
+                    "receiving_targets": "8",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "44",
+                    "receptions": "5",
+                    "yards_after_catch": "40",
+                    "yards_per_game": "7.3",
+                    "yards_per_reception_avg": "8.8"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4242923",
+                    "longest_reception": "15",
+                    "name": "Tylan Wallace",
+                    "over_20_yards": "0",
+                    "rank": "8",
+                    "receiving_first_downs": "3",
+                    "receiving_targets": "5",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "39",
+                    "receptions": "3",
+                    "yards_after_catch": "10",
+                    "yards_per_game": "6.5",
+                    "yards_per_reception_avg": "13.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4242762",
+                    "longest_reception": "15",
+                    "name": "Charlie Kolar",
+                    "over_20_yards": "0",
+                    "rank": "9",
+                    "receiving_first_downs": "2",
+                    "receiving_targets": "5",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "32",
+                    "receptions": "3",
+                    "yards_after_catch": "7",
+                    "yards_per_game": "5.3",
+                    "yards_per_reception_avg": "10.7"
+                },
+                {
+                    "fumbles": "1",
+                    "fumbles_lost": "0",
+                    "id": "4362549",
+                    "longest_reception": "12",
+                    "name": "Isaiah Likely",
+                    "over_20_yards": "0",
+                    "rank": "10",
+                    "receiving_first_downs": "1",
+                    "receiving_targets": "3",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "18",
+                    "receptions": "3",
+                    "yards_after_catch": "-1",
+                    "yards_per_game": "6.0",
+                    "yards_per_reception_avg": "6.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4597833",
+                    "longest_reception": "5",
+                    "name": "Keaton Mitchell",
+                    "over_20_yards": "0",
+                    "rank": "11",
+                    "receiving_first_downs": "0",
+                    "receiving_targets": "1",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "5",
+                    "receptions": "1",
+                    "yards_after_catch": "10",
+                    "yards_per_game": "2.5",
+                    "yards_per_reception_avg": "5.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4877505",
+                    "longest_reception": "3",
+                    "name": "Zaire Mitchell-Paden",
+                    "over_20_yards": "0",
+                    "rank": "12",
+                    "receiving_first_downs": "0",
+                    "receiving_targets": "2",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "3",
+                    "receptions": "1",
+                    "yards_after_catch": "0",
+                    "yards_per_game": "0.5",
+                    "yards_per_reception_avg": "3.0"
+                },
+                {
+                    "assisted_tackles": "26",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4699743",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Teddye Buchanan",
+                    "passes_defended": "0",
+                    "rank": "1",
+                    "sacks": "0.5",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "49",
+                    "unassisted_tackles": "23",
+                    "yards_lost_on_sack": "3"
+                },
+                {
+                    "assisted_tackles": "21",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4687029",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Malaki Starks",
+                    "passes_defended": "0",
+                    "rank": "2",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "39",
+                    "unassisted_tackles": "18",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "16",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4577016",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Kyle Hamilton",
+                    "passes_defended": "2",
+                    "rank": "3",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "35",
+                    "unassisted_tackles": "19",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "10",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "1",
+                    "fumbles_returned_for_touchdowns": "1",
+                    "id": "3916688",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Roquan Smith",
+                    "passes_defended": "0",
+                    "rank": "4",
+                    "sacks": "0",
+                    "tackles_for_loss": "4",
+                    "total_tackles": "34",
+                    "unassisted_tackles": "24",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "15",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4432330",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Trenton Simpson",
+                    "passes_defended": "1",
+                    "rank": "5",
+                    "sacks": "1.5",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "30",
+                    "unassisted_tackles": "15",
+                    "yards_lost_on_sack": "12"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4602777",
+                    "intercepted_returned_yards": "61",
+                    "interceptions": "1",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "61",
+                    "name": "Nate Wiggins",
+                    "passes_defended": "4",
+                    "rank": "6",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "19",
+                    "unassisted_tackles": "14",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "9",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3053600",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Chidobe Awuzie",
+                    "passes_defended": "1",
+                    "rank": "7",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "18",
+                    "unassisted_tackles": "9",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3127855",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Marlon Humphrey",
+                    "passes_defended": "2",
+                    "rank": "8",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "18",
+                    "unassisted_tackles": "16",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "8",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4691678",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Tavius Robinson",
+                    "passes_defended": "1",
+                    "rank": "9",
+                    "sacks": "2",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "9",
+                    "yards_lost_on_sack": "10"
+                },
+                {
+                    "assisted_tackles": "10",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4684687",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Mike Green",
+                    "passes_defended": "0",
+                    "rank": "10",
+                    "sacks": "0",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "7",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4695833",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Keyon Martin",
+                    "passes_defended": "0",
+                    "rank": "11",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "15",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4576982",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "T.J. Tampa",
+                    "passes_defended": "1",
+                    "rank": "12",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "15",
+                    "unassisted_tackles": "10",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "6",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "1",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "17345",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "John Jenkins",
+                    "passes_defended": "0",
+                    "rank": "13",
+                    "sacks": "1",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "15",
+                    "unassisted_tackles": "9",
+                    "yards_lost_on_sack": "9"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4362921",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Odafe Oweh",
+                    "passes_defended": "0",
+                    "rank": "14",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "10",
+                    "unassisted_tackles": "5",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4363638",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Travis Jones",
+                    "passes_defended": "0",
+                    "rank": "15",
+                    "sacks": "0",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "10",
+                    "unassisted_tackles": "6",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "6",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "18330",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Brent Urban",
+                    "passes_defended": "0",
+                    "rank": "16",
+                    "sacks": "0",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "9",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "5146441",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "CJ Okoye",
+                    "passes_defended": "0",
+                    "rank": "17",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "8",
+                    "unassisted_tackles": "5",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4036744",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Nnamdi Madubuike",
+                    "passes_defended": "0",
+                    "rank": "18",
+                    "sacks": "2",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "7",
+                    "unassisted_tackles": "5",
+                    "yards_lost_on_sack": "12"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "1",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4242749",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Jake Hummel",
+                    "passes_defended": "0",
+                    "rank": "19",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "7",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4040912",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Alohi Gilman",
+                    "passes_defended": "0",
+                    "rank": "20",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "7",
+                    "unassisted_tackles": "4",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "18271",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Kyle Van Noy",
+                    "passes_defended": "0",
+                    "rank": "21",
+                    "sacks": "1",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "6",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "8"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4694469",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Reuben Lowery III",
+                    "passes_defended": "0",
+                    "rank": "22",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "5",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3896928",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Jaire Alexander",
+                    "passes_defended": "0",
+                    "rank": "23",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "5",
+                    "unassisted_tackles": "4",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3917336",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Broderick Washington Jr.",
+                    "passes_defended": "1",
+                    "rank": "24",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "4",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4691512",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Rasheen Ali",
+                    "passes_defended": "0",
+                    "rank": "25",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "4",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "2981131",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Josh Tupou",
+                    "passes_defended": "0",
+                    "rank": "26",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4566849",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Jay Higgins IV",
+                    "passes_defended": "0",
+                    "rank": "27",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4242923",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Tylan Wallace",
+                    "passes_defended": "0",
+                    "rank": "28",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "2",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4566810",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Aeneas Peebles",
+                    "passes_defended": "1",
+                    "rank": "29",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "2",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4428006",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "David Ojabo",
+                    "passes_defended": "0",
+                    "rank": "30",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "2",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4699244",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Tyler Loop",
+                    "passes_defended": "0",
+                    "rank": "31",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "2",
+                    "unassisted_tackles": "2",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3117864",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Mark Andrews",
+                    "passes_defended": "0",
+                    "rank": "32",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "2",
+                    "unassisted_tackles": "2",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4879786",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Keondre Jackson",
+                    "passes_defended": "0",
+                    "rank": "33",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3041507",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Joseph Noteboom",
+                    "passes_defended": "0",
+                    "rank": "34",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3044577",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Derrick Henry",
+                    "passes_defended": "0",
+                    "rank": "35",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4362438",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Rashod Bateman",
+                    "passes_defended": "0",
+                    "rank": "36",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4242762",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Charlie Kolar",
+                    "passes_defended": "0",
+                    "rank": "37",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3917886",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Lamar Jackson",
+                    "passes_defended": "0",
+                    "rank": "38",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4431617",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Sanoussi Kane",
+                    "passes_defended": "0",
+                    "rank": "39",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4431114",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Zay Flowers",
+                    "passes_defended": "0",
+                    "rank": "40",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4698381",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Devontez Walker",
+                    "passes_defended": "0",
+                    "rank": "41",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "extra_points": "15",
+                    "field_goals": "9",
+                    "id": "4699244",
+                    "name": "Tyler Loop",
+                    "rank": "1",
+                    "receiving_touchdowns": "0",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "42",
+                    "total_points_per_game": "7.0",
+                    "total_touchdowns": "0",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "3044577",
+                    "name": "Derrick Henry",
+                    "rank": "2",
+                    "receiving_touchdowns": "0",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "4",
+                    "total_points": "24",
+                    "total_points_per_game": "4.0",
+                    "total_touchdowns": "4",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4039940",
+                    "name": "Justice Hill",
+                    "rank": "3",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "1",
+                    "total_points": "12",
+                    "total_points_per_game": "2.0",
+                    "total_touchdowns": "2",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "17294",
+                    "name": "DeAndre Hopkins",
+                    "rank": "4",
+                    "receiving_touchdowns": "2",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "12",
+                    "total_points_per_game": "2.0",
+                    "total_touchdowns": "2",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "3117864",
+                    "name": "Mark Andrews",
+                    "rank": "5",
+                    "receiving_touchdowns": "2",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "12",
+                    "total_points_per_game": "2.0",
+                    "total_touchdowns": "2",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4698381",
+                    "name": "Devontez Walker",
+                    "rank": "6",
+                    "receiving_touchdowns": "2",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "12",
+                    "total_points_per_game": "2.4",
+                    "total_touchdowns": "2",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4362438",
+                    "name": "Rashod Bateman",
+                    "rank": "7",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.0",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4242923",
+                    "name": "Tylan Wallace",
+                    "rank": "8",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.0",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "3917886",
+                    "name": "Lamar Jackson",
+                    "rank": "9",
+                    "receiving_touchdowns": "0",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "1",
+                    "total_points": "6",
+                    "total_points_per_game": "1.5",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4431114",
+                    "name": "Zay Flowers",
+                    "rank": "10",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.0",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                }
+            ],
+            "topPlayers": [
+                {
+                    "id": "3917886",
+                    "name": "Lamar Jackson",
+                    "position": "QB",
+                    "category": "Passing",
+                    "stats": {
+                        "passingYards": 869,
+                        "passingYardsPerGame": 217.3,
+                        "passingTouchdowns": 10,
+                        "completionPct": 71.6,
+                        "interceptions": 1,
+                        "qbRating": 130.5,
+                        "sacks": 15,
+                        "longestPass": 41,
+                        "attempts": 95,
+                        "completions": 68
+                    }
+                },
+                {
+                    "id": "3044577",
+                    "name": "Derrick Henry",
+                    "position": "RB",
+                    "category": "Rushing",
+                    "stats": {
+                        "rushingYards": 439,
+                        "rushingYardsPerGame": 73.2,
+                        "rushingTouchdowns": 4,
+                        "rushingAttempts": 88,
+                        "yardsPerRush": 5,
+                        "fumbles": 3,
+                        "fumblesLost": 2,
+                        "longestRush": 49,
+                        "over20Yards": 4,
+                        "firstDowns": 20
+                    }
+                },
+                {
+                    "id": "4431114",
+                    "name": "Zay Flowers",
+                    "position": "WR",
+                    "category": "Receiving",
+                    "stats": {
+                        "receivingYards": 423,
+                        "receivingYardsPerGame": 70.5,
+                        "receivingTouchdowns": 1,
+                        "receptions": 34,
+                        "targets": 46,
+                        "yardsPerReception": 12.4,
+                        "longestReception": 56,
+                        "over20Yards": 6,
+                        "yardsAfterCatch": 204,
+                        "firstDowns": 16
+                    }
+                }
+            ],
+            "playerCount": 76,
+            "error": null
+        },
+        "team2": {
+            "teamId": 31,
+            "allPlayers": [
+                {
+                    "completion_pct": "66.1",
+                    "completions": "160",
+                    "id": "13982",
+                    "interceptions": "2",
+                    "interceptions_pct": "",
+                    "longest_pass": "88",
+                    "name": "Matthew Stafford",
+                    "passing_attempts": "242",
+                    "passing_touchdowns": "17",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "109.3",
+                    "rank": "1",
+                    "sacked_yards_lost": "69",
+                    "sacks": "11",
+                    "yards": "1,866",
+                    "yards_per_game": "266.6",
+                    "yards_per_pass_avg": "7.7"
+                },
+                {
+                    "completion_pct": "0.0",
+                    "completions": "0",
+                    "id": "4567691",
+                    "interceptions": "0",
+                    "interceptions_pct": "",
+                    "longest_pass": "0",
+                    "name": "Joshua Karty",
+                    "passing_attempts": "1",
+                    "passing_touchdowns": "0",
+                    "passing_touchdowns_pct": "",
+                    "quaterback_rating": "39.6",
+                    "rank": "2",
+                    "sacked_yards_lost": "0",
+                    "sacks": "0",
+                    "yards": "0",
+                    "yards_per_game": "0.0",
+                    "yards_per_pass_avg": "0.0"
+                },
+                {
+                    "fumbles": "2",
+                    "fumbles_lost": "2",
+                    "id": "4432236",
+                    "longest_rush": "20",
+                    "name": "Kyren Williams",
+                    "over_20_yards": "1",
+                    "rank": "1",
+                    "rushing_attempts": "107",
+                    "rushing_first_downs": "29",
+                    "rushing_touchdowns": "2",
+                    "yards": "472",
+                    "yards_per_game": "67.4",
+                    "yards_per_rush_avg": "4.4"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4430595",
+                    "longest_rush": "15",
+                    "name": "Blake Corum",
+                    "over_20_yards": "0",
+                    "rank": "2",
+                    "rushing_attempts": "41",
+                    "rushing_first_downs": "12",
+                    "rushing_touchdowns": "1",
+                    "yards": "193",
+                    "yards_per_game": "27.6",
+                    "yards_per_rush_avg": "4.7"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4428014",
+                    "longest_rush": "45",
+                    "name": "Puka Nacua",
+                    "over_20_yards": "1",
+                    "rank": "3",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "1",
+                    "rushing_touchdowns": "1",
+                    "yards": "52",
+                    "yards_per_game": "8.7",
+                    "yards_per_rush_avg": "17.3"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4570881",
+                    "longest_rush": "6",
+                    "name": "Jordan Whittington",
+                    "over_20_yards": "0",
+                    "rank": "4",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "12",
+                    "yards_per_game": "1.7",
+                    "yards_per_rush_avg": "4.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4571536",
+                    "longest_rush": "0",
+                    "name": "Terrance Ferguson",
+                    "over_20_yards": "0",
+                    "rank": "5",
+                    "rushing_attempts": "1",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "0",
+                    "yards_per_game": "0.0",
+                    "yards_per_rush_avg": "0.0"
+                },
+                {
+                    "fumbles": "3",
+                    "fumbles_lost": "1",
+                    "id": "13982",
+                    "longest_rush": "6",
+                    "name": "Matthew Stafford",
+                    "over_20_yards": "0",
+                    "rank": "6",
+                    "rushing_attempts": "17",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "-2",
+                    "yards_per_game": "-0.3",
+                    "yards_per_rush_avg": "-0.1"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "18259",
+                    "longest_rush": "-1",
+                    "name": "Jimmy Garoppolo",
+                    "over_20_yards": "0",
+                    "rank": "7",
+                    "rushing_attempts": "3",
+                    "rushing_first_downs": "0",
+                    "rushing_touchdowns": "0",
+                    "yards": "-3",
+                    "yards_per_game": "-3.0",
+                    "yards_per_rush_avg": "-1.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4428014",
+                    "longest_reception": "31",
+                    "name": "Puka Nacua",
+                    "over_20_yards": "9",
+                    "rank": "1",
+                    "receiving_first_downs": "33",
+                    "receiving_targets": "65",
+                    "receiving_touchdowns": "2",
+                    "receiving_yards": "616",
+                    "receptions": "54",
+                    "yards_after_catch": "222",
+                    "yards_per_game": "102.7",
+                    "yards_per_reception_avg": "11.4"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "18299",
+                    "longest_reception": "44",
+                    "name": "Davante Adams",
+                    "over_20_yards": "8",
+                    "rank": "2",
+                    "receiving_first_downs": "23",
+                    "receiving_targets": "63",
+                    "receiving_touchdowns": "6",
+                    "receiving_yards": "431",
+                    "receptions": "31",
+                    "yards_after_catch": "69",
+                    "yards_per_game": "61.6",
+                    "yards_per_reception_avg": "13.9"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4432236",
+                    "longest_reception": "30",
+                    "name": "Kyren Williams",
+                    "over_20_yards": "1",
+                    "rank": "3",
+                    "receiving_first_downs": "8",
+                    "receiving_targets": "26",
+                    "receiving_touchdowns": "3",
+                    "receiving_yards": "166",
+                    "receptions": "20",
+                    "yards_after_catch": "89",
+                    "yards_per_game": "23.7",
+                    "yards_per_reception_avg": "8.3"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4362296",
+                    "longest_reception": "88",
+                    "name": "Tutu Atwell",
+                    "over_20_yards": "3",
+                    "rank": "4",
+                    "receiving_first_downs": "3",
+                    "receiving_targets": "9",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "164",
+                    "receptions": "4",
+                    "yards_after_catch": "61",
+                    "yards_per_game": "27.3",
+                    "yards_per_reception_avg": "41.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4570881",
+                    "longest_reception": "40",
+                    "name": "Jordan Whittington",
+                    "over_20_yards": "2",
+                    "rank": "5",
+                    "receiving_first_downs": "5",
+                    "receiving_targets": "17",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "121",
+                    "receptions": "12",
+                    "yards_after_catch": "58",
+                    "yards_per_game": "17.3",
+                    "yards_per_reception_avg": "10.1"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "2574900",
+                    "longest_reception": "24",
+                    "name": "Tyler Higbee",
+                    "over_20_yards": "2",
+                    "rank": "6",
+                    "receiving_first_downs": "7",
+                    "receiving_targets": "21",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "121",
+                    "receptions": "13",
+                    "yards_after_catch": "72",
+                    "yards_per_game": "20.2",
+                    "yards_per_reception_avg": "9.3"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4428052",
+                    "longest_reception": "20",
+                    "name": "Davis Allen",
+                    "over_20_yards": "1",
+                    "rank": "7",
+                    "receiving_first_downs": "5",
+                    "receiving_targets": "10",
+                    "receiving_touchdowns": "2",
+                    "receiving_yards": "59",
+                    "receptions": "8",
+                    "yards_after_catch": "22",
+                    "yards_per_game": "8.4",
+                    "yards_per_reception_avg": "7.4"
+                },
+                {
+                    "fumbles": "1",
+                    "fumbles_lost": "1",
+                    "id": "4244056",
+                    "longest_reception": "23",
+                    "name": "Colby Parkinson",
+                    "over_20_yards": "1",
+                    "rank": "8",
+                    "receiving_first_downs": "3",
+                    "receiving_targets": "8",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "58",
+                    "receptions": "7",
+                    "yards_after_catch": "29",
+                    "yards_per_game": "11.6",
+                    "yards_per_reception_avg": "8.3"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4571536",
+                    "longest_reception": "31",
+                    "name": "Terrance Ferguson",
+                    "over_20_yards": "2",
+                    "rank": "9",
+                    "receiving_first_downs": "2",
+                    "receiving_targets": "4",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "52",
+                    "receptions": "2",
+                    "yards_after_catch": "3",
+                    "yards_per_game": "10.4",
+                    "yards_per_reception_avg": "26.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4388043",
+                    "longest_reception": "36",
+                    "name": "Xavier Smith",
+                    "over_20_yards": "1",
+                    "rank": "10",
+                    "receiving_first_downs": "1",
+                    "receiving_targets": "4",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "51",
+                    "receptions": "3",
+                    "yards_after_catch": "7",
+                    "yards_per_game": "7.3",
+                    "yards_per_reception_avg": "17.0"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4430595",
+                    "longest_reception": "14",
+                    "name": "Blake Corum",
+                    "over_20_yards": "0",
+                    "rank": "11",
+                    "receiving_first_downs": "0",
+                    "receiving_targets": "8",
+                    "receiving_touchdowns": "0",
+                    "receiving_yards": "15",
+                    "receptions": "4",
+                    "yards_after_catch": "21",
+                    "yards_per_game": "2.1",
+                    "yards_per_reception_avg": "3.8"
+                },
+                {
+                    "fumbles": "0",
+                    "fumbles_lost": "0",
+                    "id": "4712354",
+                    "longest_reception": "7",
+                    "name": "Konata Mumpfield",
+                    "over_20_yards": "0",
+                    "rank": "12",
+                    "receiving_first_downs": "2",
+                    "receiving_targets": "3",
+                    "receiving_touchdowns": "1",
+                    "receiving_yards": "12",
+                    "receptions": "2",
+                    "yards_after_catch": "7",
+                    "yards_per_game": "1.7",
+                    "yards_per_reception_avg": "6.0"
+                },
+                {
+                    "assisted_tackles": "34",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "2",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4244680",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Nate Landman",
+                    "passes_defended": "4",
+                    "rank": "1",
+                    "sacks": "1.5",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "67",
+                    "unassisted_tackles": "33",
+                    "yards_lost_on_sack": "3"
+                },
+                {
+                    "assisted_tackles": "19",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4243653",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "2",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Kam Curl",
+                    "passes_defended": "4",
+                    "rank": "2",
+                    "sacks": "1",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "57",
+                    "unassisted_tackles": "38",
+                    "yards_lost_on_sack": "2"
+                },
+                {
+                    "assisted_tackles": "21",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "1",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4250627",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "1",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Quentin Lake",
+                    "passes_defended": "9",
+                    "rank": "3",
+                    "sacks": "1",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "45",
+                    "unassisted_tackles": "24",
+                    "yards_lost_on_sack": "13"
+                },
+                {
+                    "assisted_tackles": "15",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4876695",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Byron Young",
+                    "passes_defended": "0",
+                    "rank": "4",
+                    "sacks": "9",
+                    "tackles_for_loss": "9",
+                    "total_tackles": "39",
+                    "unassisted_tackles": "24",
+                    "yards_lost_on_sack": "49"
+                },
+                {
+                    "assisted_tackles": "13",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4597862",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Kamren Kinchens",
+                    "passes_defended": "3",
+                    "rank": "5",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "36",
+                    "unassisted_tackles": "23",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "12",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "3",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4579584",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Jared Verse",
+                    "passes_defended": "0",
+                    "rank": "6",
+                    "sacks": "4",
+                    "tackles_for_loss": "7",
+                    "total_tackles": "30",
+                    "unassisted_tackles": "18",
+                    "yards_lost_on_sack": "24"
+                },
+                {
+                    "assisted_tackles": "10",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4430049",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Omar Speights",
+                    "passes_defended": "0",
+                    "rank": "7",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "26",
+                    "unassisted_tackles": "16",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "13",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "1",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4569716",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Tyler Davis",
+                    "passes_defended": "0",
+                    "rank": "8",
+                    "sacks": "1",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "23",
+                    "unassisted_tackles": "10",
+                    "yards_lost_on_sack": "12"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4428619",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Jaylen McCollough",
+                    "passes_defended": "1",
+                    "rank": "9",
+                    "sacks": "2",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "22",
+                    "unassisted_tackles": "17",
+                    "yards_lost_on_sack": "22"
+                },
+                {
+                    "assisted_tackles": "12",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3126613",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Poona Ford",
+                    "passes_defended": "0",
+                    "rank": "10",
+                    "sacks": "1",
+                    "tackles_for_loss": "3",
+                    "total_tackles": "18",
+                    "unassisted_tackles": "6",
+                    "yards_lost_on_sack": "8"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "1",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4431266",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Emmanuel Forbes Jr.",
+                    "passes_defended": "2",
+                    "rank": "11",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "13",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4695347",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Shaun Dolac",
+                    "passes_defended": "0",
+                    "rank": "12",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "12",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "9",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4252120",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Kobie Turner",
+                    "passes_defended": "1",
+                    "rank": "13",
+                    "sacks": "1.5",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "8",
+                    "yards_lost_on_sack": "11"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4386048",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "1",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Cobie Durant",
+                    "passes_defended": "2",
+                    "rank": "14",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "17",
+                    "unassisted_tackles": "13",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "4",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4241332",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Darious Williams",
+                    "passes_defended": "7",
+                    "rank": "15",
+                    "sacks": "0",
+                    "tackles_for_loss": "1",
+                    "total_tackles": "14",
+                    "unassisted_tackles": "10",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "3",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3117676",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Troy Reeder",
+                    "passes_defended": "1",
+                    "rank": "16",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "12",
+                    "unassisted_tackles": "9",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "6",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "1",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4363744",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Braden Fiske",
+                    "passes_defended": "1",
+                    "rank": "17",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "10",
+                    "unassisted_tackles": "4",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4684482",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Josaiah Stewart",
+                    "passes_defended": "2",
+                    "rank": "18",
+                    "sacks": "2",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "8",
+                    "unassisted_tackles": "6",
+                    "yards_lost_on_sack": "13"
+                },
+                {
+                    "assisted_tackles": "5",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4432617",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Ty Hamilton",
+                    "passes_defended": "0",
+                    "rank": "19",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "5",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4573870",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Josh Wallace",
+                    "passes_defended": "0",
+                    "rank": "20",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "4",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4362272",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Nick Hampton",
+                    "passes_defended": "0",
+                    "rank": "21",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "2",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4388043",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Xavier Smith",
+                    "passes_defended": "0",
+                    "rank": "22",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4241622",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Larrell Murchison",
+                    "passes_defended": "0",
+                    "rank": "23",
+                    "sacks": "2",
+                    "tackles_for_loss": "2",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "2",
+                    "yards_lost_on_sack": "15"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "3124129",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Ahkello Witherspoon",
+                    "passes_defended": "1",
+                    "rank": "24",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "3",
+                    "unassisted_tackles": "3",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "1",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4245044",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Alex Ward",
+                    "passes_defended": "0",
+                    "rank": "25",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "0",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "18299",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Davante Adams",
+                    "passes_defended": "0",
+                    "rank": "26",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4363973",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Steve Avila",
+                    "passes_defended": "0",
+                    "rank": "27",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "5127374",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Ethan Evans",
+                    "passes_defended": "0",
+                    "rank": "28",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "assisted_tackles": "0",
+                    "blocked_kicks": "0",
+                    "forced_fumbles": "0",
+                    "fumbles_recovered": "0",
+                    "fumbles_returned_for_touchdowns": "0",
+                    "id": "4567691",
+                    "intercepted_returned_yards": "0",
+                    "interceptions": "0",
+                    "interceptions_returned_for_touchdowns": "0",
+                    "longest_interception_return": "0",
+                    "name": "Joshua Karty",
+                    "passes_defended": "0",
+                    "rank": "29",
+                    "sacks": "0",
+                    "tackles_for_loss": "0",
+                    "total_tackles": "1",
+                    "unassisted_tackles": "1",
+                    "yards_lost_on_sack": "0"
+                },
+                {
+                    "extra_points": "19",
+                    "field_goals": "10",
+                    "id": "4567691",
+                    "name": "Joshua Karty",
+                    "rank": "1",
+                    "receiving_touchdowns": "0",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "49",
+                    "total_points_per_game": "7.0",
+                    "total_touchdowns": "0",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "18299",
+                    "name": "Davante Adams",
+                    "rank": "2",
+                    "receiving_touchdowns": "6",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "36",
+                    "total_points_per_game": "5.1",
+                    "total_touchdowns": "6",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4432236",
+                    "name": "Kyren Williams",
+                    "rank": "3",
+                    "receiving_touchdowns": "3",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "2",
+                    "total_points": "30",
+                    "total_points_per_game": "4.3",
+                    "total_touchdowns": "5",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4428014",
+                    "name": "Puka Nacua",
+                    "rank": "4",
+                    "receiving_touchdowns": "2",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "1",
+                    "total_points": "18",
+                    "total_points_per_game": "3.0",
+                    "total_touchdowns": "3",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4428052",
+                    "name": "Davis Allen",
+                    "rank": "5",
+                    "receiving_touchdowns": "2",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "12",
+                    "total_points_per_game": "1.7",
+                    "total_touchdowns": "2",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4712354",
+                    "name": "Konata Mumpfield",
+                    "rank": "6",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "0.9",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4362296",
+                    "name": "Tutu Atwell",
+                    "rank": "7",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.0",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4430595",
+                    "name": "Blake Corum",
+                    "rank": "8",
+                    "receiving_touchdowns": "0",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "1",
+                    "total_points": "6",
+                    "total_points_per_game": "0.9",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "4571536",
+                    "name": "Terrance Ferguson",
+                    "rank": "9",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.2",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                },
+                {
+                    "extra_points": "0",
+                    "field_goals": "0",
+                    "id": "2574900",
+                    "name": "Tyler Higbee",
+                    "rank": "10",
+                    "receiving_touchdowns": "1",
+                    "return_touchdowns": "0",
+                    "rushing_touchdowns": "0",
+                    "total_points": "6",
+                    "total_points_per_game": "1.0",
+                    "total_touchdowns": "1",
+                    "two_point_conversions": "0"
+                }
+            ],
+            "topPlayers": [
+                {
+                    "id": "13982",
+                    "name": "Matthew Stafford",
+                    "position": "QB",
+                    "category": "Passing",
+                    "stats": {
+                        "passingYards": 1866,
+                        "passingYardsPerGame": 266.6,
+                        "passingTouchdowns": 17,
+                        "completionPct": 66.1,
+                        "interceptions": 2,
+                        "qbRating": 109.3,
+                        "sacks": 11,
+                        "longestPass": 88,
+                        "attempts": 242,
+                        "completions": 160
+                    }
+                },
+                {
+                    "id": "4432236",
+                    "name": "Kyren Williams",
+                    "position": "RB",
+                    "category": "Rushing",
+                    "stats": {
+                        "rushingYards": 472,
+                        "rushingYardsPerGame": 67.4,
+                        "rushingTouchdowns": 2,
+                        "rushingAttempts": 107,
+                        "yardsPerRush": 4.4,
+                        "fumbles": 2,
+                        "fumblesLost": 2,
+                        "longestRush": 20,
+                        "over20Yards": 1,
+                        "firstDowns": 29
+                    }
+                },
+                {
+                    "id": "4428014",
+                    "name": "Puka Nacua",
+                    "position": "WR",
+                    "category": "Receiving",
+                    "stats": {
+                        "receivingYards": 616,
+                        "receivingYardsPerGame": 102.7,
+                        "receivingTouchdowns": 2,
+                        "receptions": 54,
+                        "targets": 65,
+                        "yardsPerReception": 11.4,
+                        "longestReception": 31,
+                        "over20Yards": 9,
+                        "yardsAfterCatch": 222,
+                        "firstDowns": 33
+                    }
+                }
+            ],
+            "playerCount": 60,
+            "error": null
+        }
+    },
+    "gameData": {
+        "team1_last10games": {
+            "winLossRecord": {
+                "record": "1-5",
+                "pattern": "(L-L-L-L-W-L)"
+            },
+            "last10Games": [
+                {
+                    "game": {
+                        "id": 17400,
+                        "stage": "Regular Season",
+                        "week": "Week 6",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-10-12",
+                            "time": "17:00",
+                            "timestamp": 1760288400
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 14,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 17
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 0,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 3
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17385,
+                        "stage": "Regular Season",
+                        "week": "Week 5",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-10-05",
+                            "time": "17:00",
+                            "timestamp": 1759683600
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 26,
+                            "name": "Houston Texans",
+                            "logo": "https://media.api-sports.io/american-football/teams/26.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 17,
+                            "quarter_3": 10,
+                            "quarter_4": 10,
+                            "overtime": null,
+                            "total": 44
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 0,
+                            "quarter_3": 7,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 10
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17373,
+                        "stage": "Regular Season",
+                        "week": "Week 4",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-28",
+                            "time": "20:25",
+                            "timestamp": 1759091100
+                        },
+                        "venue": {
+                            "name": "GEHA Field at Arrowhead Stadium",
+                            "city": "Kansas City"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        },
+                        "away": {
+                            "id": 17,
+                            "name": "Kansas City Chiefs",
+                            "logo": "https://media.api-sports.io/american-football/teams/17.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 3,
+                            "quarter_3": 3,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 20
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 17,
+                            "quarter_3": 10,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 37
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17361,
+                        "stage": "Regular Season",
+                        "week": "Week 3",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-23",
+                            "time": "00:15",
+                            "timestamp": 1758586500
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 7,
+                            "name": "Detroit Lions",
+                            "logo": "https://media.api-sports.io/american-football/teams/7.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 7,
+                            "quarter_3": 7,
+                            "quarter_4": 17,
+                            "overtime": null,
+                            "total": 38
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 7,
+                            "quarter_3": 7,
+                            "quarter_4": 9,
+                            "overtime": null,
+                            "total": 30
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17339,
+                        "stage": "Regular Season",
+                        "week": "Week 2",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-14",
+                            "time": "17:00",
+                            "timestamp": 1757869200
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 9,
+                            "name": "Cleveland Browns",
+                            "logo": "https://media.api-sports.io/american-football/teams/9.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 7,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 17
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 7,
+                            "quarter_3": 10,
+                            "quarter_4": 21,
+                            "overtime": null,
+                            "total": 41
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17328,
+                        "stage": "Regular Season",
+                        "week": "Week 1",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-08",
+                            "time": "00:20",
+                            "timestamp": 1757290800
+                        },
+                        "venue": {
+                            "name": "Highmark Stadium",
+                            "city": "Orchard Park"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        },
+                        "away": {
+                            "id": 20,
+                            "name": "Buffalo Bills",
+                            "logo": "https://media.api-sports.io/american-football/teams/20.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 3,
+                            "quarter_2": 17,
+                            "quarter_3": 14,
+                            "quarter_4": 6,
+                            "overtime": null,
+                            "total": 40
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 6,
+                            "quarter_3": 6,
+                            "quarter_4": 22,
+                            "overtime": null,
+                            "total": 41
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 19202,
+                        "stage": "Pre Season",
+                        "week": "Week 3",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-23",
+                            "time": "16:00",
+                            "timestamp": 1755964800
+                        },
+                        "venue": {
+                            "name": "Northwest Stadium",
+                            "city": "Landover"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        },
+                        "away": {
+                            "id": 18,
+                            "name": "Washington Commanders",
+                            "logo": "https://media.api-sports.io/american-football/teams/18.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 20,
+                            "quarter_3": 0,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 30
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 3
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17296,
+                        "stage": "Pre Season",
+                        "week": "Week 2",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-16",
+                            "time": "23:00",
+                            "timestamp": 1755385200
+                        },
+                        "venue": {
+                            "name": "AT&T Stadium",
+                            "city": "Arlington"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        },
+                        "away": {
+                            "id": 29,
+                            "name": "Dallas Cowboys",
+                            "logo": "https://media.api-sports.io/american-football/teams/29.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 5,
+                            "quarter_2": 13,
+                            "quarter_3": 3,
+                            "quarter_4": 10,
+                            "overtime": null,
+                            "total": 31
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 0,
+                            "quarter_3": 3,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 13
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17280,
+                        "stage": "Pre Season",
+                        "week": "Week 1",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-07",
+                            "time": "23:00",
+                            "timestamp": 1754607600
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 21,
+                            "name": "Indianapolis Colts",
+                            "logo": "https://media.api-sports.io/american-football/teams/21.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 6,
+                            "quarter_2": 3,
+                            "quarter_3": 7,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 16
+                        },
+                        "away": {
+                            "quarter_1": 14,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 24
+                        }
+                    }
+                }
+            ],
+            "upcomingGame": null,
+            "error": null
+        },
+        "team2_last10games": {
+            "winLossRecord": {
+                "record": "5-1",
+                "pattern": "(W-W-W-L-W-W)"
+            },
+            "last10Games": [
+                {
+                    "game": {
+                        "id": 17408,
+                        "stage": "Regular Season",
+                        "week": "Week 7",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-10-19",
+                            "time": "13:30",
+                            "timestamp": 1760880600
+                        },
+                        "venue": {
+                            "name": "Wembley Stadium",
+                            "city": "London"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 2,
+                            "name": "Jacksonville Jaguars",
+                            "logo": "https://media.api-sports.io/american-football/teams/2.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 14,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 14,
+                            "overtime": null,
+                            "total": 35
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 0,
+                            "quarter_3": 0,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 7
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17400,
+                        "stage": "Regular Season",
+                        "week": "Week 6",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-10-12",
+                            "time": "17:00",
+                            "timestamp": 1760288400
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 14,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 17
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 0,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 3
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17371,
+                        "stage": "Regular Season",
+                        "week": "Week 4",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-28",
+                            "time": "20:05",
+                            "timestamp": 1759089900
+                        },
+                        "venue": {
+                            "name": "SoFi Stadium",
+                            "city": "Inglewood"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 21,
+                            "name": "Indianapolis Colts",
+                            "logo": "https://media.api-sports.io/american-football/teams/21.png"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 3,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 10,
+                            "overtime": null,
+                            "total": 20
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 10,
+                            "quarter_3": 0,
+                            "quarter_4": 14,
+                            "overtime": null,
+                            "total": 27
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17351,
+                        "stage": "Regular Season",
+                        "week": "Week 3",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-21",
+                            "time": "17:00",
+                            "timestamp": 1758474000
+                        },
+                        "venue": {
+                            "name": "Lincoln Financial Field",
+                            "city": "Philadelphia"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 12,
+                            "name": "Philadelphia Eagles",
+                            "logo": "https://media.api-sports.io/american-football/teams/12.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 10,
+                            "quarter_2": 9,
+                            "quarter_3": 7,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 26
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 0,
+                            "quarter_3": 14,
+                            "quarter_4": 12,
+                            "overtime": null,
+                            "total": 33
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17334,
+                        "stage": "Regular Season",
+                        "week": "Week 2",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-14",
+                            "time": "17:00",
+                            "timestamp": 1757869200
+                        },
+                        "venue": {
+                            "name": "Nissan Stadium",
+                            "city": "Nashville"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 6,
+                            "name": "Tennessee Titans",
+                            "logo": "https://media.api-sports.io/american-football/teams/6.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 3,
+                            "quarter_3": 10,
+                            "quarter_4": 13,
+                            "overtime": null,
+                            "total": 33
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 13,
+                            "quarter_3": 3,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 19
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17327,
+                        "stage": "Regular Season",
+                        "week": "Week 1",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-09-07",
+                            "time": "20:25",
+                            "timestamp": 1757276700
+                        },
+                        "venue": {
+                            "name": "SoFi Stadium",
+                            "city": "Inglewood"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 26,
+                            "name": "Houston Texans",
+                            "logo": "https://media.api-sports.io/american-football/teams/26.png"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 3,
+                            "quarter_2": 6,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 9
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 7,
+                            "quarter_3": 7,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 14
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17310,
+                        "stage": "Pre Season",
+                        "week": "Week 3",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-23",
+                            "time": "17:00",
+                            "timestamp": 1755968400
+                        },
+                        "venue": {
+                            "name": "Huntington Bank Field",
+                            "city": "Cleveland"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        },
+                        "away": {
+                            "id": 9,
+                            "name": "Cleveland Browns",
+                            "logo": "https://media.api-sports.io/american-football/teams/9.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 7,
+                            "quarter_3": 3,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 17
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 9,
+                            "quarter_3": 0,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 19
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17297,
+                        "stage": "Pre Season",
+                        "week": "Week 2",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-16",
+                            "time": "23:00",
+                            "timestamp": 1755385200
+                        },
+                        "venue": {
+                            "name": "SoFi Stadium",
+                            "city": "Inglewood"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 30,
+                            "name": "Los Angeles Chargers",
+                            "logo": "https://media.api-sports.io/american-football/teams/30.png"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 3,
+                            "quarter_2": 6,
+                            "quarter_3": 6,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 22
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 0,
+                            "quarter_3": 10,
+                            "quarter_4": 6,
+                            "overtime": null,
+                            "total": 23
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17286,
+                        "stage": "Pre Season",
+                        "week": "Week 1",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-08-09",
+                            "time": "23:00",
+                            "timestamp": 1754780400
+                        },
+                        "venue": {
+                            "name": "SoFi Stadium",
+                            "city": "Inglewood"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 29,
+                            "name": "Dallas Cowboys",
+                            "logo": "https://media.api-sports.io/american-football/teams/29.png"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 6,
+                            "quarter_3": 0,
+                            "quarter_4": 15,
+                            "overtime": null,
+                            "total": 21
+                        },
+                        "away": {
+                            "quarter_1": 14,
+                            "quarter_2": 0,
+                            "quarter_3": 3,
+                            "quarter_4": 14,
+                            "overtime": null,
+                            "total": 31
+                        }
+                    }
+                }
+            ],
+            "upcomingGame": null,
+            "error": null
+        },
+        "h2h_games": {
+            "h2hGames": [
+                {
+                    "game": {
+                        "id": 59,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2010-09-03",
+                            "time": "00:00",
+                            "timestamp": 1283472000
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2010",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 14,
+                            "quarter_2": 3,
+                            "quarter_3": 3,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 27
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 7,
+                            "quarter_3": 7,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 21
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 432,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2011-09-25",
+                            "time": "20:05",
+                            "timestamp": 1316981100
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2011",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 0,
+                            "quarter_3": 7,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 7
+                        },
+                        "away": {
+                            "quarter_1": 21,
+                            "quarter_2": 6,
+                            "quarter_3": 3,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 37
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 715,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2012-08-30",
+                            "time": "23:00",
+                            "timestamp": 1346367600
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2012",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 14,
+                            "quarter_2": 7,
+                            "quarter_3": 7,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 31
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 0,
+                            "quarter_3": 10,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 17
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 1049,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2013-08-30",
+                            "time": "00:00",
+                            "timestamp": 1377820800
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2013",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 3,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 14,
+                            "overtime": null,
+                            "total": 24
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 21
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 1869,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2015-11-22",
+                            "time": "18:00",
+                            "timestamp": 1448215200
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2015",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 0,
+                            "quarter_4": 13,
+                            "overtime": null,
+                            "total": 16
+                        },
+                        "away": {
+                            "quarter_1": 7,
+                            "quarter_2": 0,
+                            "quarter_3": 6,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 13
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 2650,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2018-08-09",
+                            "time": "22:30",
+                            "timestamp": 1533853800
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2018",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 17,
+                            "quarter_2": 6,
+                            "quarter_3": 3,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 33
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 0,
+                            "quarter_3": 0,
+                            "quarter_4": 7,
+                            "overtime": null,
+                            "total": 7
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 3209,
+                        "stage": null,
+                        "week": null,
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2019-11-26",
+                            "time": "01:15",
+                            "timestamp": 1574730900
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2019",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 6,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 6
+                        },
+                        "away": {
+                            "quarter_1": 14,
+                            "quarter_2": 14,
+                            "quarter_3": 7,
+                            "quarter_4": 10,
+                            "overtime": null,
+                            "total": 45
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 3867,
+                        "stage": "Regular Season",
+                        "week": "Week 17",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2022-01-02",
+                            "time": "18:00",
+                            "timestamp": 1641146400
+                        },
+                        "venue": {
+                            "name": null,
+                            "city": null
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2021",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 5,
+                            "name": "Baltimore Ravens"
+                        },
+                        "away": {
+                            "id": 31,
+                            "name": "Los Angeles Rams",
+                            "logo": "https://media.api-sports.io/american-football/teams/31.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 7,
+                            "quarter_2": 6,
+                            "quarter_3": 3,
+                            "quarter_4": 3,
+                            "overtime": null,
+                            "total": 19
+                        },
+                        "away": {
+                            "quarter_1": 0,
+                            "quarter_2": 7,
+                            "quarter_3": 0,
+                            "quarter_4": 13,
+                            "overtime": null,
+                            "total": 20
+                        }
+                    }
+                },
+                {
+                    "game": {
+                        "id": 17400,
+                        "stage": "Regular Season",
+                        "week": "Week 6",
+                        "date": {
+                            "timezone": "UTC",
+                            "date": "2025-10-12",
+                            "time": "17:00",
+                            "timestamp": 1760288400
+                        },
+                        "venue": {
+                            "name": "M&T Bank Stadium",
+                            "city": "Baltimore"
+                        },
+                        "status": {
+                            "short": "FT",
+                            "long": "Finished",
+                            "timer": null
+                        }
+                    },
+                    "league": {
+                        "id": 1,
+                        "name": "NFL",
+                        "season": "2025",
+                        "logo": "https://media.api-sports.io/american-football/leagues/1.png",
+                        "country": {
+                            "name": "USA",
+                            "code": "US",
+                            "flag": "https://media.api-sports.io/flags/us.svg"
+                        }
+                    },
+                    "teams": {
+                        "home": {
+                            "id": 31,
+                            "name": "Los Angeles Rams"
+                        },
+                        "away": {
+                            "id": 5,
+                            "name": "Baltimore Ravens",
+                            "logo": "https://media.api-sports.io/american-football/teams/5.png"
+                        }
+                    },
+                    "scores": {
+                        "home": {
+                            "quarter_1": 0,
+                            "quarter_2": 3,
+                            "quarter_3": 14,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 17
+                        },
+                        "away": {
+                            "quarter_1": 3,
+                            "quarter_2": 0,
+                            "quarter_3": 0,
+                            "quarter_4": 0,
+                            "overtime": null,
+                            "total": 3
+                        }
+                    }
+                }
+            ],
+            "h2hRecord": {
+                "record": "3-3",
+                "pattern": "(L-W-L-L-W-W)"
+            },
+            "error": null
+        },
+        "team1_injuries": {
+            "injuries": [
+                {
+                    "player": "Marlon Humphrey",
+                    "injury": "Questionable",
+                    "reason": "Illness - Did Not Practice on Wednesday. Questionable for Week 8 vs. Chicago",
+                    "date": "2025-10-22"
+                },
+                {
+                    "player": "Kyle Hamilton",
+                    "injury": "Questionable",
+                    "reason": "Groin - Limited Practice on Wednesday. Questionable for Week 8 vs. Chicago",
+                    "date": "2025-10-22"
+                },
+                {
+                    "player": "Tavius Robinson",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Foot",
+                    "date": "2025-10-22"
+                },
+                {
+                    "player": "Lamar Jackson",
+                    "injury": "Questionable",
+                    "reason": "Hamstring - Limited Practice on Wednesday. Questionable for Week 8 vs. Chicago",
+                    "date": "2025-10-13"
+                },
+                {
+                    "player": "Adisa Isaac",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Elbow",
+                    "date": "2025-10-12"
+                },
+                {
+                    "player": "Robert Longerbeam",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Knee",
+                    "date": "2025-10-01"
+                },
+                {
+                    "player": "Bilhal Kone",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Knee",
+                    "date": "2025-10-01"
+                },
+                {
+                    "player": "Dayton Wade",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Ribs",
+                    "date": "2025-10-01"
+                },
+                {
+                    "player": "Justin Madubuike",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Neck",
+                    "date": "2025-09-29"
+                }
+            ],
+            "error": null
+        },
+        "team2_injuries": {
+            "injuries": [
+                {
+                    "player": "Puka Nacua",
+                    "injury": "Questionable",
+                    "reason": "Ankle - Questionable for Week 9 vs. New Orleans",
+                    "date": "2025-10-20"
+                },
+                {
+                    "player": "Rob Havenstein",
+                    "injury": "Questionable",
+                    "reason": "Ankle - Questionable for Week 9 vs. New Orleans",
+                    "date": "2025-10-20"
+                },
+                {
+                    "player": "Kamren Kinchens",
+                    "injury": "Questionable",
+                    "reason": "Toe - Questionable for Week 9 vs. New Orleans",
+                    "date": "2025-10-19"
+                },
+                {
+                    "player": "Ahkello Witherspoon",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Collarbone",
+                    "date": "2025-10-01"
+                },
+                {
+                    "player": "Keir Thomas",
+                    "injury": "I.L.",
+                    "reason": "I.L. - Undisclosed",
+                    "date": "2025-10-01"
+                }
+            ],
+            "error": null
+        },
+        "upcomingGame": null
+    },
+    "timestamp": "2025-10-24T16:50:39.261Z",
+    "teamIds": {
+        "team1Id": 5,
+        "team2Id": 31
+    }
+}

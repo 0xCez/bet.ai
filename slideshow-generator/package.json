@@ -1,0 +1,20 @@
+{
+  "name": "slideshow-generator",
+  "version": "1.0.0",
+  "description": "Generate TARGET/AVOID slideshow posts for player props",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "npx ts-node test.ts",
+    "dev": "ts-node test.ts"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}

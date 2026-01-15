@@ -2,12 +2,14 @@ import React from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
+import { colors, borderRadius } from "../../constants/designTokens";
 
 export interface AnalysisHistoryItemProps {
   teams: string;
@@ -27,7 +29,10 @@ export function AnalysisHistoryItem({
   isDeleting,
 }: AnalysisHistoryItemProps) {
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
+    <Pressable style={styles.container} onPress={() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
+    }}>
       <View style={styles.imageContainer}>
         {imageUrl ? (
           <Image
@@ -41,27 +46,27 @@ export function AnalysisHistoryItem({
         )}
 
         {onDelete && (
-          <TouchableOpacity
-            style={styles.deleteButton}
+          <Pressable
+            style={({ pressed }) => [
+              styles.deleteButton,
+              pressed && styles.deleteButtonPressed,
+            ]}
             onPress={(e) => {
               e.stopPropagation();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               onDelete();
             }}
             disabled={isDeleting}
           >
             {isDeleting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Image
-                source={require("../../assets/images/delete.png")}
-                style={styles.deleteIcon}
-                contentFit="contain"
-              />
+              <Ionicons name="trash-outline" size={20} color={colors.primary} />
             )}
-          </TouchableOpacity>
+          </Pressable>
         )}
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -75,8 +80,8 @@ const styles = StyleSheet.create({
   container: {
     width: "48%",
     margin: 8,
-    backgroundColor: "#1A1A1A",
-    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
     overflow: "hidden",
   },
   imageContainer: {
@@ -89,50 +94,27 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   placeholderImage: {
-    backgroundColor: "#333",
+    backgroundColor: colors.secondary,
   },
   deleteButton: {
     position: "absolute",
-    bottom: 6,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1,
-  },
-  deleteIcon: {
+    bottom: 10,
+    left: "50%",
+    marginLeft: -20,
     width: 40,
     height: 40,
-  },
-  contentBelow: {
-    padding: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    borderRadius: borderRadius.full,
+    justifyContent: "center",
     alignItems: "center",
-    minHeight: 40,
+    backgroundColor: "rgba(22, 26, 34, 0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.2)",
+    zIndex: 1,
   },
-  teams: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-    flexShrink: 1,
-    marginRight: 4,
-  },
-  rightContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  confidenceBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  confidenceText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  loadingIcon: {
-    opacity: 0.5,
+  deleteButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.95 }],
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+    borderColor: "rgba(0, 215, 215, 0.4)",
   },
 });

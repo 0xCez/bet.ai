@@ -4,25 +4,42 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  useWindowDimensions,
-  Pressable,
   ScrollView,
+  Animated,
 } from "react-native";
+import * as Haptics from "expo-haptics";
+
+// Animated wrapper - only handles animation, doesn't care about children content
+const AnimatedOptionWrapper = ({ children, animValue }: { children: React.ReactNode; animValue: Animated.Value }) => {
+  return (
+    <Animated.View
+      style={{
+        opacity: animValue,
+        transform: [
+          { translateY: animValue.interpolate({ inputRange: [0, 1], outputRange: [15, 0] }) },
+          { scale: animValue.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+};
 import PagerView from "react-native-pager-view";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
-import { GradientText } from "../components/ui/GradientText";
 import { GradientButton } from "../components/ui/GradientButton";
-import { BorderButton } from "../components/ui/BorderButton";
+import { IconButton } from "../components/ui/IconButton";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { updateAppState, getAppState } from "@/utils/appStorage";
 import { MultilineText } from "@/components/ui/MultilineText";
-import { BlackGradientButton } from "@/components/ui/BlackGradientButton";
+import { ProfitGrowthChart } from "../components/ui/ProfitGrowthChart";
+import { ProfitabilityComparisonChart } from "../components/ui/ProfitabilityComparisonChart";
+import { UserReviewsCard } from "../components/ui/UserReviewsCard";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import * as StoreReview from "expo-store-review";
-import { usePostHog } from "posthog-react-native";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 import i18n from "../i18n";
 
 // Define the type for the onboarding slides
@@ -33,6 +50,7 @@ interface OnboardingSlide {
   description1?: string;
   description2?: string;
   image?: any;
+  useCustomComponent?: string; // For custom animated components
   question1?: string;
   question2?: string;
   options?: string[];
@@ -68,12 +86,8 @@ const slides: OnboardingSlide[] = [
     id: 3,
     title1: i18n.t("signupMaximizeProfits1"),
     title2: i18n.t("signupMaximizeProfits2"),
-    image:
-      i18n.locale.startsWith("fr")
-        ? require("../assets/images/signup/signup1-fr.png")
-        : i18n.locale.startsWith("es")
-          ? require("../assets/images/Signup1-es.png")
-          : require("../assets/images/signup/signup1.png"),
+    // Using custom component instead of image
+    useCustomComponent: "profitGrowthChart",
   },
   {
     id: 4,
@@ -104,12 +118,8 @@ const slides: OnboardingSlide[] = [
     id: 6,
     title1: i18n.t("signupDataBacked1"),
     title2: i18n.t("signupDataBacked2"),
-    image:
-      i18n.locale.startsWith("fr")
-        ? require("../assets/images/signup/signup2-fr.png")
-        : i18n.locale.startsWith("es")
-          ? require("../assets/images/Signup2-es.png")
-          : require("../assets/images/signup/signup2.png"),
+    // Using custom component instead of image
+    useCustomComponent: "profitabilityComparisonChart",
   },
   {
     id: 7,
@@ -130,33 +140,81 @@ const slides: OnboardingSlide[] = [
     id: 8,
     title1: i18n.t("signupWinningConsistently1"),
     title2: i18n.t("signupWinningConsistently2"),
-    image: require("../assets/images/review.png"),
+    useCustomComponent: "userReviewsCard",
   },
 ];
 
 export default function SignupScreen() {
-  const { width } = useWindowDimensions();
   const pagerRef = useRef<PagerView>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedOptions, setSelectedOptions] = useState<{
     [key: number]: string | string[];
   }>({});
   const [isRatingVisible, setIsRatingVisible] = useState(false);
-  const posthog = usePostHog();
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTrackedStart = useRef(false);
+
+  // Animated progress bar
+  const progressAnim = useRef(new Animated.Value(1 / slides.length)).current;
+
+  // Track which pages have been visited (to render their options)
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(new Set([0]));
+
+  // Animation values for each option on each page (max 6 options per page)
+  // Using refs so they persist across renders
+  const optionAnims = useRef<{ [pageIndex: number]: Animated.Value[] }>({}).current;
+
+  // Get or create animation values for a page
+  const getPageAnims = (pageIndex: number) => {
+    if (!optionAnims[pageIndex]) {
+      optionAnims[pageIndex] = Array.from({ length: 6 }, () => new Animated.Value(0));
+    }
+    return optionAnims[pageIndex];
+  };
+
+  // Animate options for a page
+  const animatePageOptions = (pageIndex: number) => {
+    const anims = getPageAnims(pageIndex);
+    anims.forEach((anim, index) => {
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 300,
+        delay: 50 + index * 60,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  // Animate first page on mount and track signup started
+  useEffect(() => {
+    if (slides[0].options) {
+      setTimeout(() => animatePageOptions(0), 100);
+    }
+    // Track signup started
+    if (!hasTrackedStart.current) {
+      trackFunnelStep('signup_started');
+      hasTrackedStart.current = true;
+    }
+  }, []);
 
   const handlePageSelected = async (e: any) => {
     const newPage = e.nativeEvent.position;
     setCurrentPage(newPage);
 
-    // Track step change with PostHog
-    const currentSlide = slides[newPage];
-    await posthog?.capture("signup_step_changed", {
-      step_number: newPage + 1,
-      total_steps: slides.length,
-      step_type: currentSlide.question1 ? "question" : "info",
-      step_title: currentSlide.title1 || currentSlide.question1,
-      selected_options: selectedOptions[currentSlide.id],
-    });
+    // Mark page as visited and animate options
+    if (!visitedPages.has(newPage)) {
+      setVisitedPages(prev => new Set([...prev, newPage]));
+      if (slides[newPage].options) {
+        animatePageOptions(newPage);
+      }
+    }
+
+    // Animate progress bar smoothly
+    Animated.timing(progressAnim, {
+      toValue: (newPage + 1) / slides.length,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
 
     // Show store review prompt when slide 8 is reached
     if (newPage === 7) {
@@ -179,16 +237,24 @@ export default function SignupScreen() {
   };
 
   const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (currentPage === 0) {
       // If on first slide, go back to welcome screen
       router.back();
     } else {
-      // If on any other slide, go to previous slide
+      // Remove current page from visited so animation re-triggers if user comes back
+      setVisitedPages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentPage);
+        return newSet;
+      });
+      // Go to previous slide
       pagerRef.current?.setPage(currentPage - 1);
     }
   };
 
   const handleOptionSelect = async (slideId: number, option: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     let newSelectedOptions;
 
     // Special handling for sports selection (slide 7)
@@ -211,18 +277,6 @@ export default function SignupScreen() {
     }
 
     setSelectedOptions(newSelectedOptions);
-
-    // Track option selection with PostHog
-    const currentSlide = slides[slideId - 1];
-    await posthog?.capture("signup_option_selected", {
-      step_number: slideId,
-      step_type: "question",
-      step_title: currentSlide.question1,
-      selected_option: option,
-      is_sports_selection: slideId === 7,
-      total_sports_selected:
-        slideId === 7 ? newSelectedOptions[slideId].length : undefined,
-    });
 
     try {
       await updateAppState({
@@ -253,19 +307,15 @@ export default function SignupScreen() {
 
   const handleSignupComplete = async () => {
     try {
-      // Track signup completion with PostHog
-      await posthog?.capture("signup_completed", {
-        total_steps_completed: slides.length,
-        selected_answers: selectedOptions,
-      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Track signup completion
+      trackFunnelStep('signup_completed');
 
       // Store all the final answers and mark signup as complete
       console.log("[Signup] Saving completion status:");
       await updateAppState({
         signupComplete: true,
       });
-
-      // console.log("[Signup] Completion status saved:", selectedOptions);
 
       router.push("/loading");
     } catch (error) {
@@ -293,7 +343,7 @@ export default function SignupScreen() {
     loadProgress();
   }, []);
 
-  const renderImageSlide = (slide: OnboardingSlide) => (
+  const renderImageSlide = (slide: OnboardingSlide, slideIndex: number) => (
     <View style={styles.slideContainer}>
       <View style={styles.headerContainer}>
         <MultilineText
@@ -316,13 +366,28 @@ export default function SignupScreen() {
         )}
       </View>
 
-      {slide.id !== 8 && (
+      {/* Custom animated component for slide 3 */}
+      {slide.useCustomComponent === "profitGrowthChart" && visitedPages.has(slideIndex) && (
+        <View style={styles.customComponentContainer}>
+          <ProfitGrowthChart animate={true} />
+        </View>
+      )}
+
+      {/* Custom animated component for slide 6 */}
+      {slide.useCustomComponent === "profitabilityComparisonChart" && visitedPages.has(slideIndex) && (
+        <View style={styles.customComponentContainer}>
+          <ProfitabilityComparisonChart animate={true} />
+        </View>
+      )}
+
+      {/* Regular image slides */}
+      {slide.image && !slide.useCustomComponent && (
         <Image
           source={slide.image}
           style={[
             styles.slideImage,
             {
-              marginTop: slide.id === 3 ? 30 : slide.id === 6 ? 20 : 20,
+              marginTop: slide.id === 6 ? 20 : 20,
             },
           ]}
           contentFit="contain"
@@ -330,60 +395,16 @@ export default function SignupScreen() {
         />
       )}
 
-      {slide.id === 8 && (
-        <ScrollView
-          style={styles.reviewScrollContainer}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.reviewContentContainer}
-        >
-          <View style={styles.reviewContainer}>
-            <Image
-              source={require("../assets/images/welcome.png")}
-              style={styles.starImage}
-              contentFit="contain"
-            />
-            <View style={styles.reviewImageContainer}>
-              <Image
-                source={
-                  i18n.locale.startsWith("fr")
-                    ? require("../assets/images/review1-fr.png")
-                    : i18n.locale.startsWith("es")
-                      ? require("../assets/images/review1-es.png")
-                      : require("../assets/images/review1.png")
-                }
-                style={styles.reviewImage}
-                contentFit="contain"
-              />
-              <Image
-                source={
-                  i18n.locale.startsWith("fr")
-                    ? require("../assets/images/review2-fr.png")
-                    : i18n.locale.startsWith("es")
-                      ? require("../assets/images/review2-es.png")
-                      : require("../assets/images/review2.png")
-                }
-                style={styles.reviewImage}
-                contentFit="contain"
-              />
-              <Image
-                source={
-                  i18n.locale.startsWith("fr")
-                    ? require("../assets/images/review3-fr.png")
-                    : i18n.locale.startsWith("es")
-                      ? require("../assets/images/review3-es.png")
-                      : require("../assets/images/review3.png")
-                }
-                style={styles.reviewImage}
-                contentFit="contain"
-              />
-            </View>
-          </View>
-        </ScrollView>
+      {/* Custom animated component for slide 8 (User Reviews) */}
+      {slide.useCustomComponent === "userReviewsCard" && visitedPages.has(slideIndex) && (
+        <View style={styles.customComponentContainer}>
+          <UserReviewsCard animate={true} />
+        </View>
       )}
     </View>
   );
 
-  const renderQuestionSlide = (slide: OnboardingSlide) => (
+  const renderQuestionSlide = (slide: OnboardingSlide, slideIndex: number) => (
     <View style={styles.slideContainer}>
       <View style={styles.headerContainer}>
         <MultilineText
@@ -414,30 +435,31 @@ export default function SignupScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {slide.options?.map((option, index) => {
+        {visitedPages.has(slideIndex) && slide.options?.map((option, index) => {
           const isSelected =
             slide.id === 7
               ? ((selectedOptions[slide.id] as string[]) || []).includes(option)
               : selectedOptions[slide.id] === option;
+          const anims = getPageAnims(slideIndex);
 
-          return isSelected ? (
-            <GradientButton
-              borderRadius={20}
-              key={index}
-              height={60}
-              colors={["#00C1E0", "#009EDB", "#00A6CD"]}
-              onPress={() => handleOptionSelect(slide.id, option)}
-            >
-              <Text style={styles.buttonText}>{option}</Text>
-            </GradientButton>
-          ) : (
-            <BlackGradientButton
-              key={index}
-              borderRadius={20}
-              onPress={() => handleOptionSelect(slide.id, option)}
-            >
-              <Text style={styles.buttonText}>{option}</Text>
-            </BlackGradientButton>
+          return (
+            <AnimatedOptionWrapper key={`${slideIndex}-${index}`} animValue={anims[index]}>
+              <TouchableOpacity
+                style={[
+                  styles.optionButton,
+                  isSelected && styles.optionButtonSelected,
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleOptionSelect(slide.id, option)}
+              >
+                <Text style={[
+                  styles.buttonText,
+                  isSelected && styles.buttonTextSelected,
+                ]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            </AnimatedOptionWrapper>
           );
         })}
       </ScrollView>
@@ -448,6 +470,7 @@ export default function SignupScreen() {
           <View style={styles.fixedNextButtonContainer}>
             <GradientButton
               onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 if (currentPage < slides.length - 1) {
                   pagerRef.current?.setPage(currentPage + 1);
                 }
@@ -463,19 +486,17 @@ export default function SignupScreen() {
   return (
     <ScreenBackground hideBg>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          {/* <Ionicons name="arrow-back" size={24} color="white" /> */}
-          <Image
-            source={require("../assets/images/back.png")}
-            style={styles.backIcon}
-            contentFit="contain"
-          />
-        </TouchableOpacity>
+        <IconButton icon="chevron-back" onPress={handleBack} size={28} />
         <View style={styles.progressBar}>
-          <View
+          <Animated.View
             style={[
               styles.progressFill,
-              { width: `${((currentPage + 1) / slides.length) * 100}%` },
+              {
+                width: progressAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0%', '100%'],
+                }),
+              },
             ]}
           />
         </View>
@@ -488,18 +509,19 @@ export default function SignupScreen() {
         onPageSelected={handlePageSelected}
         scrollEnabled={false} // Disable manual swiping
       >
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <View key={slide.id} style={styles.page}>
-            {slide.image ? renderImageSlide(slide) : renderQuestionSlide(slide)}
+            {(slide.image || slide.useCustomComponent) ? renderImageSlide(slide, index) : renderQuestionSlide(slide, index)}
           </View>
         ))}
       </PagerView>
 
-      {/* Only show bottom button for image slides */}
-      {slides[currentPage].image && (
+      {/* Only show bottom button for image/custom component slides */}
+      {(slides[currentPage].image || slides[currentPage].useCustomComponent) && (
         <BlurView intensity={0} tint="dark" style={styles.bottomContainer}>
           <GradientButton
             onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               if (currentPage < slides.length - 1) {
                 pagerRef.current?.setPage(currentPage + 1);
               } else {
@@ -524,69 +546,35 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  reviewScrollContainer: {
-    flex: 1,
-    width: "100%",
-  },
-  reviewContentContainer: {
-    flexGrow: 1,
-  },
-  reviewImageContainer: {
-    width: "100%",
-    gap: 0,
-    alignItems: "center",
-    marginTop: 0,
-  },
-  reviewContainer: {
-    width: "100%",
-    gap: 20,
-    alignItems: "center",
-  },
-  reviewImage: {
-    width: "100%",
-    aspectRatio: 2,
-    // height: 180,
-    borderRadius: 12,
-  },
-  starImage: {
-    width: "100%",
-    height: 50,
-    marginTop: 0,
-  },
   welcomeImage: {
     width: 130,
     aspectRatio: 1,
-    marginTop: 20,
-  },
-  backIcon: {
-    width: 40,
-    height: 40,
+    marginTop: spacing[5],
   },
   header: {
     flexDirection: "row" as const,
     alignItems: "center",
-    padding: 20,
+    padding: spacing[5],
     paddingVertical: 15,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(14, 14, 14, 0.83)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 15,
+    gap: spacing[3],
   },
   progressBar: {
     flex: 1,
-    height: 6,
-    backgroundColor: "#3A3838",
-    borderRadius: 10,
+    height: 8,
+    backgroundColor: "rgba(39, 46, 58, 0.6)",
+    borderRadius: borderRadius.full,
+    overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#00C2E0",
-    borderRadius: 10,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    // Glow effect
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 4,
   },
   pager: {
     flex: 1,
@@ -596,11 +584,11 @@ const styles = StyleSheet.create({
   },
   slideContainer: {
     flex: 1,
-    padding: 20,
+    padding: spacing[5],
   },
   headerContainer: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: spacing[5],
     gap: 15,
   },
   scrollContainer: {
@@ -610,47 +598,82 @@ const styles = StyleSheet.create({
     aspectRatio: 0.9,
     marginTop: 30,
     alignSelf: "flex-start",
-    // backgroundColor: "red",
     width: "100%",
   },
+  customComponentContainer: {
+    flex: 1,
+    justifyContent: "center",
+    marginTop: spacing[4],
+  },
   description: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.8)",
+    fontSize: typography.sizes.base,
+    color: colors.mutedForeground, // #7A8BA3
     textAlign: "center",
-    fontFamily: "Aeonik-Light",
+    fontFamily: typography.fontFamily.light,
     paddingHorizontal: 0,
   },
   optionsContainer: {
-    gap: 16,
+    gap: spacing[4],
     paddingTop: 30,
   },
   optionsContainerWithButton: {
-    paddingBottom: 100, // Add space for the fixed Next button
+    paddingBottom: 100,
   },
   fixedNextButtonContainer: {
     position: "absolute",
     bottom: 60,
-    left: 20,
-    right: 20,
+    left: spacing[5],
+    right: spacing[5],
     backgroundColor: "transparent",
   },
   bottomContainer: {
-    padding: 20,
+    padding: spacing[5],
     paddingBottom: 60,
   },
+  optionButton: {
+    width: "100%",
+    height: 60,
+    borderRadius: borderRadius.xl,
+    backgroundColor: "rgba(22, 26, 34, 0.8)",
+    borderWidth: 1.5,
+    borderColor: colors.rgba.primary20,
+    alignItems: "center",
+    justifyContent: "center",
+    // Subtle shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  optionButtonSelected: {
+    backgroundColor: colors.rgba.primary15,
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+    // Cyan glow effect
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   buttonText: {
-    fontSize: 18,
-    color: "white",
+    fontSize: typography.sizes.base,
+    color: colors.foreground, // #F5F8FC - light text
     textAlign: "center",
-    fontFamily: "Aeonik-Regular",
+    fontFamily: typography.fontFamily.regular,
+  },
+  buttonTextSelected: {
+    color: colors.foreground, // Keep text white for better contrast
+    fontFamily: typography.fontFamily.medium,
   },
   nextButtonText: {
-    fontSize: 18,
-    color: "white",
+    fontSize: typography.sizes.base,
+    color: colors.primaryForeground, // #0D0F14 - dark text on cyan
     textAlign: "center",
-    fontFamily: "Aeonik-Medium",
+    fontFamily: typography.fontFamily.medium,
   },
   buttonTextDisabled: {
     opacity: 0.5,
   },
-} as const);
+});

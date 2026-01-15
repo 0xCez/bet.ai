@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { StyleSheet, View, Text, Animated } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { StyleSheet, View, Text } from "react-native";
 import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import CircularProgress from "react-native-circular-progress-indicator";
 import { GradientText } from "../components/ui/GradientText";
+import { colors, spacing, typography } from "../constants/designTokens";
 import i18n from "../i18n";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 interface LoadingState {
   threshold: number;
@@ -24,6 +26,16 @@ export default function LoadingScreen() {
     description1: i18n.t("loadingAnalyzingDesc1"),
     description2: i18n.t("loadingAnalyzingDesc2"),
   });
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTracked = useRef(false);
+
+  // Track loading screen viewed on mount
+  useEffect(() => {
+    if (!hasTracked.current) {
+      trackFunnelStep('loading_viewed');
+      hasTracked.current = true;
+    }
+  }, []);
 
   useEffect(() => {
     // Create loading states with i18n translations
@@ -101,9 +113,9 @@ export default function LoadingScreen() {
             radius={130}
             duration={16}
             progressValueColor={"transparent"}
-            activeStrokeColor={"#00C2E0"}
-            inActiveStrokeColor={"#0C0C0C"}
-            inActiveStrokeOpacity={0.5}
+            activeStrokeColor={colors.primary}
+            inActiveStrokeColor={colors.card}
+            inActiveStrokeOpacity={0.8}
             inActiveStrokeWidth={16}
             activeStrokeWidth={16}
             maxValue={100}
@@ -112,7 +124,7 @@ export default function LoadingScreen() {
           <View style={styles.progressOverlay}>
             <Text style={styles.progressText}>
               {displayProgress}
-              <Text style={{ fontSize: 44 }}>%</Text>
+              <Text style={styles.percentSymbol}>%</Text>
             </Text>
           </View>
         </View>
@@ -136,16 +148,15 @@ export default function LoadingScreen() {
 
 const styles = StyleSheet.create({
   descriptionContainer: {
-    marginTop: 15,
-
+    marginTop: spacing[4],
     gap: 0,
   },
   container: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
-    gap: 30,
+    padding: spacing[5],
+    gap: spacing[8],
   },
   progressContainer: {
     position: "relative",
@@ -161,27 +172,29 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 70,
     fontWeight: "bold",
-    color: "#fff",
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontFamily: typography.fontFamily.medium,
+  },
+  percentSymbol: {
+    fontSize: 44,
   },
   textContainer: {
     alignItems: "center",
-    marginTop: 40,
-    paddingHorizontal: 5,
+    marginTop: spacing[10],
+    paddingHorizontal: spacing[1],
   },
   title: {
-    fontSize: 30,
+    fontSize: typography.sizes["3xl"],
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 0,
   },
   description: {
-    fontSize: 16,
+    fontSize: typography.sizes.base,
     textAlign: "center",
-    opacity: 0.5,
+    color: colors.mutedForeground,
     lineHeight: 24,
     letterSpacing: 0.5,
-    fontFamily: "Aeonik-Regular",
-    color: "#fff",
+    fontFamily: typography.fontFamily.regular,
   },
 });

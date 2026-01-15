@@ -18,6 +18,11 @@ import i18n from "../i18n";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { RevenueCatProvider } from "./providers/RevenueCatProvider";
+import { DemoTooltipProvider } from "../contexts/DemoTooltipContext";
+import { DemoTooltipRenderer } from "../components/ui/DemoTooltip";
+// TODO: Image transition - commented out for now, will finish later
+// import { ImageTransitionProvider } from "../contexts/ImageTransitionContext";
+// import { TransitionImageOverlay } from "../components/ui/TransitionImageOverlay";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -33,8 +38,8 @@ export default function RootLayout() {
 
   // Initialize i18n with the device locale
   useEffect(() => {
-    // Set the locale from the device with fallback to 'en'
-    const deviceLocale = Localization.getLocales()[0]?.languageCode || 'en';
+    // Set the locale from the device
+    const deviceLocale = Localization.getLocales()[0]?.languageTag || 'en';
     i18n.locale = deviceLocale;
     console.log("Device locale set to:", i18n.locale);
   }, []);
@@ -46,7 +51,11 @@ export default function RootLayout() {
   return (
     <PostHogProvider
       apiKey="phc_poDQ9VIIhfP0rbYLiovSrktgSKjtMN6Z2GxSNX0Pj1o"
-      autocapture
+      autocapture={{
+        captureLifecycleEvents: true,
+        captureTouches: false,
+        captureScreens: false,
+      }}
       options={{
         host: "https://eu.i.posthog.com",
         sendFeatureFlagEvent: true,
@@ -55,15 +64,18 @@ export default function RootLayout() {
       }}
     >
       <RevenueCatProvider>
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={styles.container}>
-            <ThemeProvider
-              value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-            >
-              <Slot />
-            </ThemeProvider>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
+        <DemoTooltipProvider>
+          <SafeAreaProvider>
+            <GestureHandlerRootView style={styles.container}>
+              <ThemeProvider
+                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+              >
+                <Slot />
+                <DemoTooltipRenderer />
+              </ThemeProvider>
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </DemoTooltipProvider>
       </RevenueCatProvider>
     </PostHogProvider>
   );

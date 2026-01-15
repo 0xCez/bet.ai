@@ -35,7 +35,16 @@ export default function StackLayout() {
       />
       <Stack.Screen name="paywall" options={{ gestureEnabled: false }} />
       <Stack.Screen name="history" />
-      <Stack.Screen name="+not-found" />
+      <Stack.Screen name="+not-found"       />
+      <Stack.Screen
+        name="market-intel"
+        options={{
+          freezeOnBlur: true,
+          animation: "slide_from_right",
+          headerShown: false,
+          gestureEnabled: true,
+        }}
+      />
     </Stack>
   );
 }

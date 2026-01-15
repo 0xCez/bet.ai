@@ -8,9 +8,6 @@
     "scheme": "betai",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "fonts": [
-      "./assets/fonts"
-    ],
     "ios": {
       "googleServicesFile": "./GoogleService-Info.plist",
       "supportsTablet": true,
@@ -58,7 +55,13 @@
         {
           "image": "./assets/images/splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0C0C0C"
+          "backgroundColor": "#0D0F14"
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": ["./assets/fonts"]
         }
       ],
       "expo-secure-store",

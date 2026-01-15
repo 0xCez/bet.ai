@@ -8,9 +8,8 @@ import {
   TextStyle,
   TouchableOpacityProps,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-
-type ColorArray = readonly [string, string, ...string[]];
+import * as Haptics from "expo-haptics";
+import { colors, shadows, borderRadius as radii, typography } from "../../constants/designTokens";
 
 interface GradientButtonProps extends TouchableOpacityProps {
   containerStyle?: ViewStyle;
@@ -18,41 +17,49 @@ interface GradientButtonProps extends TouchableOpacityProps {
   children?: React.ReactNode;
   borderRadius?: number;
   height?: number;
-  colors?: ColorArray;
+  variant?: 'primary' | 'pill';
 }
-
-const DEFAULT_COLORS: ColorArray = ["#00A7CC", "#009EDB", "#01A7CC"];
 
 export function GradientButton({
   containerStyle,
   textStyle,
   children,
-  borderRadius = 100,
+  borderRadius = radii.lg,
   height = 55,
-  colors = DEFAULT_COLORS,
+  variant = 'primary',
+  disabled,
+  onPress,
   ...props
 }: GradientButtonProps) {
+  // Use pill style border radius if variant is pill
+  const finalBorderRadius = variant === 'pill' ? radii.full : borderRadius;
+
+  const handlePress = (e: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress?.(e);
+  };
+
   return (
     <TouchableOpacity
-      style={[styles.button, { borderRadius, height }, containerStyle]}
-      activeOpacity={0.8}
+      style={[
+        styles.button,
+        shadows.buttonGlow,
+        { borderRadius: finalBorderRadius, height },
+        disabled && styles.buttonDisabled,
+        containerStyle,
+      ]}
+      activeOpacity={0.9}
+      disabled={disabled}
+      onPress={handlePress}
       {...props}
     >
-      <LinearGradient
-        colors={colors}
-        style={styles.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        locations={[0.01, 0.45, 0.95]}
-      >
-        <View style={styles.contentContainer}>
-          {typeof children === "string" ? (
-            <Text style={[styles.buttonText, textStyle]}>{children}</Text>
-          ) : (
-            children
-          )}
-        </View>
-      </LinearGradient>
+      <View style={styles.contentContainer}>
+        {typeof children === "string" ? (
+          <Text style={[styles.buttonText, textStyle]}>{children}</Text>
+        ) : (
+          children
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -62,10 +69,10 @@ const styles = StyleSheet.create({
     width: "100%",
     overflow: "hidden",
     marginVertical: 0,
+    backgroundColor: colors.primary, // Solid cyan #00D7D7
   },
-  gradient: {
-    width: "100%",
-    height: "100%",
+  buttonDisabled: {
+    opacity: 0.5,
   },
   contentContainer: {
     flex: 1,
@@ -73,11 +80,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   buttonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.primaryForeground, // Dark text #0D0F14
     textAlign: "center",
     lineHeight: 20,
-    fontFamily: "Aeonik-Medium",
+    fontFamily: typography.fontFamily.semibold,
   },
 });

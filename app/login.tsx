@@ -1,26 +1,34 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   Image,
   Platform,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Link, router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import Icon from "react-native-vector-icons/FontAwesome";
 import { Logo } from "../components/ui/Logo";
-import { GradientText } from "../components/ui/GradientText";
 import { BorderButton } from "../components/ui/BorderButton";
+import { ConcentricCircles } from "../components/ui/ConcentricCircles";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+} from "react-native-reanimated";
 import i18n from "../i18n";
-// Import Google Sign-In for Android only
 import { MultilineText } from "@/components/ui/MultilineText";
+import { colors, spacing, typography } from "../constants/designTokens";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 // Conditionally import GoogleSignin only on Android
 const GoogleSignin =
@@ -29,7 +37,6 @@ const GoogleSignin =
     : null;
 
 import {
-  getAuth,
   signInWithCredential,
   OAuthProvider,
   GoogleAuthProvider,
@@ -43,7 +50,7 @@ import { useRevenueCatUser } from "./hooks/useRevenueCatUser";
 if (Platform.OS === "android") {
   // Configure Google Sign-In for Android
   GoogleSignin.configure({
-    // Uses the client ID with certificate_hash from google-services.json
+    // Uses the web client ID from google-services.json (Production: betai-f9176)
     webClientId:
       "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
     offlineAccess: true,
@@ -83,20 +90,72 @@ export default function LoginScreen() {
   const { linkUserToFirebase } = useRevenueCatUser();
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
   const [isAppleLoading, setIsAppleLoading] = React.useState(false);
+  const { trackFunnelStep, linkAuthenticatedUser } = useOnboardingAnalytics();
+  const hasTrackedView = useRef(false);
+
+  // Animation values
+  const logoOpacity = useSharedValue(0);
+  const logoTranslateY = useSharedValue(-20);
+  const contentOpacity = useSharedValue(0);
+  const contentTranslateY = useSharedValue(30);
+  const buttonsOpacity = useSharedValue(0);
+  const buttonsTranslateY = useSharedValue(20);
+
+  // Start entrance animations and track login viewed
+  useEffect(() => {
+    // Track login screen viewed
+    if (!hasTrackedView.current) {
+      trackFunnelStep('login_viewed');
+      hasTrackedView.current = true;
+    }
+
+    const timingConfig = {
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+    };
+
+    // Logo animation - starts immediately
+    logoOpacity.value = withTiming(1, timingConfig);
+    logoTranslateY.value = withTiming(0, timingConfig);
+
+    // Content animation - delayed
+    contentOpacity.value = withDelay(200, withTiming(1, timingConfig));
+    contentTranslateY.value = withDelay(200, withTiming(0, timingConfig));
+
+    // Buttons animation - more delayed
+    buttonsOpacity.value = withDelay(400, withTiming(1, timingConfig));
+    buttonsTranslateY.value = withDelay(400, withTiming(0, timingConfig));
+  }, []);
+
+  // Animated styles
+  const logoAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ translateY: logoTranslateY.value }],
+  }));
+
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    transform: [{ translateY: contentTranslateY.value }],
+  }));
+
+  const buttonsAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: buttonsOpacity.value,
+    transform: [{ translateY: buttonsTranslateY.value }],
+  }));
 
   // Use Expo Google auth for iOS only
   const [request, response, promptAsync] = Google.useAuthRequest({
-    // androidClientId: "133991312998-7ha5g8jdfvm4cgcvabhhhmiqhd5t98i5.apps.googleusercontent.com",
     androidClientId:
-      "133991312998-qeusullp88no21g2189pp73k1vrmskhg.apps.googleusercontent.com",
+      "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
     iosClientId:
       "133991312998-nsjaob5e5do67f55pd1pf3at8t1en12b.apps.googleusercontent.com",
     webClientId:
       "133991312998-ad8jd49fdplqntsjsq5auptus8aqa32i.apps.googleusercontent.com",
   });
 
-  const handleAuthSuccess = async (firebaseUser: any) => {
+  const handleAuthSuccess = async (firebaseUser: any, method: 'apple' | 'google') => {
     try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Save user data to Firestore and storage
       await saveUserData(firebaseUser);
 
@@ -105,6 +164,10 @@ export default function LoginScreen() {
       if (!result.success) {
         console.error("Failed to link RevenueCat user:", result.error);
       }
+
+      // Track login success and link authenticated user for analytics
+      trackFunnelStep('login_success', { method });
+      await linkAuthenticatedUser(firebaseUser.uid, firebaseUser.email);
 
       // Navigate to home
       router.replace("/home");
@@ -141,7 +204,7 @@ export default function LoginScreen() {
 
       signInWithCredential(auth, credential)
         .then((result) => {
-          handleAuthSuccess(result.user);
+          handleAuthSuccess(result.user, 'google');
         })
         .catch((error) => {
           console.error("Error with Google sign in:", error);
@@ -198,7 +261,7 @@ export default function LoginScreen() {
       console.log("Firebase sign-in successful");
 
       // Handle successful authentication
-      await handleAuthSuccess(result.user);
+      await handleAuthSuccess(result.user, 'google');
     } catch (error: any) {
       console.error("Android Google Sign-In error:", JSON.stringify(error));
 
@@ -227,6 +290,7 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       setIsGoogleLoading(true);
 
@@ -248,6 +312,7 @@ export default function LoginScreen() {
   };
 
   const handleAppleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       setIsAppleLoading(true);
       const nonce = Math.random().toString(36).substring(2, 10);
@@ -273,7 +338,7 @@ export default function LoginScreen() {
         });
 
         const result = await signInWithCredential(auth, credential);
-        await handleAuthSuccess(result.user);
+        await handleAuthSuccess(result.user, 'apple');
       } else {
         // No identity token received
         console.error("No identity token received from Apple");
@@ -293,40 +358,41 @@ export default function LoginScreen() {
 
   return (
     <ScreenBackground hideBg>
-      <Image
-        source={require("../assets/images/bglogin2.png")}
-        style={styles.bgImage}
-      />
+      {/* Concentric circles background */}
+      <ConcentricCircles rotate rotationDuration={45000} />
 
-      <View style={styles.header}>
+      <Animated.View style={[styles.header, logoAnimatedStyle]}>
         <Logo size="medium" />
-      </View>
+      </Animated.View>
+
       <View style={styles.container}>
         <View style={styles.content}>
-          <MultilineText
-            line1={i18n.t("loginAiPicks")}
-            line2={i18n.t("loginYouPlace")}
-            fontSize={26}
-            fontFamily="Aeonik-Medium"
-          />
+          <Animated.View style={contentAnimatedStyle}>
+            <MultilineText
+              line1={i18n.t("loginAiPicks")}
+              line2={i18n.t("loginYouPlace")}
+              fontSize={26}
+              fontFamily="Aeonik-Medium"
+            />
 
-          <Text style={styles.subtitle}>{i18n.t("loginCreateOrLogin")}</Text>
+            <Text style={styles.subtitle}>{i18n.t("loginCreateOrLogin")}</Text>
+          </Animated.View>
 
-          <View style={styles.buttonContainer}>
+          <Animated.View style={[styles.buttonContainer, buttonsAnimatedStyle]}>
             {Platform.OS === "ios" && (
               <BorderButton
-                borderColor="#0D1B21"
-                backgroundColor="#0D1B21"
+                borderColor={colors.muted}
+                backgroundColor={colors.card}
                 onPress={handleAppleSignIn}
                 disabled={isAppleLoading || isGoogleLoading}
               >
                 {isAppleLoading ? (
-                  <ActivityIndicator color="#FFFFFF" style={styles.icon} />
+                  <ActivityIndicator color={colors.foreground} style={styles.icon} />
                 ) : (
                   <Icon
                     name="apple"
-                    size={24}
-                    color="#FFFFFF"
+                    size={22}
+                    color={colors.foreground}
                     style={styles.icon}
                   />
                 )}
@@ -338,13 +404,13 @@ export default function LoginScreen() {
               </BorderButton>
             )}
             <BorderButton
-              borderColor="#0D1B21"
-              backgroundColor="#0D1B21"
+              borderColor={colors.muted}
+              backgroundColor={colors.card}
               onPress={handleGoogleSignIn}
               disabled={isGoogleLoading || isAppleLoading}
             >
               {isGoogleLoading ? (
-                <ActivityIndicator color="#FFFFFF" style={styles.icon} />
+                <ActivityIndicator color={colors.foreground} style={styles.icon} />
               ) : (
                 <Image
                   source={require("../assets/images/google.png")}
@@ -358,23 +424,23 @@ export default function LoginScreen() {
                   : i18n.t("loginContinueWithGoogle")}
               </Text>
             </BorderButton>
-          </View>
+          </Animated.View>
 
-          <View style={styles.bottomContainer}>
+          <Animated.View style={[styles.bottomContainer, buttonsAnimatedStyle]}>
             <Text style={styles.footerText}>{i18n.t("loginByContinuing")}</Text>
             <View style={styles.linksContainer}>
               <Link
-                href="https://betaiapp.com/privacy.html"
+                href="https://betaiapp.com/privacy"
                 style={styles.link}
               >
                 {i18n.t("loginPrivacyPolicy")}
               </Link>
               <Text style={styles.footerText}> & </Text>
-              <Link href="https://betaiapp.com/terms.html" style={styles.link}>
+              <Link href="https://betaiapp.com/terms" style={styles.link}>
                 {i18n.t("loginTermsAndConditions")}
               </Link>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </View>
     </ScreenBackground>
@@ -382,121 +448,73 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  bgImage: {
-    position: "absolute",
-    top: -130,
-    left: 0,
-    right: 0,
-    padding: 0,
-    width: "100%",
-    height: "100%",
-    transform: [{ scale: 1.2 }],
-    resizeMode: "contain",
-  },
   container: {
     flex: 1,
-    padding: 25,
-    paddingBottom: 25,
+    padding: spacing[6],
+    paddingBottom: spacing[6],
   },
   header: {
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  logo: {
-    fontSize: 32,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[3],
   },
   content: {
     flex: 2,
-    gap: 5,
+    gap: spacing[2],
     justifyContent: "flex-end",
     alignItems: "center",
   },
-  title: {
-    fontSize: 32,
-    color: "#FFFFFF",
-    paddingHorizontal: 20,
-    marginBottom: 10,
-    textAlign: "center",
-    fontFamily: "Aeonik-Medium",
-  },
   subtitle: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    paddingHorizontal: 40,
-    marginBottom: 10,
+    fontSize: typography.sizes.base,
+    color: colors.mutedForeground,
+    paddingHorizontal: spacing[10],
+    marginBottom: spacing[2],
     textAlign: "center",
-    fontFamily: "Aeonik-Light",
-    marginTop: 10,
-    letterSpacing: 1,
+    fontFamily: typography.fontFamily.light,
+    marginTop: spacing[3],
+    letterSpacing: 0.5,
   },
   buttonContainer: {
     width: "100%",
-    marginTop: 20,
-    gap: 16,
-  },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#000000",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#333333",
-  },
-  googleButton: {
-    backgroundColor: "#FFFFFF",
+    marginTop: spacing[5],
+    gap: spacing[4],
   },
   buttonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontFamily: "Aeonik-Medium",
-    fontWeight: "500",
-    marginLeft: 8,
-  },
-  googleButtonText: {
-    color: "#000000",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.medium,
+    marginLeft: spacing[2],
   },
   icon: {
     width: 24,
   },
-  footer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    marginTop: 40,
-    paddingHorizontal: 20,
-  },
   footerText: {
-    color: "#FFFFFF",
-    opacity: 0.8,
-    fontSize: 12,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
     textAlign: "center",
+    fontFamily: typography.fontFamily.regular,
   },
   linksContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    marginTop: spacing[1],
   },
   link: {
-    color: "#00C2E0",
-    fontSize: 12,
-    fontFamily: "Aeonik-Bold",
+    color: colors.primary,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
     textDecorationLine: "none",
   },
   bottomContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 25,
+    paddingVertical: spacing[6],
   },
   googleLogo: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
+    width: 22,
+    height: 22,
+    marginRight: spacing[2],
   },
 });

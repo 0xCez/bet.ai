@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
-  ActivityIndicator,
   Platform,
   ViewStyle,
   Text,
-  TextStyle,
 } from "react-native";
+import { LogoSpinner } from "../components/ui/LogoSpinner";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import {
   GiftedChat,
@@ -18,11 +17,11 @@ import {
 } from "react-native-gifted-chat";
 import APIService from "../services/api";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { TopBar } from "../components/ui/TopBar";
 import { useLocalSearchParams } from "expo-router";
-import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import i18n from "../i18n";
+import { colors, spacing, borderRadius as radii, typography } from "../constants/designTokens";
 
 // Static variable to persist messages across screen unmounts/remounts
 let persistedMessages: IMessage[] = [];
@@ -184,18 +183,20 @@ export default function ChatScreen() {
         {...props}
         wrapperStyle={{
           left: {
-            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: "rgba(0, 215, 215, 0.1)",
           },
           right: {
-            backgroundColor: "#0366d6",
+            backgroundColor: colors.primary,
           },
         }}
         textStyle={{
           left: {
-            color: "#fff",
+            color: colors.foreground,
           },
           right: {
-            color: "#fff",
+            color: colors.foreground,
           },
         }}
       />
@@ -207,8 +208,8 @@ export default function ChatScreen() {
       <View
         style={{
           paddingBottom: 0,
-          borderTopWidth: 0.2,
-          borderTopColor: "#777777",
+          borderTopWidth: 0.5,
+          borderTopColor: "rgba(0, 215, 215, 0.1)",
         }}
       >
         <InputToolbar
@@ -225,12 +226,7 @@ export default function ChatScreen() {
     return (
       <Send {...props} containerStyle={styles.sendContainer}>
         <View style={styles.sendButton}>
-          <Image
-            source={require("../assets/images/send.png")}
-            style={styles.sendIcon}
-            contentFit="cover"
-            transition={300}
-          />
+          <Ionicons name="send" size={20} color={colors.primaryForeground} />
         </View>
       </Send>
     );
@@ -254,19 +250,21 @@ export default function ChatScreen() {
 
     // Determine container style based on message position
     const containerStyle: ViewStyle = {
-      backgroundColor: isUser ? "#0083AA" : "#1C1C1C",
-      borderRadius: 16,
+      backgroundColor: isUser ? colors.primary : colors.card,
+      borderRadius: radii.xl,
       marginVertical: 0,
-      marginHorizontal: 12,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-
-      borderTopEndRadius: 18,
-      borderTopStartRadius: 18,
-      borderBottomEndRadius: isUser ? 4 : 18,
-      borderBottomStartRadius: isUser ? 18 : 4,
+      marginHorizontal: spacing[3],
+      paddingHorizontal: spacing[5],
+      paddingVertical: spacing[3],
+      borderTopEndRadius: radii.xl,
+      borderTopStartRadius: radii.xl,
+      borderBottomEndRadius: isUser ? radii.xs : radii.xl,
+      borderBottomStartRadius: isUser ? radii.xl : radii.xs,
       maxWidth: "80%",
       alignSelf: isUser ? "flex-end" : "flex-start",
+      // Add subtle border for AI messages
+      borderWidth: isUser ? 0 : 1,
+      borderColor: isUser ? "transparent" : "rgba(0, 215, 215, 0.1)",
     };
 
     return (
@@ -288,7 +286,7 @@ export default function ChatScreen() {
 
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#00C2E0" />
+        <LogoSpinner size={32} />
         <Text style={styles.loadingText}>{i18n.t("chatAiThinking")}</Text>
       </View>
     );
@@ -325,79 +323,72 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  sendIcon: {
-    width: 28,
-    height: 28,
-  },
   container: {
     flex: 1,
     backgroundColor: "transparent",
   },
   inputToolbar: {
-    backgroundColor: "#535353",
+    backgroundColor: colors.card,
     borderTopWidth: 0,
-    // paddingVertical: 8,
     height: 52,
-    paddingHorizontal: 10,
-    marginHorizontal: 20,
-    marginVertical: 20,
-    borderWidth: 0.2,
-    borderColor: "#222222",
-    // marginBottom: 5,
-    borderRadius: 16,
-    // alignItems: "center",
-    // justifyContent: "center",
+    paddingHorizontal: spacing[3],
+    marginHorizontal: spacing[5],
+    marginVertical: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+    borderRadius: radii.full,
   },
   inputPrimary: {
     alignItems: "center",
   },
   input: {
-    color: "#FFFFFF",
-    fontFamily: "Aeonik-Regular",
-    fontSize: 14,
+    color: colors.foreground,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.sm,
   },
   sendContainer: {
-    // justifyContent: "center",
-    // alignItems: "center",
-    marginRight: 5,
+    marginRight: spacing[1],
     marginBottom: 0,
     height: 38,
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendButton: {
-    backgroundColor: "rgba(255, 255, 255)",
-    borderRadius: 20,
-    padding: 0,
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
+    width: 38,
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
   },
   messageWrapper: {
     flex: 1,
     paddingHorizontal: 0,
-    marginVertical: 15,
+    marginVertical: spacing[4],
   },
   messageText: {
-    fontSize: 16,
+    fontSize: typography.sizes.base,
     lineHeight: 22,
-    marginBottom: 4,
-    fontFamily: "Aeonik-Regular",
-    color: "white",
+    marginBottom: spacing[1],
+    fontFamily: typography.fontFamily.regular,
+    color: colors.foreground,
   },
   timeText: {
-    fontSize: 12,
-    color: "rgba(255, 255, 255, 0.5)",
-    marginTop: 4,
-    fontFamily: "Aeonik-Regular",
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+    marginTop: spacing[1],
+    fontFamily: typography.fontFamily.regular,
   },
   loadingContainer: {
-    padding: 12,
-    borderRadius: 8,
+    padding: spacing[3],
+    borderRadius: radii.lg,
     flexDirection: "row",
-    // alignItems: "center",
-    // alignSelf: "center",
-    marginTop: 10,
-    gap: 8,
+    marginTop: spacing[3],
+    gap: spacing[2],
   },
   loadingText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.regular,
   },
 });

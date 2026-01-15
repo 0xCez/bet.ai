@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  Image,
   StyleSheet,
   ScrollView,
   Text,
   Pressable,
   ViewStyle,
+  Animated,
+  Easing,
 } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
 import type { ParamListBase } from "@react-navigation/native";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
@@ -24,6 +26,8 @@ import {
 import { GradientButton } from "../components/ui/GradientButton";
 import { BorderButton } from "@/components/ui/BorderButton";
 import { TopBar } from "../components/ui/TopBar";
+import { Card } from "@/components/ui/Card";
+import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import {
   doc,
   setDoc,
@@ -34,10 +38,15 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "../firebaseConfig"; // Assuming firebaseConfig.ts exports db and auth
 import { BlurText } from "@/components/ui/BlurText";
+import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import * as Progress from "react-native-progress";
 import i18n from "../i18n";
+import { colors, spacing, borderRadius as radii, typography, shadows, shimmerColors } from "../constants/designTokens";
+import { useDemoTooltip } from "../contexts/DemoTooltipContext";
+// TODO: Image transition - commented out for now, will finish later
+// import { useImageTransition } from "../contexts/ImageTransitionContext";
 
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
@@ -98,6 +107,7 @@ interface APIAnalysisResponse {
 }
 
 interface AnalysisResult {
+  sport?: string; // Add sport field to match backend response
   teams: {
     home: string;
     away: string;
@@ -107,13 +117,24 @@ interface AnalysisResult {
     };
   };
   keyInsights: {
-    confidence: string;
-    marketActivity: string;
-    lineShift: string;
-    publicVsSharps: {
-      public: number;
-      sharps: number;
-    };
+    marketConsensus: {
+      display: string;
+      label: string;
+      teamSide?: "home" | "away" | null;
+    } | null;
+    bestValue: {
+      display: string;
+      label: string;
+      teamSide?: "home" | "away" | null;
+    } | null;
+    offensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
+    defensiveEdge: {
+      display: string;
+      label: string;
+    } | null;
   };
   matchSnapshot: {
     recentPerformance: {
@@ -136,6 +157,9 @@ interface AnalysisResult {
     bettingSignal: string;
     breakdown: string;
   };
+  // Lightweight data for chatbot context (~4k total)
+  marketIntelligence?: any;  // Small or null
+  teamStats?: any;  // ~2k chars - reasonable for chatbot
 }
 
 // Type for the data passed from history screen (matches Firestore doc structure)
@@ -156,6 +180,27 @@ type AnalysisParams = {
   isDemo?: string;
 };
 
+// Helper function to remove empty string keys from objects (Firestore doesn't allow them)
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item));
+  }
+
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    Object.keys(obj).forEach(key => {
+      // Skip empty string keys
+      if (key === '') return;
+      cleaned[key] = sanitizeForFirestore(obj[key]);
+    });
+    return cleaned;
+  }
+
+  return obj;
+}
+
 export default function AnalysisScreen() {
   // Get both potential parameters
   const params = useLocalSearchParams<AnalysisParams>();
@@ -172,7 +217,7 @@ export default function AnalysisScreen() {
     // Track page entry
     posthog?.capture("analysis_page_viewed", {
       userId: auth.currentUser.uid,
-      analysisId: params.analysisId,
+      analysisId: params.analysisId || "none",
       isDemo: params.isDemo === "true",
     });
 
@@ -184,7 +229,7 @@ export default function AnalysisScreen() {
 
         posthog?.capture("analysis_page_exit", {
           userId: auth.currentUser.uid,
-          analysisId: params.analysisId,
+          analysisId: params.analysisId || "none",
           isDemo: params.isDemo === "true",
           timeSpentSeconds: timeSpentSeconds,
           timeSpentMinutes: Math.round((timeSpentSeconds / 60) * 10) / 10, // Round to 1 decimal place
@@ -212,6 +257,12 @@ export default function AnalysisScreen() {
   const analysisId = params.analysisId;
   const isDemo = params.isDemo === "true";
 
+  // Demo tooltip system
+  const { showTooltip, setIsDemo: setDemoMode } = useDemoTooltip();
+  // TODO: Image transition - commented out for now, will finish later
+  // const { isTransitioning, completeTransition } = useImageTransition();
+  const demoTooltipShownRef = useRef(false);
+
   const [showUnlockMessage, setShowUnlockMessage] = useState(false);
   const hasInitializedRef = React.useRef(false);
   const hasAnalysisSaved = React.useRef(false);
@@ -227,15 +278,70 @@ export default function AnalysisScreen() {
     isSameAnalysis && cachedDisplayImageUrl ? cachedDisplayImageUrl : null
   );
   const [error, setError] = useState<string | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(
+    analysisId || null
+  );
   const [expandedCards, setExpandedCards] = useState(
     isSameAnalysis
-      ? cachedExpandedCards
+      ? { ...cachedExpandedCards, xFactors: true } // Ensure xFactors is always true initially
       : {
-          snapshot: isDemo ? false : false,
-          xFactors: isDemo ? false : false,
-          aiAnalysis: isDemo ? false : false,
+          snapshot: false,
+          xFactors: true,
+          aiAnalysis: false,
         }
   );
+
+  // Animation values for staggered card animations (6 cards total)
+  const cardAnimations = useRef(
+    Array.from({ length: 6 }, () => new Animated.Value(0))
+  ).current;
+
+  const animateCardsIn = () => {
+    // Reset all animations
+    cardAnimations.forEach(anim => anim.setValue(0));
+
+    // Stagger animate each card
+    const animations = cardAnimations.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 350,
+        delay: 50 + index * 100,
+        useNativeDriver: true,
+      })
+    );
+
+    Animated.parallel(animations).start();
+  };
+
+  // Trigger animation when loading completes
+  const hasAnimatedRef = useRef(false);
+  useEffect(() => {
+    if (!isLoading && analysisResult && !hasAnimatedRef.current) {
+      hasAnimatedRef.current = true;
+      setTimeout(animateCardsIn, 100);
+    }
+    if (isLoading) {
+      hasAnimatedRef.current = false;
+    }
+  }, [isLoading, analysisResult]);
+
+  const getCardStyle = (index: number) => ({
+    opacity: cardAnimations[index],
+    transform: [
+      {
+        translateX: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [-30, 0],
+        }),
+      },
+      {
+        scale: cardAnimations[index].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+      },
+    ],
+  });
 
   const toggleCard = (cardName: "snapshot" | "xFactors" | "aiAnalysis") => {
     const newExpandedCards = {
@@ -243,7 +349,23 @@ export default function AnalysisScreen() {
       [cardName]: !expandedCards[cardName],
     };
     setExpandedCards(newExpandedCards);
-    cachedExpandedCards = newExpandedCards; // Update cached state
+    cachedExpandedCards = newExpandedCards;
+  };
+
+  const getTeamLogo = (teamName: string, sport?: string) => {
+    if (!sport) return require("../assets/images/logo.png");
+
+    switch (sport.toLowerCase()) {
+      case "nba":
+        return getNBATeamLogo(teamName);
+      case "nfl":
+        return getNFLTeamLogo(teamName);
+      case "soccer":
+      case "soccer_epl":
+        return getSoccerTeamLogo(teamName);
+      default:
+        return require("../assets/images/logo.png");
+    }
   };
 
   useEffect(() => {
@@ -303,6 +425,27 @@ export default function AnalysisScreen() {
     }
   }, [analysisId, imageUri, auth.currentUser, isSameAnalysis]);
 
+  // Show demo tooltip when analysis loads in demo mode
+  useEffect(() => {
+    if (isDemo && !isLoading && analysisResult && !demoTooltipShownRef.current) {
+      demoTooltipShownRef.current = true;
+      setDemoMode(true);
+
+      // Show welcome tooltip after a short delay
+      const timer = setTimeout(() => {
+        showTooltip("welcome");
+      }, 800);
+
+      return () => clearTimeout(timer);
+    }
+
+    // Reset demo mode when leaving
+    if (!isDemo) {
+      setDemoMode(false);
+      demoTooltipShownRef.current = false;
+    }
+  }, [isDemo, isLoading, analysisResult]);
+
   // --- Function to fetch analysis data by ID ---
   const fetchAnalysisById = async (userId: string, docId: string) => {
     setIsLoading(true);
@@ -314,7 +457,9 @@ export default function AnalysisScreen() {
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
 
-      const docRef = doc(db, "userAnalyses", userId, "analyses", docId);
+      // Use demoAnalysis collection for demo mode, otherwise use userAnalyses
+      const collection = isDemo ? "demoAnalysis" : "userAnalyses";
+      const docRef = doc(db, collection, userId, "analyses", docId);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -322,9 +467,62 @@ export default function AnalysisScreen() {
         console.log("Fetched analysis data:", data);
         // Ensure the fetched data has the nested 'analysis' object
         if (data && data.analysis) {
-          setAnalysisResult(data.analysis as AnalysisResult);
-          cachedAnalysisResult = data.analysis as AnalysisResult; // Cache the result
-          console.log("Set analysis result from history:", data.analysis);
+          // Handle old analyses that don't have sport field - infer from team names
+          let analysisData = data.analysis as AnalysisResult;
+
+          // If no sport field, try to infer from team names or top-level
+          if (!analysisData.sport) {
+            console.warn("Analysis missing sport field, inferring from team names...");
+
+            // Infer sport from team names
+            const teamNames = (analysisData.teams?.home + " " + analysisData.teams?.away).toLowerCase();
+
+            // NBA team keywords (unique identifiers)
+            if (teamNames.includes("lakers") || teamNames.includes("celtics") ||
+                teamNames.includes("warriors") || teamNames.includes("bulls") ||
+                teamNames.includes("knicks") || teamNames.includes("heat") ||
+                teamNames.includes("spurs") || teamNames.includes("mavericks") ||
+                teamNames.includes("76ers") || teamNames.includes("nets") ||
+                teamNames.includes("clippers") || teamNames.includes("nuggets") ||
+                teamNames.includes("bucks") || teamNames.includes("suns") ||
+                teamNames.includes("rockets") || teamNames.includes("cavaliers") ||
+                teamNames.includes("raptors") || teamNames.includes("thunder") ||
+                teamNames.includes("pelicans") || teamNames.includes("wizards") ||
+                teamNames.includes("hornets") || teamNames.includes("jazz") ||
+                teamNames.includes("kings") || teamNames.includes("trail blazers") ||
+                teamNames.includes("grizzlies") || teamNames.includes("pacers") ||
+                teamNames.includes("pistons") || teamNames.includes("timberwolves") ||
+                teamNames.includes("magic") || teamNames.includes("hawks")) {
+              analysisData.sport = "nba";
+              console.log("Inferred sport as nba from team names");
+            }
+            // Soccer team keywords
+            else if (teamNames.includes("palace") || teamNames.includes("bournemouth") ||
+                teamNames.includes("united") || teamNames.includes("arsenal") ||
+                teamNames.includes("chelsea") || teamNames.includes("liverpool") ||
+                teamNames.includes("madrid") || teamNames.includes("barcelona") ||
+                teamNames.includes("milan") || teamNames.includes("juventus") ||
+                teamNames.includes("bayern") || teamNames.includes("everton") ||
+                teamNames.includes("ajax") || teamNames.includes("brighton") ||
+                teamNames.includes("fulham") || teamNames.includes("newcastle") ||
+                teamNames.includes("southampton") || teamNames.includes("wolves") ||
+                teamNames.includes("brentford") || teamNames.includes("villa") ||
+                teamNames.includes("forest") || teamNames.includes("tottenham") ||
+                teamNames.includes("leicester") || teamNames.includes("west ham")) {
+              analysisData.sport = "soccer_epl";
+              console.log("Inferred sport as soccer_epl from team names");
+            } else {
+              // Check top-level or default to nfl
+              analysisData.sport = data.sport || "nfl";
+              console.log(`Using top-level sport or defaulting to nfl: ${analysisData.sport}`);
+            }
+          }
+
+          setAnalysisResult(analysisData);
+          cachedAnalysisResult = analysisData; // Cache the result
+          setCurrentAnalysisId(docId); // Set the current analysis ID
+          console.log("Set analysis result from history:", analysisData);
+          console.log("SPORT FROM HISTORY:", analysisData.sport);
           // Set the display image URL from the fetched data
           if (data.imageUrl) {
             setDisplayImageUrl(data.imageUrl);
@@ -390,7 +588,17 @@ export default function AnalysisScreen() {
       console.log("Parsed Response:", parsedResponse);
 
       // Now use the parsed response
+      console.log("=== KEY INSIGHTS DEBUG ===");
+      console.log("Full parsedResponse:", JSON.stringify(parsedResponse, null, 2));
+      console.log("keyInsightsNew:", parsedResponse?.keyInsightsNew);
+      console.log("marketConsensus:", parsedResponse?.keyInsightsNew?.marketConsensus);
+      console.log("bestValue:", parsedResponse?.keyInsightsNew?.bestValue);
+      console.log("offensiveEdge:", parsedResponse?.keyInsightsNew?.offensiveEdge);
+      console.log("defensiveEdge:", parsedResponse?.keyInsightsNew?.defensiveEdge);
+      console.log("========================");
+
       const analysisData: AnalysisResult = {
+        sport: parsedResponse?.sport || "", // ✅ CRITICAL FIX: Extract sport from API response
         teams: {
           home: parsedResponse?.teams?.home || "",
           away: parsedResponse?.teams?.away || "",
@@ -400,13 +608,10 @@ export default function AnalysisScreen() {
           },
         },
         keyInsights: {
-          confidence: parsedResponse?.keyInsights?.confidence || "",
-          marketActivity: parsedResponse?.keyInsights?.marketActivity || "",
-          lineShift: parsedResponse?.keyInsights?.lineShift || "",
-          publicVsSharps: {
-            public: parsedResponse?.keyInsights?.publicVsSharps?.public || 50,
-            sharps: parsedResponse?.keyInsights?.publicVsSharps?.sharps || 50,
-          },
+          marketConsensus: parsedResponse?.keyInsightsNew?.marketConsensus || null,
+          bestValue: parsedResponse?.keyInsightsNew?.bestValue || null,
+          offensiveEdge: parsedResponse?.keyInsightsNew?.offensiveEdge || null,
+          defensiveEdge: parsedResponse?.keyInsightsNew?.defensiveEdge || null,
         },
         matchSnapshot: {
           recentPerformance: {
@@ -425,7 +630,14 @@ export default function AnalysisScreen() {
           bettingSignal: parsedResponse?.aiAnalysis?.bettingSignal || "",
           breakdown: parsedResponse?.aiAnalysis?.breakdown || "",
         },
+        // Lightweight data for chatbot context (~4k chars total, not 80k)
+        marketIntelligence: parsedResponse?.marketIntelligence,
+        teamStats: parsedResponse?.teamStats,
       };
+
+      console.log("=== ANALYSIS DATA CREATED ===");
+      console.log("analysisData.keyInsights:", JSON.stringify(analysisData.keyInsights, null, 2));
+      console.log("============================");
 
       setAnalysisResult(analysisData);
       cachedAnalysisResult = analysisData; // Cache the analysis data
@@ -445,13 +657,15 @@ export default function AnalysisScreen() {
           const analysisDataToSave = {
             teams: `${analysisData.teams.home} vs ${analysisData.teams.away}`,
             confidence: parseInt(analysisData.aiAnalysis.confidenceScore) || 50,
+            sport: analysisData.sport || "nfl", // Add sport to top level for easier access
             imageUrl: downloadURL,
             createdAt: serverTimestamp(),
-            analysis: analysisData,
+            analysis: sanitizeForFirestore(analysisData), // Clean empty string keys
           };
 
           await setDoc(newAnalysisRef, analysisDataToSave);
           hasAnalysisSaved.current = true; // Mark as saved
+          setCurrentAnalysisId(newAnalysisRef.id); // Save the analysis ID to state
           console.log(
             "Analysis saved successfully to Firestore with ID:",
             newAnalysisRef.id
@@ -476,114 +690,167 @@ export default function AnalysisScreen() {
 
   const renderShimmer = () => (
     <View style={styles.shimmerContainer}>
+      {/* Image Container */}
       <View style={styles.imageContainer}>
-        {isDemo ? (
-          <Image
-            source={
-              i18n.locale.startsWith("fr")
-                ? require("../assets/images/demo_fr.png")
-                : i18n.locale.startsWith("es")
-                  ? require("../assets/images/demo_es.png")
-                  : require("../assets/images/demo_en.png")
-            }
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : displayImageUrl ? (
-          <Image
-            source={{ uri: displayImageUrl }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        ) : (
-          <View style={styles.placeholderImage} />
-        )}
+        <ShimmerPlaceholder
+          style={styles.image}
+          shimmerColors={shimmerColors}
+        />
       </View>
 
-      {/* Content Shimmer Groups */}
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
+      {/* Key Insights Card Skeleton */}
+      <Card style={styles.keyInsightsCard}>
+        <ShimmerPlaceholder
+          style={styles.keyInsightsTitleShimmer}
+          shimmerColors={shimmerColors}
+        />
+
+        <View style={styles.gridContainer}>
+          {/* 4 Metric Items */}
+          {[1, 2, 3, 4].map((index) => (
+            <View key={index} style={styles.gridItem}>
+              <View style={styles.metricContent}>
+                <ShimmerPlaceholder
+                  style={styles.kIcon}
+                  shimmerColors={shimmerColors}
+                />
+                <View style={styles.metricTextContainer}>
+                  <ShimmerPlaceholder
+                    style={styles.metricValueShimmer}
+                    shimmerColors={shimmerColors}
+                  />
+                  <ShimmerPlaceholder
+                    style={styles.metricLabelShimmer}
+                    shimmerColors={shimmerColors}
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* Match Snapshot Row Skeleton */}
+      <View style={styles.matchSnapshotRow}>
+        {/* Home Team Card */}
+        <Card style={styles.teamSnapshotCard}>
+          <View style={styles.teamHeader}>
+            <ShimmerPlaceholder
+              style={styles.teamLogo}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamNameShimmer}
+              shimmerColors={shimmerColors}
+            />
+          </View>
+          <View style={styles.teamContent}>
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={shimmerColors}
+            />
+
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={shimmerColors}
+            />
+          </View>
+        </Card>
+
+        {/* Away Team Card */}
+        <Card style={styles.teamSnapshotCard}>
+          <View style={styles.teamHeader}>
+            <ShimmerPlaceholder
+              style={styles.teamLogo}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamNameShimmer}
+              shimmerColors={shimmerColors}
+            />
+          </View>
+          <View style={styles.teamContent}>
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={shimmerColors}
+            />
+
+            <ShimmerPlaceholder
+              style={styles.teamSectionLabelShimmer}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.teamSectionValueShimmer}
+              shimmerColors={shimmerColors}
+            />
+          </View>
+        </Card>
       </View>
 
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
-          <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
+      {/* X-Factors Card Skeleton */}
+      <Card style={styles.xFactorsCard}>
+        <View style={styles.xFactorsContent}>
+          {/* Header */}
+          <View style={styles.xFactorsHeader}>
+            <ShimmerPlaceholder
+              style={styles.xFactorsTitleShimmer}
+              shimmerColors={shimmerColors}
+            />
+            <ShimmerPlaceholder
+              style={styles.xFactorsInfoShimmer}
+              shimmerColors={shimmerColors}
+            />
+          </View>
 
-      <View style={styles.shimmerGroup}>
-        <LinearGradient
-          colors={["#1A1A1A", "#363636"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradientContainer}
-        >
+          {/* X-Factors List */}
+          {[1, 2, 3].map((index) => (
+            <View key={index} style={[styles.xFactorItem, index === 3 && styles.xFactorItemLast]}>
+              <View style={styles.iconContainer}>
+                <ShimmerPlaceholder
+                  style={styles.xFactorIcon}
+                  shimmerColors={shimmerColors}
+                />
+              </View>
+              <View style={styles.xFactorTextContainer}>
+                <ShimmerPlaceholder
+                  style={styles.xFactorLabelShimmer}
+                  shimmerColors={shimmerColors}
+                />
+                <ShimmerPlaceholder
+                  style={styles.xFactorDetailShimmer}
+                  shimmerColors={shimmerColors}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      {/* AI Analysis Card Skeleton */}
+      <Card style={styles.aiAnalysisCard}>
+        <View style={[styles.aiAnalysisHeader, styles.collapsedHeader]}>
           <ShimmerPlaceholder
-            style={styles.shimmerLine}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            style={styles.aiAnalysisTitleShimmer}
+            shimmerColors={shimmerColors}
           />
           <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
+            style={styles.aiChevronShimmer}
+            shimmerColors={shimmerColors}
           />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "100%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-          <ShimmerPlaceholder
-            style={[styles.shimmerLine, { width: "30%" }]}
-            shimmerColors={["#919191", "#767676", "#919191"]}
-          />
-        </LinearGradient>
-      </View>
+        </View>
+      </Card>
     </View>
   );
 
@@ -622,7 +889,7 @@ export default function AnalysisScreen() {
         style={styles.analysisContent}
       >
         {/* Image Container - Use displayImageUrl state */}
-        <View style={styles.imageContainer}>
+        <Animated.View style={[styles.imageContainer, getCardStyle(0)]}>
           {isDemo && displayImageUrl ? (
             // Use the image URL from the fetched Firestore document
             // This ensures the image matches the analysis data
@@ -643,7 +910,7 @@ export default function AnalysisScreen() {
               <Text style={styles.placeholderText}></Text>
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {/* <Text style={styles.sectionTitle}>AI Insights</Text>
         <Text style={styles.sectionContent}>
@@ -651,226 +918,204 @@ export default function AnalysisScreen() {
         </Text> */}
 
         {/* Key Insights Card */}
-        <View style={[styles.card, styles.keyInsightsCard]}>
-          <Text style={styles.keyInsightsTitle}>
-            {i18n.t("analysisKeyInsights")}
-          </Text>
+        <Animated.View style={getCardStyle(1)}>
+        <Card style={styles.keyInsightsCard}>
+          <Text style={styles.keyInsightsTitle}>{i18n.t("analysisKeyInsights")}</Text>
+
           <View style={styles.gridContainer}>
-            {/* Confidence Box */}
+            {/* Market Consensus */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
+                <View style={styles.gridItemIcon}>
                   <Image
-                    source={require("../assets/images/ki1.png")}
-                    style={[styles.kIcon, { width: 32, height: 32 }]}
-                    resizeMode="contain"
+                    source={getTeamLogo(
+                      analysisResult?.keyInsights?.marketConsensus?.teamSide === "home"
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.keyInsights?.marketConsensus?.teamSide === "away"
+                        ? analysisResult?.teams?.away || ""
+                        : "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
                   />
                 </View>
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisConfidence")}
-                  </Text>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisMarketConsensus")}</Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.confidence}
+                    {analysisResult?.keyInsights?.marketConsensus?.display || i18n.t("analysisNoConsensus")}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Market Activity Box */}
+            {/* Best Value */}
             <View style={styles.gridItem}>
               <View style={styles.metricContent}>
-                <View style={styles.metricIconBox}>
+                <View style={styles.gridItemIcon}>
                   <Image
-                    source={require("../assets/images/ki2.png")}
-                    style={styles.kIcon}
-                    resizeMode="contain"
+                    source={getTeamLogo(
+                      analysisResult?.keyInsights?.bestValue?.teamSide === "home"
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.keyInsights?.bestValue?.teamSide === "away"
+                        ? analysisResult?.teams?.away || ""
+                        : "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
                   />
                 </View>
                 <View style={styles.metricTextContainer}>
-                  <Text style={styles.metricLabel}>
-                    {i18n.t("analysisMarketActivity")}
-                  </Text>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisBestValue")}</Text>
                   <Text style={styles.metricValue}>
-                    {analysisResult?.keyInsights.marketActivity}
+                    {analysisResult?.keyInsights?.bestValue?.display || i18n.t("analysisEfficientMarket")}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Line Shift Progress */}
+            {/* Offensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisLineShift")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <Text style={styles.progressValue}>
-                    {analysisResult?.keyInsights.lineShift}
+              <View style={styles.metricContent}>
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("+") ||
+                      (analysisResult?.keyInsights?.offensiveEdge?.display || "").startsWith("0")
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.teams?.away || "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisOffensiveEdge")}</Text>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.offensiveEdge?.display || "N/A"}
                   </Text>
-                  <View style={styles.progressBarContainer}>
-                    <Progress.Bar
-                      progress={
-                        analysisResult?.keyInsights.marketActivity === "High"
-                          ? 0.9
-                          : analysisResult?.keyInsights.marketActivity ===
-                            "Moderate"
-                          ? 0.66
-                          : 0.33
-                      }
-                      color="#FF55D4"
-                      unfilledColor="#FF55D440"
-                      borderWidth={0}
-                      style={[styles.progressBar, styles.lineShiftBar]}
-                    />
-                  </View>
                 </View>
               </View>
             </View>
 
-            {/* Public vs Sharps Progress */}
+            {/* Defensive Edge */}
             <View style={styles.gridItem}>
-              <Text style={styles.progressLabel}>
-                {i18n.t("analysisPublicVsSharps")}
-              </Text>
-              <View style={styles.progressMetric}>
-                <View style={styles.progressBox}>
-                  <View style={styles.percentageContainer}>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.public}%
-                    </Text>
-                    <Text style={styles.percentageValue}>
-                      {analysisResult?.keyInsights.publicVsSharps.sharps}%
-                    </Text>
-                  </View>
-                  <View style={styles.progressBarContainer}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.publicBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.public ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.progressBar,
-                        styles.sharpsBar,
-                        {
-                          flex:
-                            (analysisResult?.keyInsights?.publicVsSharps
-                              ?.sharps ?? 50) / 100,
-                        },
-                      ]}
-                    />
-                  </View>
+              <View style={styles.metricContent}>
+                <View style={styles.gridItemIcon}>
+                  <Image
+                    source={getTeamLogo(
+                      (analysisResult?.keyInsights?.defensiveEdge?.display || "").startsWith("-")
+                        ? analysisResult?.teams?.home || ""
+                        : analysisResult?.teams?.away || "",
+                      analysisResult?.sport
+                    )}
+                    style={styles.gridItemLogo}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.metricTextContainer}>
+                  <Text style={styles.metricLabel}>{i18n.t("analysisDefensiveEdge")}</Text>
+                  <Text style={styles.metricValue}>
+                    {analysisResult?.keyInsights?.defensiveEdge?.display || "N/A"}
+                  </Text>
                 </View>
               </View>
             </View>
           </View>
-        </View>
+        </Card>
+        </Animated.View>
 
-        {/* Match Snapshot Card */}
-        <View style={[styles.card, styles.snapshotCard]}>
-          <Pressable
-            onPress={() => toggleCard("snapshot")}
-            style={[
-              styles.snapshotHeader,
-              !expandedCards.snapshot && styles.collapsedHeader,
-            ]}
-          >
-            <Text style={styles.snapshotTitle}>
-              {i18n.t("analysisMatchSnapshot")}
-            </Text>
-            <Feather
-              name={expandedCards.snapshot ? "chevron-up" : "chevron-down"}
-              size={30}
-              color="#FFFFFF"
-            />
-          </Pressable>
-          {expandedCards.snapshot && (
-            <View style={styles.snapshotContent}>
-              {/* Recent Performances */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms1.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisRecentPerformances")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-1" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.recentPerformance.home}
-                    </BlurText>
-
-                    <BlurText
-                      card="ms-2"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.recentPerformance.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
-
-              {/* Head-to-Head Record */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms2.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisHeadToHead")}
-                  </Text>
-                  <BlurText card="ms-2" blur={!auth.currentUser}>
-                    {analysisResult?.matchSnapshot.headToHead}
-                  </BlurText>
-                </View>
-              </View>
-
-              {/* Momentum Indicator */}
-              <View style={styles.snapshotRow}>
-                <View style={styles.snapshotIconBox}>
-                  <Image
-                    source={require("../assets/images/ms3.png")}
-                    style={styles.snapshotIcon}
-                  />
-                </View>
-                <View style={styles.snapshotTextContainer}>
-                  <Text style={styles.snapshotLabel}>
-                    {i18n.t("analysisMomentumIndicator")}
-                  </Text>
-                  <View style={styles.performanceContainer}>
-                    <BlurText card="ms-3" blur={!auth.currentUser}>
-                      {analysisResult?.matchSnapshot.momentum.home}
-                    </BlurText>
-                    <BlurText
-                      card="ms-3"
-                      invisible={true}
-                      blur={!auth.currentUser}
-                    >
-                      {analysisResult?.matchSnapshot.momentum.away}
-                    </BlurText>
-                  </View>
-                </View>
-              </View>
+        {/* Match Snapshot - Home Team */}
+        <Animated.View style={getCardStyle(2)}>
+        <Card style={styles.teamCard}>
+          {/* Team Title Header */}
+          <View style={styles.teamCardHeader}>
+            <View style={styles.iconContainer}>
+              <Image
+                source={getTeamLogo(analysisResult?.teams.home || "", analysisResult?.sport)}
+                style={styles.xFactorIcon}
+                contentFit="contain"
+              />
             </View>
-          )}
-        </View>
+            <Text style={styles.teamCardTitle}>{analysisResult?.teams.home}</Text>
+          </View>
+
+          {/* Recent Performances */}
+          <View style={styles.xFactorItem}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="stats-chart" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisRecentPerformances")}</Text>
+              <BlurText card="ms-1" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
+                {analysisResult?.matchSnapshot.recentPerformance.home}
+              </BlurText>
+            </View>
+          </View>
+
+          {/* Momentum */}
+          <View style={[styles.xFactorItem, styles.xFactorItemLast]}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="trending-up" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisMomentumIndicator")}</Text>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
+                {analysisResult?.matchSnapshot.momentum.home}
+              </BlurText>
+            </View>
+          </View>
+        </Card>
+        </Animated.View>
+
+        {/* Match Snapshot - Away Team */}
+        <Animated.View style={getCardStyle(3)}>
+        <Card style={styles.teamCard}>
+          {/* Team Title Header */}
+          <View style={styles.teamCardHeader}>
+            <View style={styles.iconContainer}>
+              <Image
+                source={getTeamLogo(analysisResult?.teams.away || "", analysisResult?.sport)}
+                style={styles.xFactorIcon}
+                contentFit="contain"
+              />
+            </View>
+            <Text style={styles.teamCardTitle}>{analysisResult?.teams.away}</Text>
+          </View>
+
+          {/* Recent Performances */}
+          <View style={styles.xFactorItem}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="stats-chart" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisRecentPerformances")}</Text>
+              <BlurText card="ms-2" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
+                {analysisResult?.matchSnapshot.recentPerformance.away}
+              </BlurText>
+            </View>
+          </View>
+
+          {/* Momentum */}
+          <View style={[styles.xFactorItem, styles.xFactorItemLast]}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="trending-up" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.xFactorTextContainer}>
+              <Text style={styles.xFactorLabel}>{i18n.t("analysisMomentumIndicator")}</Text>
+              <BlurText card="ms-3" blur={!auth.currentUser && !isDemo} style={styles.xFactorDetail}>
+                {analysisResult?.matchSnapshot.momentum.away}
+              </BlurText>
+            </View>
+          </View>
+        </Card>
+        </Animated.View>
 
         {/* X-Factors Card */}
-        <View style={[styles.card, styles.xFactorsCard]}>
+        <Animated.View style={getCardStyle(4)}>
+        <Card style={styles.xFactorsCard}>
           <Pressable
             onPress={() => toggleCard("xFactors")}
             style={[
@@ -878,9 +1123,7 @@ export default function AnalysisScreen() {
               !expandedCards.xFactors && styles.collapsedHeader,
             ]}
           >
-            <Text style={styles.xFactorsTitle}>
-              {i18n.t("analysisXFactors")}
-            </Text>
+            <Text style={styles.xFactorsTitle}>{i18n.t("analysisXFactors")}</Text>
             <Feather
               name={expandedCards.xFactors ? "chevron-up" : "chevron-down"}
               size={30}
@@ -889,22 +1132,24 @@ export default function AnalysisScreen() {
           </Pressable>
           {expandedCards.xFactors && (
             <View style={styles.xFactorsContent}>
+              {/* X-Factors List */}
               {analysisResult?.xFactors.map((xFactor, index) => (
-                <View key={index} style={styles.xFactorRow}>
-                  <View style={styles.xFactorIconBox}>
+                <View key={index} style={[styles.xFactorItem, index === (analysisResult.xFactors.length - 1) && styles.xFactorItemLast]}>
+                  <View style={styles.iconContainer}>
                     <Image
                       source={
                         xFactor.type === 1
-                          ? require("../assets/images/xf1.png") // Health & Availability
+                          ? require("../assets/images/icons/shield.svg") // Health & Availability
                           : xFactor.type === 2
-                          ? require("../assets/images/xf2.png") // Location & Weather
+                          ? require("../assets/images/icons/geo-tag.svg") // Location & Weather
                           : xFactor.type === 3
-                          ? require("../assets/images/xf3.png") // Officiating & Rules
+                          ? require("../assets/images/icons/whistle.svg") // Officiating & Rules
                           : xFactor.type === 4
-                          ? require("../assets/images/xf4.png") // Travel & Fatigue
-                          : require("../assets/images/xf4.png") // Default
+                          ? require("../assets/images/icons/plane.svg") // Travel & Fatigue
+                          : require("../assets/images/icons/shield.svg") // Default
                       }
-                      style={styles.snapshotIcon}
+                      style={styles.xFactorIcon}
+                      contentFit="contain"
                     />
                   </View>
                   <View style={styles.xFactorTextContainer}>
@@ -919,31 +1164,20 @@ export default function AnalysisScreen() {
                         ? i18n.t("analysisTravelFatigue")
                         : xFactor.title}
                     </Text>
-                    <BlurText
-                      card={
-                        xFactor.type === 1
-                          ? "xf-1"
-                          : xFactor.type === 2
-                          ? "xf-2"
-                          : xFactor.type === 3
-                          ? "xf-3"
-                          : xFactor.type === 4
-                          ? "xf-4"
-                          : "xf-1"
-                      }
-                      blur={!auth.currentUser}
-                    >
+                    <Text style={styles.xFactorDetail}>
                       {xFactor.detail}
-                    </BlurText>
+                    </Text>
                   </View>
                 </View>
               ))}
             </View>
           )}
-        </View>
+        </Card>
+        </Animated.View>
 
         {/* AI Analysis Card */}
-        <View style={[styles.card, styles.aiAnalysisCard]}>
+        <Animated.View style={getCardStyle(5)}>
+        <Card style={styles.aiAnalysisCard}>
           <Pressable
             onPress={() => toggleCard("aiAnalysis")}
             style={[
@@ -960,30 +1194,24 @@ export default function AnalysisScreen() {
               color="#FFFFFF"
             />
           </Pressable>
-          {expandedCards.aiAnalysis && (
+          {expandedCards.aiAnalysis && analysisResult?.aiAnalysis && (
             <View style={styles.aiAnalysisContent}>
               <View style={styles.aiMetricsContainer}>
-                {/* Confidence Score */}
+                {/* Confidence */}
                 <View style={styles.aiMetricBox}>
                   <View style={styles.aiIconBox}>
                     <Image
                       source={require("../assets/images/aa1.png")}
                       style={styles.snapshotIcon}
+                      contentFit="contain"
                     />
                   </View>
-                  <View>
-                    <Text style={styles.aiMetricLabel}>
-                      {i18n.t("analysisConfidenceScore")}
-                    </Text>
-
-                    {auth.currentUser ? (
-                      <BlurText
-                        card="ai-2"
-                        blur={false}
-                        style={styles.aiMetricValue}
-                      >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aiMetricLabel}>Confidence</Text>
+                    {auth.currentUser || isDemo ? (
+                      <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.confidenceScore}
-                      </BlurText>
+                      </Text>
                     ) : (
                       <Image
                         source={require("../assets/images/ai-blur-1.png")}
@@ -998,26 +1226,21 @@ export default function AnalysisScreen() {
                   </View>
                 </View>
 
-                {/* Betting Signal */}
+                {/* Signal */}
                 <View style={styles.aiMetricBox}>
                   <View style={styles.aiIconBox}>
                     <Image
                       source={require("../assets/images/aa2.png")}
                       style={styles.snapshotIcon}
-                    />{" "}
+                      contentFit="contain"
+                    />
                   </View>
-                  <View>
-                    <Text style={styles.aiMetricLabel}>
-                      {i18n.t("analysisBettingSignal")}
-                    </Text>
-                    {auth.currentUser ? (
-                      <BlurText
-                        card="ai-2"
-                        blur={false}
-                        style={styles.aiMetricValue}
-                      >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aiMetricLabel}>Signal</Text>
+                    {auth.currentUser || isDemo ? (
+                      <Text style={styles.aiMetricValue}>
                         {analysisResult?.aiAnalysis.bettingSignal}
-                      </BlurText>
+                      </Text>
                     ) : (
                       <Image
                         source={require("../assets/images/ai-blur-2.png")}
@@ -1037,15 +1260,10 @@ export default function AnalysisScreen() {
                 <Text style={styles.aiBreakdownTitle}>
                   {i18n.t("analysisBreakdown")}
                 </Text>
-                {auth.currentUser ? (
-                  <BlurText
-                    textColor="#FFFFFF"
-                    card="ai-3"
-                    lineHeight={18}
-                    blur={false}
-                  >
+                {auth.currentUser || isDemo ? (
+                  <Text style={styles.aiBreakdownText}>
                     {analysisResult?.aiAnalysis.breakdown}
-                  </BlurText>
+                  </Text>
                 ) : (
                   <Image
                     source={require("../assets/images/aiblur.png")}
@@ -1059,63 +1277,21 @@ export default function AnalysisScreen() {
               </View>
             </View>
           )}
-        </View>
-
-        <View style={styles.debateContainer}>
-          {!isDemo && (
-            <BorderButton
-              onPress={() => {
-                // Pass full analysis data to chat screen
-                router.push({
-                  pathname: "/chat",
-                  params: { analysisData: JSON.stringify(analysisResult) },
-                });
-              }}
-              containerStyle={styles.floatingButton}
-              borderColor="#00C2E0"
-              backgroundColor="#00C2E020"
-              opacity={1}
-              borderWidth={1}
-            >
-              <Text style={styles.buttonText}>
-                {i18n.t("analysisDebateWithAI")}
-              </Text>
-            </BorderButton>
-          )}
-        </View>
-        {isDemo && (
-          <View style={styles.demoDebateContainer}>
-            <BorderButton
-              onPress={() => setShowUnlockMessage(true)}
-              containerStyle={styles.floatingButton}
-              borderColor="#00C2E0"
-              backgroundColor="#00C2E020"
-              opacity={1}
-              borderWidth={1}
-            >
-              <Text style={styles.buttonText}>
-                {i18n.t("analysisDebateWithAI")}
-              </Text>
-            </BorderButton>
-            {showUnlockMessage && (
-              <Text style={styles.unlockText}>
-                {i18n.t("analysisUnlockPremium")}
-              </Text>
-            )}
-          </View>
-        )}
+        </Card>
+        </Animated.View>
       </ScrollView>
     );
   };
 
   return (
     <ScreenBackground hideBg>
-      <TopBar />
+      <TopBar onBackPress={() => router.replace("/")} />
 
       <View style={styles.container}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
         >
           {/* Analysis Content */}
           <View style={styles.analysisContainer}>
@@ -1123,27 +1299,20 @@ export default function AnalysisScreen() {
           </View>
         </ScrollView>
 
-        {/* Floating Next Button */}
-        {!isLoading && isDemo && (
-          <View style={styles.floatingButtonContainer}>
-            {isDemo && (
-              <>
-                <GradientButton
-                  onPress={() => {
-                    if (isSubscribed) {
-                      console.log("User is subscribed, navigating to login.");
-                      router.push("/login");
-                    } else {
-                      router.push("/paywall");
-                    }
-                  }}
-                >
-                  {i18n.t("analysisNext")}
-                </GradientButton>
-              </>
-            )}
-          </View>
-        )}
+        {/* Floating Bottom Navigation - Show for both demo and regular mode */}
+          <FloatingBottomNav
+            activeTab="insight"
+            analysisData={{
+              team1: analysisResult?.teams?.home,
+              team2: analysisResult?.teams?.away,
+              sport: analysisResult?.sport,
+              team1Logo: analysisResult?.teams?.logos?.home,
+              team2Logo: analysisResult?.teams?.logos?.away,
+              analysisId: currentAnalysisId || undefined,
+            isDemo: isDemo,
+          }}
+          isSubscribed={isSubscribed}
+        />
       </View>
     </ScreenBackground>
   );
@@ -1169,6 +1338,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  scrollContent: {
+    paddingBottom: 120, // Extra padding for floating nav
+  },
   title: {
     fontSize: 28,
     fontWeight: "bold",
@@ -1182,16 +1354,17 @@ const styles = StyleSheet.create({
     height: 300,
     aspectRatio: 1,
     alignSelf: "center",
-    marginBottom: 20,
-    borderRadius: 35,
+    marginBottom: 0,
+    borderRadius: radii.xl,
     overflow: "hidden",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   image: {
     width: "100%",
     height: "100%",
-    borderRadius: 20,
-    objectFit: "cover",
+    borderRadius: radii.xl,
   },
   analysisContainer: {
     paddingTop: 20,
@@ -1221,6 +1394,9 @@ const styles = StyleSheet.create({
     borderColor: "#888888",
     overflow: "hidden",
   },
+  firstShimmerGroup: {
+    marginTop: 18,
+  },
   gradientContainer: {
     width: "100%",
     padding: 15,
@@ -1238,22 +1414,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   analysisSection: {
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   sectionTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-    fontFamily: "Aeonik-Bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    marginBottom: spacing[2],
+    fontFamily: typography.fontFamily.bold,
   },
   sectionContent: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
   },
   errorContainer: {
     // padding: 20,
@@ -1268,55 +1445,60 @@ const styles = StyleSheet.create({
     fontFamily: "Aeonik-Regular",
   },
   card: {
-    backgroundColor: "#101010",
-    borderWidth: 0.2,
-    borderColor: "#505050",
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+    borderRadius: radii.lg,
+    padding: spacing[4],
+    marginBottom: spacing[4],
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 15,
+    marginBottom: spacing[4],
   },
   cardTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
   },
   insightGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 15,
+    gap: spacing[4],
   },
   insightItem: {
     width: "48%",
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    padding: spacing[3],
     flexDirection: "column",
     alignItems: "flex-start",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   insightLabel: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginTop: 8,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    marginTop: spacing[2],
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   insightValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Bold",
-    marginTop: 4,
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.medium,
+    marginTop: spacing[1],
   },
   snapshotCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   snapshotHeader: {
     flexDirection: "row",
@@ -1324,14 +1506,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   snapshotTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
   },
   snapshotContent: {
-    marginTop: 20,
-    gap: 20,
+    marginTop: spacing[5],
+    gap: spacing[5],
   },
   snapshotRow: {
     flexDirection: "row",
@@ -1340,90 +1521,116 @@ const styles = StyleSheet.create({
   snapshotIconBox: {
     width: 48,
     height: 48,
-    backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 12,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    marginRight: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   snapshotTextContainer: {
     flex: 1,
   },
   snapshotLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 8,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    marginBottom: spacing[2],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   snapshotValue: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
     lineHeight: 22,
   },
   performanceContainer: {
-    // justifyContent: "space-between",
-    // alignItems: "center",
-    gap: 5,
+    gap: spacing[1],
   },
   performanceText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
   },
   xFactorsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  xFactorsContent: {
+    paddingVertical: spacing[1],
+    paddingHorizontal: 0,
   },
   xFactorsHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing[5],
   },
   xFactorsTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Medium",
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xl,
+    color: colors.foreground,
   },
-  xFactorsContent: {
-    gap: 20,
-    marginTop: 20,
+  xFactorsInfo: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.base,
+    color: colors.primary,
   },
-  xFactorRow: {
+  xFactorItem: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: spacing[3],
+    marginBottom: spacing[4],
+    padding: spacing[3],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
-  xFactorIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 12,
+  xFactorItemLast: {
+    marginBottom: 0,
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  xFactorIcon: {
+    width: 26,
+    height: 26,
   },
   xFactorTextContainer: {
     flex: 1,
+    gap: 4,
   },
   xFactorLabel: {
-    color: "rgba(255, 255, 255, 0.8)",
-
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 8,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  xFactorValue: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    lineHeight: 22,
+  xFactorDetail: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.sm,
+    color: colors.mutedForeground,
+    lineHeight: 18,
   },
   aiAnalysisCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    ...shadows.cardGlow,
   },
   aiAnalysisHeader: {
     flexDirection: "row",
@@ -1431,10 +1638,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   aiAnalysisTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Medium",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
   },
   aiAnalysisEmoji: {
     fontSize: 24,
@@ -1442,109 +1648,184 @@ const styles = StyleSheet.create({
   aiMetricsContainer: {
     width: "100%",
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    // marginBottom: 24,
-    gap: 10,
-    marginTop: 20,
+    gap: spacing[3],
+    marginTop: spacing[5],
   },
   aiMetricBox: {
     flex: 1,
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
     flexDirection: "row",
-    borderRadius: 16,
-
+    borderRadius: radii.lg,
     alignItems: "center",
-    // padding: 16,
-    gap: 10,
+    gap: spacing[2],
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[1],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   aiIconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: "rgba(40, 40, 40, 0.95)",
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   aiMetricLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 4,
+    color: colors.primary,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[1],
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   aiMetricValue: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
+    lineHeight: 18,
   },
   aiBreakdownContainer: {
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 16,
-    paddingBottom: 16,
+    marginTop: spacing[2],
   },
   aiBreakdownTitle: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
-    marginBottom: 18,
-    textAlign: "center",
+    color: colors.primary,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[4],
+    textAlign: "left",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   aiBreakdownText: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
-    lineHeight: 28,
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
+    lineHeight: 22,
   },
   keyInsightsCard: {
-    backgroundColor: "rgba(18, 18, 18, 0.95)",
-    borderRadius: 14,
-    padding: 20,
-    paddingVertical: 25,
-    marginTop: 20,
+    padding: spacing[5],
+    paddingVertical: spacing[6],
+    marginTop: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    ...shadows.cardGlow,
   },
   keyInsightsTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "bold",
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
     textAlign: "center",
-    marginBottom: 14,
-    fontFamily: "Aeonik-Medium",
+    marginBottom: spacing[4],
+    fontFamily: typography.fontFamily.medium,
+  },
+  matchSnapshotRow: {
+    flexDirection: "row",
+    gap: spacing[4],
+    marginTop: spacing[4],
+    marginBottom: 0,
+  },
+  teamSnapshotCard: {
+    flex: 1,
+    minHeight: 180,
+    padding: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  teamHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    marginBottom: spacing[4],
+    paddingBottom: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  teamLogo: {
+    width: 40,
+    height: 40,
+  },
+  teamName: {
+    flex: 1,
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.medium,
+  },
+  teamContent: {
+    gap: spacing[3],
+  },
+  teamStatItem: {
+    marginBottom: spacing[3],
+    gap: spacing[1],
+  },
+  teamCard: {
+    marginTop: spacing[4],
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  teamCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    marginBottom: spacing[4],
+  },
+  teamCardTitle: {
+    color: colors.foreground,
+    fontSize: typography.sizes.xl,
+    fontFamily: typography.fontFamily.medium,
+  },
+  teamSectionLabel: {
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    marginBottom: spacing[1],
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  teamSectionValue: {
+    color: colors.foreground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    lineHeight: 18,
   },
 
   metricBox: {
     width: 160,
-    // backgroundColor: "rgba(32, 32, 32, 0.95)",
-    borderRadius: 16,
-    // padding: 16,
+    borderRadius: radii.lg,
     justifyContent: "center",
   },
   metricContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing[3],
   },
   metricIconBox: {
-    width: 50,
-    height: 50,
-    backgroundColor: "#212121",
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    backgroundColor: colors.secondary,
+    borderRadius: radii.lg,
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
   },
   metricTextContainer: {
     flex: 1,
   },
   metricLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    marginBottom: 4,
-    fontFamily: "Aeonik-Regular",
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginBottom: spacing[1],
   },
   metricValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
   },
   progressMetricsContainer: {
     flexDirection: "row",
@@ -1559,27 +1840,31 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   progressMetric: {
-    backgroundColor: "#212121",
-    borderRadius: 13,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    paddingRight: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    paddingRight: spacing[4],
     minHeight: 45,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
   },
   progressLabel: {
-    color: "rgba(255, 255, 255, 0.6)",
-    fontSize: 12,
-    marginBottom: 8,
-    fontFamily: "Aeonik-Regular",
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    marginBottom: spacing[2],
+    fontFamily: typography.fontFamily.regular,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   progressBox: {
     width: "100%",
   },
   progressValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    marginBottom: 15,
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    marginBottom: spacing[4],
+    fontFamily: typography.fontFamily.medium,
   },
   progressBar: {
     height: 5,
@@ -1599,10 +1884,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   percentageValue: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    fontFamily: "Aeonik-Regular",
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.bold,
   },
   progressBarContainer: {
     flexDirection: "row",
@@ -1631,14 +1915,13 @@ const styles = StyleSheet.create({
   },
   floatingButtonContainer: {
     position: "absolute",
-    backgroundColor: "#0C0C0C",
+    backgroundColor: colors.background,
     bottom: 0,
     paddingBottom: 60,
-    paddingTop: 20,
+    paddingTop: spacing[5],
     left: 0,
-
     right: 0,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing[5],
   },
   floatingButton: {
     shadowOpacity: 0.25,
@@ -1665,9 +1948,8 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   kIcon: {
-    width: 26,
-    height: 26,
-    resizeMode: "contain",
+    width: 24,
+    height: 24,
   },
   unlockText: {
     color: "#FF373A",
@@ -1681,13 +1963,101 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
-    paddingHorizontal: 4,
+    gap: spacing[3],
+    paddingHorizontal: spacing[1],
   },
   gridItem: {
     width: "47%",
     marginBottom: 0,
     minHeight: 80,
     justifyContent: "center",
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[1],
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.03)",
+  },
+  gridItemIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.1)",
+  },
+  gridItemLogo: {
+    width: 26,
+    height: 26,
+  },
+  // Shimmer Styles
+  keyInsightsTitleShimmer: {
+    height: 22,
+    borderRadius: 8,
+    marginBottom: 14,
+    width: "60%",
+    alignSelf: "center",
+  },
+  metricValueShimmer: {
+    height: 16,
+    borderRadius: 6,
+    width: "80%",
+    marginTop: 8,
+  },
+  metricLabelShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "70%",
+    marginTop: 4,
+  },
+  teamNameShimmer: {
+    height: 16,
+    borderRadius: 6,
+    width: "60%",
+    marginLeft: 12,
+  },
+  teamSectionLabelShimmer: {
+    height: 12,
+    borderRadius: 4,
+    width: "70%",
+    marginBottom: 2,
+  },
+  teamSectionValueShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "90%",
+  },
+  xFactorsTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "50%",
+  },
+  xFactorsInfoShimmer: {
+    height: 17,
+    borderRadius: 6,
+    width: 20,
+  },
+  xFactorLabelShimmer: {
+    height: 11,
+    borderRadius: 4,
+    width: "60%",
+  },
+  xFactorDetailShimmer: {
+    height: 14,
+    borderRadius: 6,
+    width: "85%",
+    marginTop: 4,
+  },
+  aiAnalysisTitleShimmer: {
+    height: 20,
+    borderRadius: 8,
+    width: "40%",
+  },
+  aiChevronShimmer: {
+    height: 30,
+    width: 30,
+    borderRadius: 15,
   },
 });

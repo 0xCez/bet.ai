@@ -127,8 +127,8 @@ export function RevenueCatProvider({
     }
   }
 
-  const isSubscribed =
-    customerInfo?.entitlements.active["Premium"] !== undefined;
+  // Production: Check actual subscription status
+  const isSubscribed = customerInfo?.entitlements.active["Premium"] !== undefined;
 
   const value = {
     customerInfo,

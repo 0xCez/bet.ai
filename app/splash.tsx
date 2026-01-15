@@ -1,107 +1,139 @@
-import { useEffect, useState } from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { useEffect, useState, useRef } from "react";
+import { View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { auth } from "../firebaseConfig";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { getAppState, AppState } from "../utils/appStorage";
+import { initializeAuthStateManager, isUserLoggedIn } from "../utils/authStateManager";
 import * as SplashScreen from "expo-splash-screen";
-import { Logo } from "@/components/ui/Logo";
-import { ScreenBackground } from "@/components/ui/ScreenBackground";
+import { LogoSpinner } from "@/components/ui/LogoSpinner";
 import { usePostHog } from "posthog-react-native";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 import * as Localization from "expo-localization";
+import { colors } from "../constants/designTokens";
 
 SplashScreen.preventAutoHideAsync();
+
+// Minimum time to show splash (1 animation loop + small buffer)
+const MIN_SPLASH_DURATION = 2000;
 
 export default function SplashPage() {
   const router = useRouter();
   const [isAuthInitialized, setIsAuthInitialized] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [appState, setAppState] = useState<AppState | null>(null);
+  const [isMinDurationComplete, setIsMinDurationComplete] = useState(false);
   const posthog = usePostHog();
+  const navigationDataRef = useRef<{ state: AppState | null; user: User | null } | null>(null);
 
-  // Handle Firebase Auth state
+  // Start minimum duration timer immediately
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const timer = setTimeout(() => {
+      setIsMinDurationComplete(true);
+    }, MIN_SPLASH_DURATION);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Handle Firebase Auth state with improved persistence
+  useEffect(() => {
+    // Initialize auth state manager
+    const unsubscribeAuthManager = initializeAuthStateManager();
+
+    // Set up auth state listener with debouncing
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", { user: !!user, uid: user?.uid });
+
+      // Double-check auth state to prevent false logouts
+      const isLoggedIn = await isUserLoggedIn();
+      console.log("Confirmed login status:", isLoggedIn);
+
       setFirebaseUser(user);
       setIsAuthInitialized(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubscribeAuthManager();
+    };
   }, []);
 
-  // Handle navigation once auth is initialized
+  // Load data once auth is initialized
   useEffect(() => {
-    async function initialize() {
+    async function loadData() {
       try {
         // Track app launch with PostHog
-        await posthog?.capture("app_launched", {
+        posthog?.capture("app_launched", {
           appVersion: Application.nativeApplicationVersion,
           appBuild: Application.nativeBuildVersion,
           deviceName: Device.deviceName,
           deviceType: Device.deviceType,
           osName: Device.osName,
           osVersion: Device.osVersion,
-          locale: Localization.getLocales()[0]?.languageCode || 'en',
+          locale: Localization.getLocales()[0]?.languageCode || "en",
         });
 
         // Load app state
         const state = await getAppState();
-        setAppState(state);
         console.log("Loading app state in splash state", state);
+
+        // Store navigation data for later use
+        navigationDataRef.current = { state, user: firebaseUser };
 
         // Hide the native splash screen
         await SplashScreen.hideAsync();
-
-        // Handle navigation based on state
-        if (!state?.onboardingComplete) {
-          router.replace("/onboarding");
-          return;
-        }
-
-        if (firebaseUser) {
-          router.replace("/home");
-          return;
-        }
-
-        if (!state.signupComplete) {
-          if (!state.signupStep) {
-            router.replace("/welcome");
-          } else {
-            router.replace("/welcome");
-          }
-          return;
-        }
-
-        if (!firebaseUser) {
-          router.replace("/welcome");
-          return;
-        }
-
-        // If all checks pass, go to home
-        router.replace("/home");
       } catch (error) {
-        console.error("Error in splash initialization:", error);
-        // In case of error, redirect to welcome as a safe default
-        router.replace("/welcome");
+        console.error("Error loading splash data:", error);
+        navigationDataRef.current = { state: null, user: null };
       }
     }
 
     if (isAuthInitialized) {
-      initialize();
+      loadData();
     }
   }, [isAuthInitialized, firebaseUser]);
 
+  // Navigate only when both conditions are met
+  useEffect(() => {
+    if (!isMinDurationComplete || !isAuthInitialized || !navigationDataRef.current) {
+      return;
+    }
+
+    const { state, user } = navigationDataRef.current;
+
+    try {
+      // Handle navigation based on state
+      if (!state?.onboardingComplete) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      if (user) {
+        router.replace("/home");
+        return;
+      }
+
+      if (!state.signupComplete) {
+        router.replace("/welcome");
+        return;
+      }
+
+      if (!user) {
+        router.replace("/welcome");
+        return;
+      }
+
+      // If all checks pass, go to home
+      router.replace("/home");
+    } catch (error) {
+      console.error("Error in splash navigation:", error);
+      router.replace("/welcome");
+    }
+  }, [isMinDurationComplete, isAuthInitialized]);
+
   return (
     <View style={styles.container}>
-      <View style={styles.logoContainer}>
-        <Image
-          source={require("../assets/images/logo4.png")}
-          style={styles.image}
-          resizeMode="contain"
-        />
-      </View>
+      <LogoSpinner size={96} />
     </View>
   );
 }
@@ -109,17 +141,8 @@ export default function SplashPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#0C0C0C",
-  },
-  logoContainer: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  image: {
-    width: "25%",
-    height: "25%",
+    backgroundColor: colors.background,
   },
 });

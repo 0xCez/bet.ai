@@ -1,18 +1,19 @@
-import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, Dimensions, Image, Alert } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, Dimensions, Image, Alert, Pressable, Animated } from "react-native";
+import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Carousel, { ICarouselInstance } from "react-native-reanimated-carousel";
-import { BlurView } from "expo-blur";
-import MaskedView from "@react-native-masked-view/masked-view";
-import { LinearGradient } from "expo-linear-gradient";
-import { GradientButton } from "../components/ui/GradientButton";
-import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { Logo } from "../components/ui/Logo";
-import { GradientText } from "../components/ui/GradientText";
 import { updateAppState } from "../utils/appStorage";
-import { MultilineText } from "@/components/ui/MultilineText";
 import i18n from "../i18n";
-import LottieView from "lottie-react-native";
+import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
+import { OnboardingSlide2Visual } from "../components/ui/OnboardingSlide2Visual";
+import { SharpsVsPublicChart, OddsMovementChart } from "../components/ui/OnboardingSlide3Visual";
+import { OnboardingSlide4Visual } from "../components/ui/OnboardingSlide4Visual";
+import { OnboardingSlide5Visual } from "../components/ui/OnboardingSlide5Visual";
+import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
+import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -81,10 +82,41 @@ const slides: OnboardingSlide[] = [
 export default function OnboardingScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const carouselRef = useRef<ICarouselInstance>(null);
+  const insets = useSafeAreaInsets();
+  const { trackFunnelStep } = useOnboardingAnalytics();
+  const hasTrackedStart = useRef(false);
+
+  // Track carousel started on mount
+  useEffect(() => {
+    if (!hasTrackedStart.current) {
+      trackFunnelStep('carousel_started');
+      hasTrackedStart.current = true;
+    }
+  }, []);
+
+  // Entrance animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const isLastSlide = activeIndex === slides.length - 1;
 
   const handleNext = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isLastSlide) {
       handleOnboardingComplete();
       return;
@@ -95,6 +127,10 @@ export default function OnboardingScreen() {
   const handleOnboardingComplete = async () => {
     try {
       console.log("Starting onboarding completion...");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Track carousel completed
+      trackFunnelStep('carousel_completed');
 
       // Save onboarding completion state
       await updateAppState({
@@ -118,22 +154,38 @@ export default function OnboardingScreen() {
 
   const renderSlide = ({ item }: { item: OnboardingSlide }) => (
     <View style={styles.slide}>
-      <View style={styles.contentContainer}>
+      <Animated.View
+        style={[
+          styles.contentContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <View style={styles.titleContainer}>
-          {/* <GradientText fontSize={38}>{item.title}</GradientText> */}
-          <MultilineText
-            line1={item.title}
-            line2={item.title2}
-            fontSize={26} // optional
-          />
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.title}>{item.title2}</Text>
         </View>
         {item.id === 1 ? (
-          <LottieView
-            source={require("../assets/lottie/welcome.json")}
-            autoPlay
-            loop={true}
-            style={{ width: "100%", height: "60%", marginBottom: 20 }}
-          />
+          <OnboardingSlide1Visual isActive={activeIndex === 0} />
+        ) : item.id === 2 ? (
+          <OnboardingSlide2Visual isActive={activeIndex === 1} />
+        ) : item.id === 3 ? (
+          <View style={styles.slide3Container}>
+            <View style={styles.slide3ChartsWrapper}>
+              <View style={styles.sharpsChartPosition}>
+                <SharpsVsPublicChart isActive={activeIndex === 2} />
+              </View>
+              <View style={styles.oddsChartPosition}>
+                <OddsMovementChart isActive={activeIndex === 2} />
+              </View>
+            </View>
+          </View>
+        ) : item.id === 4 ? (
+          <OnboardingSlide4Visual isActive={activeIndex === 3} />
+        ) : item.id === 5 ? (
+          <OnboardingSlide5Visual isActive={activeIndex === 4} />
         ) : (
           <View style={styles.imageContainer}>
             <Image
@@ -145,11 +197,9 @@ export default function OnboardingScreen() {
         )}
 
         <View style={styles.textContainer}>
-          <GradientText fontSize={24} style={styles.description}>
-            {item.description}
-          </GradientText>
+          <Text style={styles.description}>{item.description}</Text>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 
@@ -167,121 +217,187 @@ export default function OnboardingScreen() {
     </View>
   );
 
+  // Calculate available height for carousel (between header and bottom)
+  const headerHeight = insets.top + 50; // safe area + logo + padding
+  const bottomHeight = Math.max(insets.bottom, 20) + 120; // safe area + dots + button
+  const carouselHeight = SCREEN_HEIGHT - headerHeight - bottomHeight;
+
   return (
-    <ScreenBackground backgroundImage={require("../assets/images/bg4.png")}>
-      <View style={styles.header}>
+    <View style={styles.screenContainer}>
+      {/* Header with Logo */}
+      <View style={[styles.header, { height: headerHeight, paddingTop: insets.top + 10 }]}>
         <Logo size="small" />
       </View>
 
-      <Carousel
-        ref={carouselRef}
-        loop={false}
-        width={SCREEN_WIDTH}
-        height={SCREEN_WIDTH * 1.9}
-        data={slides}
-        renderItem={renderSlide}
-        onSnapToItem={setActiveIndex}
-        mode="parallax"
-        modeConfig={{
-          parallaxScrollingScale: 0.9,
-          parallaxScrollingOffset: 30,
-        }}
-      />
+      {/* Carousel fills middle space */}
+      <View style={{ marginTop: headerHeight }}>
+        <Carousel
+          ref={carouselRef}
+          loop={false}
+          width={SCREEN_WIDTH}
+          height={carouselHeight}
+          data={slides}
+          renderItem={renderSlide}
+          onSnapToItem={(index) => {
+            if (index !== activeIndex) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+            setActiveIndex(index);
+          }}
+          mode="parallax"
+          modeConfig={{
+            parallaxScrollingScale: 0.9,
+            parallaxScrollingOffset: 30,
+          }}
+        />
+      </View>
 
-      <BlurView intensity={0} tint="dark" style={styles.bottomContainer}>
+      {/* Bottom Container */}
+      <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
         {renderPaginationDots()}
-        <GradientButton onPress={handleNext}>{i18n.t('onboardingButtonNext')}</GradientButton>
-      </BlurView>
-    </ScreenBackground>
+        <Pressable
+          onPress={handleNext}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && styles.primaryButtonPressed,
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>
+            {i18n.t('onboardingButtonNext')}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    alignItems: "center",
+  screenContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  logo: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 30,
-    color: "#FFFFFF",
-    textAlign: "center",
+  header: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
   },
   slide: {
     flex: 1,
+    justifyContent: "center",
   },
   contentContainer: {
-    flex: 1,
-    paddingHorizontal: 0,
-    justifyContent: "space-between",
-    paddingTop: 0,
-    paddingBottom: 100,
+    paddingHorizontal: spacing[2],
     alignItems: "center",
   },
   titleContainer: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: spacing[5],
     width: "100%",
+    paddingHorizontal: 0,
+  },
+  title: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 30,
+    color: colors.foreground,
+    textAlign: "center",
+    lineHeight: 38,
   },
   imageContainer: {
-    flex: 1,
+    width: SCREEN_WIDTH * 0.85,
+    height: SCREEN_HEIGHT * 0.45,
     justifyContent: "center",
     alignItems: "center",
-    width: "100%",
+  },
+  slide3Container: {
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_HEIGHT * 0.50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  slide3ChartsWrapper: {
     position: "relative",
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sharpsChartPosition: {
+    position: "absolute",
+    top: 25,
+    left: -10,
+    zIndex: 1,
+  },
+  oddsChartPosition: {
+    position: "absolute",
+    bottom: 15,
+    right: -10,
+    zIndex: 2,
   },
   image: {
     width: "100%",
     height: "100%",
   },
   textContainer: {
-    marginTop: 32,
+    marginTop: spacing[4],
     alignItems: "center",
     width: "100%",
-    marginBottom: 30,
-  },
-  title: {
-    fontFamily: "Aeonik-Medium",
-    fontSize: 38,
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: 8,
-    paddingHorizontal: 0,
   },
   description: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 20,
-    color: "#ffffff",
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 18,
+    color: colors.mutedForeground,
     textAlign: "center",
-    lineHeight: 30,
-    // letterSpacing: 0.5,
-    paddingHorizontal: 0,
+    lineHeight: 26,
   },
   bottomContainer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingBottom: 34,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[2],
   },
   paginationContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: spacing[5],
     width: "100%",
   },
   paginationDot: {
-    width: 9,
-    height: 9,
+    width: 8,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: "#333333",
+    backgroundColor: colors.muted,
     marginHorizontal: 5,
   },
   paginationDotActive: {
-    backgroundColor: "#ffffff",
-    width: 9,
+    backgroundColor: colors.primary,
+    width: 8,
+  },
+  // Primary CTA Button
+  primaryButton: {
+    height: 56,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  primaryButtonPressed: {
+    transform: [{ scale: 0.97 }],
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+  },
+  primaryButtonText: {
+    color: colors.primaryForeground,
+    fontSize: typography.sizes.lg,
+    fontFamily: typography.fontFamily.bold,
   },
 });
