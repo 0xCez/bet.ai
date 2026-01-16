@@ -102,6 +102,8 @@ type SoccerTeamStatsParams = {
   analysisId?: string;
   selectedTeam?: string;
   isDemo?: string;
+  fromCache?: string; // "true" when viewing pre-cached games from carousel
+  cachedGameId?: string; // Firestore doc ID for pre-cached games
 };
 
 
@@ -233,9 +235,13 @@ export default function TeamStatsSoccerNew() {
       cachedTeamResult = null;
     }
 
-    // If analysisId exists (history/demo), load from Firestore instead of API
+    // If analysisId exists (history/demo/cached), load from Firestore instead of API
     if (params.analysisId) {
-      loadTeamStatsFromFirestore();
+      if (params.fromCache === "true") {
+        loadTeamStatsFromCache();
+      } else {
+        loadTeamStatsFromFirestore();
+      }
       return;
     }
 
@@ -294,6 +300,55 @@ export default function TeamStatsSoccerNew() {
     } catch (err) {
       console.error("Error loading team stats from Firestore:", err);
       setError("Team stats unavailable for this analysis.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load team stats from pre-cached games (matchAnalysisCache collection)
+  const loadTeamStatsFromCache = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (!params.analysisId) {
+        throw new Error("Cache ID missing");
+      }
+
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("@/firebaseConfig");
+
+      // Pre-cached games are stored in matchAnalysisCache collection
+      const docRef = doc(db, "matchAnalysisCache", params.analysisId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error("Cached analysis not found");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis || {};
+
+      if (cachedAnalysis?.teamStats) {
+        const teamData: SoccerTeamStatsResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          teamStats: cachedAnalysis.teamStats,
+          timestamp: data.timestamp || new Date().toISOString(),
+          teamIds: cachedAnalysis.teamStats.team1?.teamId && cachedAnalysis.teamStats.team2?.teamId ?
+            { team1Id: cachedAnalysis.teamStats.team1.teamId, team2Id: cachedAnalysis.teamStats.team2.teamId } :
+            { team1Id: 0, team2Id: 0 }
+        };
+
+        setTeamResult(teamData);
+        cachedTeamResult = teamData;
+        console.log("✅ Loaded team stats from pre-cached game");
+      } else {
+        throw new Error("No team stats data in pre-cached analysis");
+      }
+    } catch (err) {
+      console.error("Error loading team stats from cache:", err);
+      setError("Team stats unavailable for this cached game.");
     } finally {
       setIsLoading(false);
     }
@@ -711,6 +766,8 @@ export default function TeamStatsSoccerNew() {
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
           isDemo: params.isDemo === "true",
+          fromCache: params.fromCache === "true",
+          cachedGameId: params.cachedGameId,
         }}
         isSubscribed={isSubscribed}
       />

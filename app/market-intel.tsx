@@ -130,6 +130,8 @@ type MarketIntelParams = {
   team2Logo?: string;
   analysisId?: string;
   isDemo?: string;
+  fromCache?: string; // "true" when viewing pre-cached games from carousel
+  cachedGameId?: string; // Firestore doc ID for pre-cached games
 };
 
 // Helper function to get bookmaker logo
@@ -297,9 +299,13 @@ export default function MarketIntelNew() {
       cachedMarketResult = null;
     }
 
-    // If analysisId exists (history/demo), load from Firestore instead of API
+    // If analysisId exists (history/demo/cached), load from Firestore instead of API
     if (params.analysisId) {
-      loadMarketIntelFromFirestore();
+      if (params.fromCache === "true") {
+        loadMarketIntelFromCache();
+      } else {
+        loadMarketIntelFromFirestore();
+      }
       return;
     }
 
@@ -370,6 +376,58 @@ export default function MarketIntelNew() {
     } catch (err) {
       console.error("Error loading from Firestore:", err);
       setError("Historical data unavailable. Click 'Get Fresh Odds' to fetch current data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load market intel from pre-cached games (matchAnalysisCache collection)
+  const loadMarketIntelFromCache = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      if (!params.analysisId) {
+        throw new Error("Cache ID missing");
+      }
+
+      // Pre-cached games are stored in matchAnalysisCache collection
+      const docRef = doc(db, "matchAnalysisCache", params.analysisId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error("Cached analysis not found");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis || {};
+
+      if (cachedAnalysis?.marketIntelligence) {
+        const mi = cachedAnalysis.marketIntelligence;
+        const flattenedMarketIntel = {
+          ...mi,
+          vigAnalysis: mi.vigAnalysis || mi.evAnalysis?.vigAnalysis || null,
+          fairValue: mi.fairValue || mi.evAnalysis?.fairValue || null,
+          evOpportunities: mi.evOpportunities || mi.evAnalysis?.uiOpportunities || mi.evAnalysis?.evOpportunities || null,
+          sharpConsensus: mi.sharpConsensus || mi.evAnalysis?.sharpConsensus || null,
+        };
+
+        const marketData: MarketIntelResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          marketIntelligence: flattenedMarketIntel,
+          timestamp: data.timestamp || new Date().toISOString()
+        };
+
+        setMarketResult(marketData);
+        cachedMarketResult = marketData;
+        console.log("✅ Loaded market intel from pre-cached game");
+      } else {
+        throw new Error("No market intelligence data in pre-cached analysis");
+      }
+    } catch (err) {
+      console.error("Error loading from cache:", err);
+      setError("Cached data unavailable. Click 'Get Fresh Odds' to fetch current data.");
     } finally {
       setIsLoading(false);
     }
@@ -1704,6 +1762,8 @@ export default function MarketIntelNew() {
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
           isDemo: params.isDemo === "true",
+          fromCache: params.fromCache === "true",
+          cachedGameId: params.cachedGameId,
         }}
         isSubscribed={isSubscribed}
       />

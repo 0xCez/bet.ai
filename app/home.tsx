@@ -1,5 +1,15 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Animated,
+  ScrollView,
+  Dimensions,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,12 +30,23 @@ import { colors, spacing, borderRadius, typography } from "../constants/designTo
 import { LogoSpinner } from "../components/ui/LogoSpinner";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
+import { PageIndicator } from "../components/ui/PageIndicator";
+import { HeroGamesCarousel } from "../components/ui/HeroGamesCarousel";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "../i18n";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const RATING_SHOWN_KEY = "@rating_shown";
 
 export default function HomeScreen() {
   const { isSubscribed, purchaseLoading } = useRevenueCatPurchases();
+  const insets = useSafeAreaInsets();
+
+  // Page state for horizontal swiping
+  const [activePage, setActivePage] = useState(1); // Start on Scan page (index 1)
+  const scrollViewRef = useRef<ScrollView>(null);
+  const isScrollingProgrammatically = useRef(false);
 
   // Staggered animation values (4 elements: top bar, orb, scan button, gallery button)
   const cardAnimations = useRef(
@@ -125,6 +146,33 @@ export default function HomeScreen() {
     } catch (error) {
       console.error("Error linking user:", error);
     }
+  };
+
+  // Handle horizontal page scroll (only for user-initiated scrolls)
+  const handlePageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Skip state updates during programmatic scrolls
+    if (isScrollingProgrammatically.current) return;
+
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const page = Math.round(offsetX / SCREEN_WIDTH);
+    if (page !== activePage && page >= 0 && page <= 1) {
+      setActivePage(page);
+    }
+  };
+
+  // Handle page indicator tap
+  const handlePageChange = (page: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    isScrollingProgrammatically.current = true;
+    scrollViewRef.current?.scrollTo({
+      x: page * SCREEN_WIDTH,
+      animated: true,
+    });
+    setActivePage(page);
+    // Reset flag after scroll animation completes
+    setTimeout(() => {
+      isScrollingProgrammatically.current = false;
+    }, 350);
   };
 
   // We don't need this anymore as we're directly calling the camera/gallery functions
@@ -246,11 +294,12 @@ export default function HomeScreen() {
 
   return (
     <ScreenBackground hideBg>
-      {/* Option A: Floating particles around the orb */}
-      <FloatingParticles verticalPosition={0.50} />
-      <GradientOrb />
+      {/* Background Effects - Fixed at root level */}
+      <FloatingParticles verticalPosition={0.52} />
+      <GradientOrb verticalPosition={0.475} />
+
       <View style={styles.container}>
-        {/* Top Bar */}
+        {/* Top Bar - Fixed position */}
         <Animated.View style={[styles.topBar, getAnimatedStyle(0)]}>
           <IconButton
             icon="menu"
@@ -269,55 +318,84 @@ export default function HomeScreen() {
           />
         </Animated.View>
 
-
-        {/* Two Buttons Container */}
-        <View style={styles.bottomContainer}>
-          {/* Top Button - Scan a Bet (Primary solid CTA) */}
-          <Animated.View style={getAnimatedStyle(2)}>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              if (!isSubscribed) {
-                router.push("/paywall");
-                return;
-              }
-              handleCameraPress();
-            }}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.primaryButtonPressed,
-            ]}
-          >
-            <View style={styles.buttonContent}>
-              <Ionicons name="scan" size={22} color={colors.primaryForeground} />
-              <Text style={styles.primaryButtonText}>{i18n.t("imagePickerTakePhoto")}</Text>
-            </View>
-          </Pressable>
-          </Animated.View>
-
-          {/* Bottom Button - Choose from Gallery (Glass style) */}
-          <Animated.View style={getAnimatedStyle(3)}>
-          <Pressable
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              if (!isSubscribed) {
-                router.push("/paywall");
-                return;
-              }
-              handleGalleryPress();
-            }}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.secondaryButtonPressed,
-            ]}
-          >
-            <View style={styles.buttonContent}>
-              <Ionicons name="images-outline" size={22} color={colors.primary} />
-              <Text style={styles.secondaryButtonText}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
-            </View>
-          </Pressable>
-          </Animated.View>
+        {/* Page Indicator - Below header */}
+        <View style={styles.pageIndicatorContainer}>
+          <PageIndicator
+            activePage={activePage}
+            onPageChange={handlePageChange}
+          />
         </View>
+
+        {/* Horizontal Swipeable Pages */}
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={handlePageScroll}
+          scrollEventThrottle={16}
+          bounces={false}
+          contentOffset={{ x: SCREEN_WIDTH, y: 0 }} // Start on page 2 (Scan)
+          style={styles.pagesContainer}
+        >
+          {/* Page 1: Discover - Hero Game Cards */}
+          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+            <HeroGamesCarousel maxGames={8} />
+          </View>
+
+          {/* Page 2: Scan - Original home content */}
+          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+
+            {/* Two Buttons Container */}
+            <View style={styles.bottomContainer}>
+              {/* Top Button - Scan a Bet (Primary solid CTA) */}
+              <Animated.View style={getAnimatedStyle(2)}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  if (!isSubscribed) {
+                    router.push("/paywall");
+                    return;
+                  }
+                  handleCameraPress();
+                }}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && styles.primaryButtonPressed,
+                ]}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="scan" size={22} color={colors.primaryForeground} />
+                  <Text style={styles.primaryButtonText}>{i18n.t("imagePickerTakePhoto")}</Text>
+                </View>
+              </Pressable>
+              </Animated.View>
+
+              {/* Bottom Button - Choose from Gallery (Glass style) */}
+              <Animated.View style={getAnimatedStyle(3)}>
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  if (!isSubscribed) {
+                    router.push("/paywall");
+                    return;
+                  }
+                  handleGalleryPress();
+                }}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && styles.secondaryButtonPressed,
+                ]}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="images-outline" size={22} color={colors.primary} />
+                  <Text style={styles.secondaryButtonText}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
+                </View>
+              </Pressable>
+              </Animated.View>
+            </View>
+          </View>
+        </ScrollView>
 
         <ImagePickerSheet
           isVisible={isBottomSheetVisible}
@@ -446,5 +524,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: colors.background,
+  },
+  pagesContainer: {
+    flex: 1,
+  },
+  page: {
+    flex: 1,
+  },
+  pageIndicatorContainer: {
+    alignItems: "center",
+    paddingVertical: spacing[3],
   },
 });

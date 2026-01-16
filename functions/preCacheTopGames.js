@@ -1,8 +1,9 @@
 /**
  * preCacheTopGames.js
  *
- * Weekly cron job to pre-cache analysis for top upcoming NBA and Soccer games.
- * This ensures creators have market data available when making content on replays.
+ * Weekly cron job to pre-cache FULL AI analysis for top upcoming NBA and Soccer games.
+ * This ensures users have complete analysis (including AI breakdown, xFactors, etc.)
+ * available instantly when they tap on a game from the carousel.
  *
  * Run: firebase deploy --only functions:preCacheTopGames
  * Test: curl -X POST https://us-central1-betai-f9176.cloudfunctions.net/preCacheTopGames -H "x-api-key: YOUR_KEY"
@@ -16,6 +17,8 @@ require('dotenv').config();
 // Don't initialize Firebase here - it's initialized in index.js which imports this file
 // We get the db reference lazily when needed
 const getDb = () => admin.firestore();
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 
@@ -220,39 +223,32 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
   });
 
 /**
- * Run the full analysis pipeline for a game and save to cache with extended TTL
+ * Run the FULL analysis pipeline for a game and save to cache with extended TTL
  *
- * This calls the internal helper functions that are also used by analyzeImage
+ * This calls marketIntelligence to get data, then generates AI analysis via GPT-4
+ * to create the complete analysis matching what analyzeImage produces.
  */
 async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
-  // We need to call internal functions from index.js
-  // Since they're not exported, we'll make direct API calls to our own endpoints
-  // This is cleaner and ensures we use the exact same logic
-
   const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
     ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
     : 'https://us-central1-betai-f9176.cloudfunctions.net';
 
-  // Call marketIntelligence endpoint to get full analysis data
-  // This will also populate the cache as a side effect
+  // Step 1: Get market intelligence data
+  console.log(`📊 Fetching market data for ${team1} vs ${team2}...`);
   const response = await axios.post(`${baseUrl}/marketIntelligence`, {
     sport: oddsApiSport,
     team1,
     team2,
     locale: 'en'
   }, {
-    timeout: 60000 // 60 second timeout per game
+    timeout: 60000
   });
 
   if (response.data.marketIntelligence?.error) {
     throw new Error(response.data.marketIntelligence.error);
   }
 
-  // Now we need to save this to cache with extended TTL
-  // The marketIntelligence endpoint doesn't save to cache, so we do it here
   const data = response.data;
-
-  // Get team IDs from the response
   const team1Id = data.teamIds?.team1Id;
   const team2Id = data.teamIds?.team2Id;
 
@@ -260,27 +256,48 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
     throw new Error('Could not determine team IDs from response');
   }
 
-  // Build cache key
+  // Step 2: Generate AI analysis using GPT-4 (same as analyzeImage)
+  console.log(`🤖 Generating AI analysis for ${team1} vs ${team2}...`);
+  const aiAnalysis = await generateAIAnalysis(
+    sport,
+    team1,
+    team2,
+    data.marketIntelligence,
+    data.teamStats,
+    data.keyInsightsNew,
+    data.gameData
+  );
+
+  // Step 3: Build the full analysis object matching analyzeImage structure
   const teams = [String(team1Id), String(team2Id)].sort().join('-');
   const cacheKey = `${sport.toLowerCase()}_${teams}_en`;
 
-  // Build analysis object matching analyzeImage structure
-  // Sanitize data to remove empty string keys (Firestore doesn't allow them)
-  const analysis = sanitizeForFirestore({
+  const fullAnalysis = sanitizeForFirestore({
     sport,
-    teams: data.teams,
+    teams: {
+      home: team1,
+      away: team2,
+      logos: data.teams?.logos || {}
+    },
+    // AI-generated fields (from GPT-4)
+    keyInsights: aiAnalysis.keyInsights,
+    matchSnapshot: aiAnalysis.matchSnapshot,
+    xFactors: aiAnalysis.xFactors,
+    aiAnalysis: aiAnalysis.aiAnalysis,
+    // Data fields
     marketIntelligence: data.marketIntelligence,
     teamStats: data.teamStats,
     keyInsightsNew: data.keyInsightsNew,
+    // Pre-cache metadata
     preCached: true,
     preCachedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + PRE_CACHE_TTL_MS).toISOString()
   });
 
-  console.log(`💾 Saving pre-cached analysis with key: ${cacheKey}`);
+  console.log(`💾 Saving FULL pre-cached analysis with key: ${cacheKey}`);
 
   await getDb().collection('matchAnalysisCache').doc(cacheKey).set({
-    analysis,
+    analysis: fullAnalysis,
     timestamp: new Date().toISOString(),
     sport: sport.toLowerCase(),
     team1Id: String(team1Id),
@@ -290,7 +307,149 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
     expiresAt: new Date(Date.now() + PRE_CACHE_TTL_MS).toISOString()
   });
 
-  console.log(`✅ Pre-cached: ${sport} ${team1} vs ${team2}`);
+  console.log(`✅ Pre-cached FULL analysis: ${sport} ${team1} vs ${team2}`);
+}
+
+/**
+ * Generate AI analysis using GPT-4 (simplified version of analyzeImage prompt)
+ * This creates matchSnapshot, xFactors, and aiAnalysis breakdown
+ */
+async function generateAIAnalysis(sport, team1, team2, marketIntelligence, teamStats, keyInsightsNew, gameData) {
+  const locale = 'en';
+
+  // Build the AI prompt with available data
+  const prompt = `
+  Task: You are an expert sports betting analyst. Generate betting analysis for this ${sport.toUpperCase()} game.
+
+  ## Teams
+  Home: ${team1}
+  Away: ${team2}
+
+  ## Market Intelligence
+  ${JSON.stringify(marketIntelligence || {})}
+
+  ## Team Statistics
+  ${JSON.stringify(teamStats || {})}
+
+  ## Key Insights
+  ${JSON.stringify(keyInsightsNew || {})}
+
+  ## Game Data (Last 10 games, H2H, Injuries)
+  ${JSON.stringify(gameData || {})}
+
+  Your tone should be sharp, real, and degen — like a bettor who's been in the trenches.
+
+  Return JSON with this exact structure:
+  {
+    "keyInsights": {
+      "confidence": "Low" | "Medium" | "High",
+      "marketActivity": "Low" | "Moderate" | "High",
+      "lineShift": "Low" | "Moderate" | "High",
+      "publicVsSharps": { "public": 65, "sharps": 35 }
+    },
+    "matchSnapshot": {
+      "recentPerformance": {
+        "home": "e.g., 7-3 (W-W-L-W-W)",
+        "away": "e.g., 5-5 (L-W-L-W-L)"
+      },
+      "headToHead": "e.g., 2-1 in last 3 matchups",
+      "momentum": {
+        "home": "e.g., On a 3-game win streak",
+        "away": "e.g., Struggling on the road"
+      }
+    },
+    "xFactors": [
+      { "title": "Health & Availability", "detail": "Key injury impact", "type": 1 },
+      { "title": "Location & Weather", "detail": "Venue/weather factors", "type": 2 },
+      { "title": "Officiating & Rules", "detail": "Referee trends", "type": 3 },
+      { "title": "Travel & Fatigue", "detail": "Rest and travel effect", "type": 4 }
+    ],
+    "aiAnalysis": {
+      "confidenceScore": "5.8",
+      "bettingSignal": "Value Bet" | "Public Trap" | "Sharp Trap" | "Market Conflicted",
+      "breakdown": "3 paragraphs (~60-80 words each) with Market Read, On-Court Context, and Betting Interpretation"
+    }
+  }
+
+  Make sure xFactors are specific based on the data. The breakdown should be 3 paragraphs covering:
+  1. Market Read vs Reality (sharp/public split, line movement)
+  2. On-Court Context (matchup analysis, form, injuries)
+  3. Betting Interpretation (clear recommendation or angle)
+
+  Return only the JSON object.`;
+
+  try {
+    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+      model: "gpt-4o",
+      messages: [{
+        role: "user",
+        content: prompt
+      }],
+      temperature: 0.2,
+      max_tokens: 1200,
+      response_format: { type: "json_object" }
+    }, {
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      timeout: 45000
+    });
+
+    const aiResponse = response.data.choices[0]?.message?.content;
+    const parsed = JSON.parse(aiResponse);
+
+    console.log(`✅ AI analysis generated successfully`);
+    return parsed;
+
+  } catch (error) {
+    console.error(`❌ AI analysis failed: ${error.message}`);
+    // Return fallback analysis if AI fails
+    return generateFallbackAnalysis(team1, team2, keyInsightsNew, teamStats, gameData);
+  }
+}
+
+/**
+ * Generate fallback analysis from data if GPT-4 fails
+ */
+function generateFallbackAnalysis(team1, team2, keyInsightsNew, teamStats, gameData) {
+  const t1Stats = teamStats?.team1?.stats || {};
+  const t2Stats = teamStats?.team2?.stats || {};
+  const t1WL = gameData?.team1_last10games?.winLossRecord || { wins: 0, losses: 0 };
+  const t2WL = gameData?.team2_last10games?.winLossRecord || { wins: 0, losses: 0 };
+
+  return {
+    keyInsights: {
+      confidence: keyInsightsNew?.confidenceScore >= 70 ? "High" : keyInsightsNew?.confidenceScore >= 50 ? "Medium" : "Low",
+      marketActivity: "Moderate",
+      lineShift: "Low",
+      publicVsSharps: { public: 60, sharps: 40 }
+    },
+    matchSnapshot: {
+      recentPerformance: {
+        home: `${t1WL.wins}-${t1WL.losses}`,
+        away: `${t2WL.wins}-${t2WL.losses}`
+      },
+      headToHead: gameData?.h2h_games?.h2hRecord
+        ? `${gameData.h2h_games.h2hRecord.team1Wins || 0}-${gameData.h2h_games.h2hRecord.team2Wins || 0} recent matchups`
+        : "No recent H2H data",
+      momentum: {
+        home: t1WL.wins > t1WL.losses ? "Trending up" : "Struggling",
+        away: t2WL.wins > t2WL.losses ? "Trending up" : "Struggling"
+      }
+    },
+    xFactors: [
+      { title: "Health & Availability", detail: "Check injury reports before betting", type: 1 },
+      { title: "Location & Weather", detail: "Standard conditions expected", type: 2 },
+      { title: "Officiating & Rules", detail: "Standard officiating expected", type: 3 },
+      { title: "Travel & Fatigue", detail: "Normal rest for both teams", type: 4 }
+    ],
+    aiAnalysis: {
+      confidenceScore: String(keyInsightsNew?.confidenceScore || 55),
+      bettingSignal: keyInsightsNew?.bestValue ? "Value Bet" : "Market Conflicted",
+      breakdown: `Market analysis for ${team1} vs ${team2}. ${keyInsightsNew?.marketConsensus?.display || 'Market efficiently priced.'}. ${keyInsightsNew?.bestValue?.label || 'Shop around for the best lines.'}. Check the key insights above for specific betting opportunities.`
+    }
+  };
 }
 
 /**

@@ -78,6 +78,8 @@ type PlayerStatsParams = {
   team2Logo?: string;
   analysisId?: string;
   isDemo?: string;
+  fromCache?: string; // "true" when viewing pre-cached games from carousel
+  cachedGameId?: string; // Firestore doc ID for pre-cached games
 };
 
 export default function PlayerStatsSoccer() {
@@ -148,9 +150,9 @@ export default function PlayerStatsSoccer() {
       cachedPlayerResult = null;
     }
 
-    // If analysisId exists AND we have team params (fresh analysis), use API
-    // If analysisId exists WITHOUT team params (demo/history), load from Firestore
-    if (params.analysisId && !params.team1) {
+    // History mode (analysisId without team params) - load from Firestore
+    // Demo mode has team params so it will fetch fresh from API below
+    if (params.analysisId && !params.team1 && params.fromCache !== "true") {
       loadPlayerStatsFromFirestore();
       return;
     }
@@ -383,6 +385,8 @@ export default function PlayerStatsSoccer() {
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
           isDemo: params.isDemo === "true",
+          fromCache: params.fromCache === "true",
+          cachedGameId: params.cachedGameId,
         }}
         isSubscribed={isSubscribed}
       />

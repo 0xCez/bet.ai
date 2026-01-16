@@ -178,6 +178,14 @@ type AnalysisParams = {
   imageUri?: string;
   analysisId?: string;
   isDemo?: string;
+  // Pre-cached game params
+  cachedGameId?: string;
+  sport?: string;
+  team1?: string;
+  team2?: string;
+  team1Id?: string;
+  team2Id?: string;
+  fromCache?: string;
 };
 
 // Helper function to remove empty string keys from objects (Firestore doesn't allow them)
@@ -242,10 +250,12 @@ export default function AnalysisScreen() {
 
   // Check if we're navigating with the same params
   // For demo mode, always force a fresh fetch to ensure we get the correct locale-specific content
+  // Also compare cachedGameId for pre-cached games from the home carousel
   const isSameAnalysis =
     params.isDemo !== "true" && // Skip cache for demo mode
     cachedParams?.analysisId === params.analysisId &&
     cachedParams?.imageUri === params.imageUri &&
+    cachedParams?.cachedGameId === params.cachedGameId && // Compare cached game ID
     cachedParams?.isDemo === params.isDemo;
 
   // Cache params for future comparison
@@ -256,6 +266,9 @@ export default function AnalysisScreen() {
   const imageUri = params.imageUri;
   const analysisId = params.analysisId;
   const isDemo = params.isDemo === "true";
+  // Pre-cached games from home carousel have no image (they're API-only fetches)
+  // Both conditions must be true to ensure we don't affect user's own scanned analyses
+  const isFromPreCache = params.fromCache === "true" && !!params.cachedGameId;
 
   // Demo tooltip system
   const { showTooltip, setIsDemo: setDemoMode } = useDemoTooltip();
@@ -387,8 +400,13 @@ export default function AnalysisScreen() {
 
     const userId = auth.currentUser?.uid; // Get current user ID
 
+    // --- Cached Game Flow (from home carousel) ---
+    if (params.cachedGameId && params.fromCache === "true") {
+      console.log(`Cached Game Flow: Fetching cached analysis with ID: ${params.cachedGameId}`);
+      fetchCachedGameAnalysis(params.cachedGameId);
+    }
     // --- History Flow ---
-    if (analysisId) {
+    else if (analysisId) {
       if (userId) {
         console.log(
           `History Flow: Fetching analysis with ID: ${analysisId} for user: ${userId}`
@@ -423,7 +441,7 @@ export default function AnalysisScreen() {
       setError("No image or analysis data provided.");
       setIsLoading(false);
     }
-  }, [analysisId, imageUri, auth.currentUser, isSameAnalysis]);
+  }, [analysisId, imageUri, auth.currentUser, isSameAnalysis, params.cachedGameId, params.fromCache]);
 
   // Show demo tooltip when analysis loads in demo mode
   useEffect(() => {
@@ -549,6 +567,88 @@ export default function AnalysisScreen() {
     } catch (err) {
       console.error("Error fetching analysis by ID:", err);
       setError("Failed to fetch analysis details.");
+      setAnalysisResult(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- Function to fetch pre-cached game analysis ---
+  // Pre-cached games now have the FULL AI analysis (matchSnapshot, xFactors, aiAnalysis)
+  // We just load it directly from Firestore - no API calls needed!
+  const fetchCachedGameAnalysis = async (cacheId: string) => {
+    setIsLoading(true);
+    setError(null);
+    setDisplayImageUrl(null);
+    try {
+      const docRef = doc(db, "matchAnalysisCache", cacheId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        console.error(`Cached game document not found: matchAnalysisCache/${cacheId}`);
+        setError("Cached game analysis not found.");
+        setAnalysisResult(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const data = docSnap.data();
+      console.log("Fetched pre-cached game data:", data);
+
+      // The full analysis is stored in data.analysis
+      const analysis = data.analysis || {};
+
+      // Check if this is a full pre-cached analysis (has aiAnalysis field)
+      if (!analysis.aiAnalysis || !analysis.matchSnapshot) {
+        console.warn("Pre-cached data missing AI analysis, may be old format");
+      }
+
+      // Build AnalysisResult directly from pre-cached data
+      const analysisData: AnalysisResult = {
+        sport: analysis.sport || data.sport || params.sport || "nba",
+        teams: {
+          home: analysis.teams?.home || params.team1 || "Team 1",
+          away: analysis.teams?.away || params.team2 || "Team 2",
+          logos: {
+            home: analysis.teams?.logos?.home || "",
+            away: analysis.teams?.logos?.away || "",
+          },
+        },
+        // Use keyInsightsNew for the Key Insights card (marketConsensus, bestValue, etc.)
+        // Note: analysis.keyInsights from AI has different structure (confidence, marketActivity)
+        keyInsights: {
+          marketConsensus: analysis.keyInsightsNew?.marketConsensus || null,
+          bestValue: analysis.keyInsightsNew?.bestValue || null,
+          offensiveEdge: analysis.keyInsightsNew?.offensiveEdge || null,
+          defensiveEdge: analysis.keyInsightsNew?.defensiveEdge || null,
+        },
+        matchSnapshot: analysis.matchSnapshot || {
+          recentPerformance: { home: "N/A", away: "N/A" },
+          headToHead: "No H2H data",
+          momentum: { home: "N/A", away: "N/A" },
+        },
+        xFactors: analysis.xFactors || [],
+        aiAnalysis: analysis.aiAnalysis || {
+          confidenceScore: String(analysis.keyInsightsNew?.confidenceScore || 55),
+          bettingSignal: "Market Conflicted",
+          breakdown: "Pre-cached analysis. Check key insights for betting opportunities.",
+        },
+        marketIntelligence: analysis.marketIntelligence,
+        teamStats: analysis.teamStats,
+      };
+
+      setAnalysisResult(analysisData);
+      cachedAnalysisResult = analysisData;
+      setCurrentAnalysisId(cacheId);
+      console.log("Set analysis result from FULL pre-cached data:", analysisData);
+
+      // No image for cached games
+      setDisplayImageUrl(null);
+      cachedDisplayImageUrl = null;
+
+    } catch (err) {
+      console.error("Error fetching cached game analysis:", err);
+      setError("Failed to fetch game details. Please try again.");
       setAnalysisResult(null);
     } finally {
       setIsLoading(false);
@@ -690,13 +790,15 @@ export default function AnalysisScreen() {
 
   const renderShimmer = () => (
     <View style={styles.shimmerContainer}>
-      {/* Image Container */}
-      <View style={styles.imageContainer}>
-        <ShimmerPlaceholder
-          style={styles.image}
-          shimmerColors={shimmerColors}
-        />
-      </View>
+      {/* Image Container - Hide for pre-cached games (they have no image) */}
+      {!isFromPreCache && (
+        <View style={styles.imageContainer}>
+          <ShimmerPlaceholder
+            style={styles.image}
+            shimmerColors={shimmerColors}
+          />
+        </View>
+      )}
 
       {/* Key Insights Card Skeleton */}
       <Card style={styles.keyInsightsCard}>
@@ -888,29 +990,31 @@ export default function AnalysisScreen() {
         showsVerticalScrollIndicator={false}
         style={styles.analysisContent}
       >
-        {/* Image Container - Use displayImageUrl state */}
-        <Animated.View style={[styles.imageContainer, getCardStyle(0)]}>
-          {isDemo && displayImageUrl ? (
-            // Use the image URL from the fetched Firestore document
-            // This ensures the image matches the analysis data
-            <Image
-              source={{ uri: displayImageUrl }}
-              style={styles.image}
-              resizeMode="contain"
-            />
-          ) : displayImageUrl ? (
-            <Image
-              source={{ uri: displayImageUrl }}
-              style={styles.image}
-              resizeMode="contain"
-            />
-          ) : (
-            // Optional: Placeholder if no image URL is available yet
-            <View style={styles.placeholderImage}>
-              <Text style={styles.placeholderText}></Text>
-            </View>
-          )}
-        </Animated.View>
+        {/* Image Container - Hide for pre-cached games (they have no image) */}
+        {!isFromPreCache && (
+          <Animated.View style={[styles.imageContainer, getCardStyle(0)]}>
+            {isDemo && displayImageUrl ? (
+              // Use the image URL from the fetched Firestore document
+              // This ensures the image matches the analysis data
+              <Image
+                source={{ uri: displayImageUrl }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ) : displayImageUrl ? (
+              <Image
+                source={{ uri: displayImageUrl }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ) : (
+              // Optional: Placeholder if no image URL is available yet
+              <View style={styles.placeholderImage}>
+                <Text style={styles.placeholderText}></Text>
+              </View>
+            )}
+          </Animated.View>
+        )}
 
         {/* <Text style={styles.sectionTitle}>AI Insights</Text>
         <Text style={styles.sectionContent}>
@@ -1309,7 +1413,9 @@ export default function AnalysisScreen() {
               team1Logo: analysisResult?.teams?.logos?.home,
               team2Logo: analysisResult?.teams?.logos?.away,
               analysisId: currentAnalysisId || undefined,
-            isDemo: isDemo,
+              isDemo: isDemo,
+              fromCache: params.fromCache === "true",
+              cachedGameId: params.cachedGameId || undefined,
           }}
           isSubscribed={isSubscribed}
         />

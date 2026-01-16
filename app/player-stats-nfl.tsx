@@ -146,8 +146,8 @@ export default function PlayerStatsNFL() {
       cachedPlayerResult = null;
     }
 
-    // If analysisId exists AND we have team params (fresh analysis), use API
-    // If analysisId exists WITHOUT team params (demo/history), load from Firestore
+    // History mode (analysisId without team params) - load from Firestore
+    // Demo mode has team params so it will fetch fresh from API below
     if (params.analysisId && !params.team1) {
       loadPlayerStatsFromFirestore();
       return;

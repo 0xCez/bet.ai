@@ -205,7 +205,7 @@ export default function TutorialScreen() {
     } else if (i18n.locale.startsWith("es")) {
       return require("../assets/images/demo_es.png");
     }
-    return require("../assets/images/demo_en.png");
+    return require("../assets/images/demo_en.jpg");
   }, []);
 
   const handleStartDemo = useCallback(() => {

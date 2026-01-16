@@ -41,6 +41,8 @@ interface FloatingBottomNavProps {
     team2Logo?: string;
     analysisId?: string;
     isDemo?: boolean;
+    fromCache?: boolean; // True when viewing pre-cached games from carousel
+    cachedGameId?: string; // The Firestore doc ID for pre-cached games
   };
   isSubscribed?: boolean;
 }
@@ -229,6 +231,8 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
       team2Logo: analysisData?.team2Logo || "",
       analysisId: analysisData?.analysisId || "",
       isDemo: analysisData?.isDemo ? "true" : undefined,
+      fromCache: analysisData?.fromCache ? "true" : undefined,
+      cachedGameId: analysisData?.cachedGameId || undefined,
     };
 
     setTimeout(() => {
@@ -238,12 +242,14 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
 
       switch (tab) {
         case "insight":
-          if (analysisData?.analysisId) {
+          if (analysisData?.analysisId || analysisData?.cachedGameId) {
             router.push({
               pathname: "/analysis",
               params: {
-                analysisId: analysisData.analysisId,
-                isDemo: analysisData.isDemo ? "true" : undefined,
+                analysisId: analysisData?.analysisId,
+                isDemo: analysisData?.isDemo ? "true" : undefined,
+                fromCache: analysisData?.fromCache ? "true" : undefined,
+                cachedGameId: analysisData?.cachedGameId,
               },
             });
           } else {

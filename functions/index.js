@@ -2151,6 +2151,39 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en') {
         return null;
       }
     }
+
+    // If no cache hit and locale is not English, also check for English pre-cache
+    // Pre-cached content is only stored in English, so non-English users can still use it
+    if (locale !== 'en') {
+      const englishCacheKey = `${sport.toLowerCase()}_${teams}_en`;
+      console.log(`No ${locale} cache found, checking English pre-cache with key: ${englishCacheKey}`);
+
+      const englishCacheRef = db.collection('matchAnalysisCache').doc(englishCacheKey);
+      const englishCacheDoc = await englishCacheRef.get();
+
+      if (englishCacheDoc.exists) {
+        const cachedData = englishCacheDoc.data();
+        const now = Date.now();
+
+        // Only use English pre-cache if it's a valid pre-cached entry (not regular cache)
+        if (cachedData.preCached && cachedData.expiresAt) {
+          const expiresAt = new Date(cachedData.expiresAt).getTime();
+          if (now < expiresAt) {
+            console.log(`✅ Pre-cache HIT (English fallback) for ${englishCacheKey}, expires: ${cachedData.expiresAt}`);
+            const analysisData = cachedData.analysis;
+            // Mark that this is English content served to a non-English user
+            analysisData.language = 'en';
+            analysisData.isEnglishFallback = true;
+            return analysisData;
+          } else {
+            console.log(`English pre-cache expired for ${englishCacheKey}, expiresAt: ${cachedData.expiresAt}`);
+          }
+        }
+      } else {
+        console.log(`No English pre-cache found for ${englishCacheKey}`);
+      }
+    }
+
     console.log(`Cache miss for ${cacheKey}`);
     return null;
   } catch (error) {
@@ -3177,7 +3210,10 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
     const normalizedSport = sport.replace('americanfootball_', '').replace('basketball_', '').replace('baseball_', '');
     console.log(`SPORT NORMALIZATION: '${sport}' → '${normalizedSport}'`);
 
-    // Get team IDs (reuse existing function) - use normalized sport
+    // For getGameData, we need base sport name ('soccer' not 'soccer_epl')
+    const baseSport = normalizedSport.startsWith('soccer_') ? 'soccer' : normalizedSport;
+
+    // Get team IDs (reuse existing function) - use normalizedSport to preserve league info for odds API
     const { team1Id, team2Id, team1StatpalCode, team2StatpalCode, sport_type_odds } = await findTeamIds(normalizedSport, team1, team1_code, team2, team2_code);
 
     if (!team1Id || !team2Id) {
@@ -3187,16 +3223,18 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
     }
 
     // Check if we have pre-cached analysis for this match (for replay content)
-    const cachedAnalysis = await checkCacheForMatch(normalizedSport, team1Id, team2Id, userLocale);
+    // Use baseSport for cache key to match how preCacheTopGames stores data
+    const cachedAnalysis = await checkCacheForMatch(baseSport, team1Id, team2Id, userLocale);
 
     if (cachedAnalysis && cachedAnalysis.marketIntelligence) {
       console.log(`📦 Cache HIT for marketIntelligence: ${normalizedSport} ${team1Id} vs ${team2Id}`);
 
       // Fetch fresh team stats, player stats, and game data (these don't go stale like odds)
+      // Note: getGameData needs baseSport ('soccer' not 'soccer_epl') for proper branching
       const [teamStats, playerStats, gameData] = await Promise.all([
         getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
         getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
-        getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode)
+        getGameData(baseSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode)
       ]);
 
       // Use cached market intelligence but fresh stats
@@ -3243,11 +3281,12 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
     console.log(`📡 Cache MISS for marketIntelligence: ${normalizedSport} ${team1Id} vs ${team2Id} - fetching live`);
 
     // No cache hit - fetch everything fresh from APIs
+    // Note: getGameData needs baseSport ('soccer' not 'soccer_epl') for proper branching
     const [marketIntelligence, teamStats, playerStats, gameData] = await Promise.all([
       getMarketIntelligenceDataTest(sport_type_odds, team1, team2, userLocale),
       getTeamStatsDataTest(normalizedSport, team1Id, team2Id),
       getPlayerStatsForSport(normalizedSport, team1Id, team2Id),
-      getGameData(normalizedSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode) // Use normalized sport name
+      getGameData(baseSport, team1Id, team2Id, team1_code, team2_code, team1StatpalCode, team2StatpalCode)
     ]);
 
     // CRITICAL: Match analyzeImage structure EXACTLY
