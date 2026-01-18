@@ -12,15 +12,9 @@ import { CachedGameCard, CachedGame } from "./CachedGameCard";
 import { colors, spacing, typography } from "../../constants/designTokens";
 import { useCachedGames } from "../../app/hooks/useCachedGames";
 
-interface CachedGamesCarouselProps {
-  maxGames?: number;
-}
-
-export const CachedGamesCarousel: React.FC<CachedGamesCarouselProps> = ({
-  maxGames = 10,
-}) => {
+export const CachedGamesCarousel: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
-  const { games, loading, error } = useCachedGames(maxGames);
+  const { games, loading, error } = useCachedGames();
 
   const handleGamePress = (game: CachedGame) => {
     // Navigate to analysis screen with the cached data

@@ -14,6 +14,7 @@ export interface CachedGame {
   confidence?: number;
   league?: string;
   timestamp: string;
+  gameStartTime?: string; // ISO 8601 - when the game actually starts
   analysis: any;
 }
 
@@ -37,6 +38,36 @@ const getConfidenceColor = (confidence: number): string => {
   if (confidence >= 80) return colors.success;
   if (confidence >= 60) return "#F59E0B"; // Amber
   return colors.mutedForeground;
+};
+
+// Format game start time (e.g., "Today 7:30 PM", "Sat 3:00 PM")
+const formatGameTime = (isoString?: string): string | null => {
+  if (!isoString) return null;
+
+  const gameDate = new Date(isoString);
+  const now = new Date();
+
+  // Check if today
+  const isToday = gameDate.toDateString() === now.toDateString();
+
+  // Check if tomorrow
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = gameDate.toDateString() === tomorrow.toDateString();
+
+  // Format time (e.g., "7:30 PM")
+  const timeStr = gameDate.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (isToday) return `Today ${timeStr}`;
+  if (isTomorrow) return `Tomorrow ${timeStr}`;
+
+  // Format as "Sat 3:00 PM"
+  const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
+  return `${dayStr} ${timeStr}`;
 };
 
 // Get short team name (e.g., "Los Angeles Lakers" -> "Lakers")
@@ -67,6 +98,7 @@ export const CachedGameCard: React.FC<CachedGameCardProps> = ({ game, onPress })
 
   const team1Short = getShortTeamName(game.team1);
   const team2Short = getShortTeamName(game.team2);
+  const gameTime = formatGameTime(game.gameStartTime);
 
   return (
     <Pressable
@@ -85,6 +117,11 @@ export const CachedGameCard: React.FC<CachedGameCardProps> = ({ game, onPress })
         <Text style={styles.teamName} numberOfLines={1}>{team1Short}</Text>
         <Text style={styles.vsText}>vs</Text>
         <Text style={styles.teamName} numberOfLines={1}>{team2Short}</Text>
+
+        {/* Game Time */}
+        <Text style={styles.gameTime} numberOfLines={1}>
+          {gameTime || "No time data"}
+        </Text>
 
         {/* Confidence */}
         <View style={styles.confidenceRow}>
@@ -130,6 +167,12 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     fontSize: 10,
     fontFamily: typography.fontFamily.regular,
+  },
+  gameTime: {
+    color: colors.mutedForeground,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.regular,
+    marginTop: spacing[1],
   },
   confidenceRow: {
     flexDirection: "row",

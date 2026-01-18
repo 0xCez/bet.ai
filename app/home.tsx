@@ -340,7 +340,7 @@ export default function HomeScreen() {
         >
           {/* Page 1: Discover - Hero Game Cards */}
           <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-            <HeroGamesCarousel maxGames={8} />
+            <HeroGamesCarousel />
           </View>
 
           {/* Page 2: Scan - Original home content */}

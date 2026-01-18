@@ -111,6 +111,36 @@ const getTeamLogo = (teamName: string, sport: string) => {
   return getSoccerTeamLogo(teamName);
 };
 
+// Format game start time (e.g., "Today 7:30 PM", "Sat 3:00 PM")
+const formatGameTime = (isoString?: string): string | null => {
+  if (!isoString) return null;
+
+  const gameDate = new Date(isoString);
+  const now = new Date();
+
+  // Check if today
+  const isToday = gameDate.toDateString() === now.toDateString();
+
+  // Check if tomorrow
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = gameDate.toDateString() === tomorrow.toDateString();
+
+  // Format time (e.g., "7:30 PM")
+  const timeStr = gameDate.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (isToday) return `Today ${timeStr}`;
+  if (isTomorrow) return `Tomorrow ${timeStr}`;
+
+  // Format as "Sat 3:00 PM"
+  const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
+  return `${dayStr} ${timeStr}`;
+};
+
 // Format decimal odds to American odds
 const formatOdds = (decimalOdds?: number): string => {
   if (!decimalOdds) return "-110";
@@ -178,6 +208,7 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
   const team2Logo = getTeamLogo(game.team2, game.sport);
   const team1Short = getShortTeamName(game.team1);
   const team2Short = getShortTeamName(game.team2);
+  const gameTime = formatGameTime(game.gameStartTime);
 
   return (
     <View style={styles.card}>
@@ -190,7 +221,7 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
 
       {/* Content Container */}
       <View style={styles.content}>
-        {/* Header: Sport Badge */}
+        {/* Header: Sport Badge + Game Time */}
         <View style={styles.header}>
           <View style={[styles.sportBadge, { borderColor: `${sportColor}40` }]}>
             <Ionicons name={getSportIcon(game.sport)} size={12} color={sportColor} />
@@ -198,6 +229,12 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
               {game.sport.toUpperCase()}
             </Text>
           </View>
+          {gameTime && (
+            <View style={styles.gameTimeBadge}>
+              <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
+              <Text style={styles.gameTimeText}>{gameTime}</Text>
+            </View>
+          )}
         </View>
 
         {/* Hero Teams Section */}
@@ -337,6 +374,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "center",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  gameTimeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.full,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+  },
+  gameTimeText: {
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
   },
   sportBadge: {
     flexDirection: "row",

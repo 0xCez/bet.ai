@@ -32,27 +32,24 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HORIZONTAL_PADDING = spacing[6]; // Match card's padding
 const SNAP_INTERVAL = HERO_CARD_WIDTH + HORIZONTAL_PADDING; // Card width + gap between cards
 
-interface HeroGamesCarouselProps {
-  maxGames?: number;
-}
-
-export const HeroGamesCarousel: React.FC<HeroGamesCarouselProps> = ({
-  maxGames = 10,
-}) => {
+/**
+ * Carousel showing ALL pre-cached games from Firestore
+ * Games are fetched fresh from server on every mount and foreground return
+ * Sorted by game start time (soonest first)
+ */
+export const HeroGamesCarousel: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
-  // Fetch more games than maxGames so each sport filter has enough games
-  const { games: allGames, loading, error } = useCachedGames(25);
+  // Fetch ALL pre-cached games from Firestore
+  const { games: allGames, loading, error } = useCachedGames();
   const [activeIndex, setActiveIndex] = useState(0);
   const [sportFilter, setSportFilter] = useState<SportFilter>("all");
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Filter games by selected sport and limit to maxGames
+  // Filter games by selected sport (no limit - show all)
   const games = useMemo(() => {
-    const filtered = sportFilter === "all"
-      ? allGames
-      : allGames.filter(game => game.sport === sportFilter);
-    return filtered.slice(0, maxGames);
-  }, [allGames, sportFilter, maxGames]);
+    if (sportFilter === "all") return allGames;
+    return allGames.filter(game => game.sport === sportFilter);
+  }, [allGames, sportFilter]);
 
   // Get current sport label
   const currentSportOption = SPORT_OPTIONS.find(opt => opt.id === sportFilter) || SPORT_OPTIONS[0];

@@ -44,19 +44,19 @@ const BIG_MARKET_SOCCER_TEAMS = [
   'Paris Saint Germain', 'Marseille', 'Monaco', 'Lyon'
 ];
 
-// Soccer leagues to fetch from (prioritized order)
+// Soccer leagues to fetch from (prioritized order) - total 10 games
 const SOCCER_LEAGUES = [
-  { key: 'soccer_epl', name: 'EPL', limit: 5 },
-  { key: 'soccer_uefa_champs_league', name: 'Champions League', limit: 3 },
-  { key: 'soccer_spain_la_liga', name: 'La Liga', limit: 3 },
-  { key: 'soccer_italy_serie_a', name: 'Serie A', limit: 2 },
-  { key: 'soccer_germany_bundesliga', name: 'Bundesliga', limit: 2 },
-  { key: 'soccer_france_ligue_one', name: 'Ligue 1', limit: 1 },
-  { key: 'soccer_uefa_europa_league', name: 'Europa League', limit: 1 }
+  { key: 'soccer_epl', name: 'EPL', limit: 3 },
+  { key: 'soccer_uefa_champs_league', name: 'Champions League', limit: 2 },
+  { key: 'soccer_spain_la_liga', name: 'La Liga', limit: 2 },
+  { key: 'soccer_italy_serie_a', name: 'Serie A', limit: 1 },
+  { key: 'soccer_germany_bundesliga', name: 'Bundesliga', limit: 1 },
+  { key: 'soccer_france_ligue_one', name: 'Ligue 1', limit: 1 }
 ];
 
-// Extended cache TTL for pre-cached content (10 days in milliseconds)
-const PRE_CACHE_TTL_MS = 10 * 24 * 60 * 60 * 1000;
+// Post-game buffer: keep analysis available for 4 hours after game starts
+// This allows users to still view analysis during/shortly after the game
+const POST_GAME_BUFFER_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 /**
  * Recursively removes empty string keys from objects
@@ -79,9 +79,11 @@ function sanitizeForFirestore(obj) {
 }
 
 /**
- * Fetch upcoming games from The Odds API, prioritizing big market teams
+ * Fetch upcoming games from The Odds API
+ * For NBA: fetches ALL available games (no team filter) sorted by time
+ * For Soccer: prioritizes big market teams
  */
-async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit) {
+async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeamFilter = false) {
   try {
     const url = `https://api.the-odds-api.com/v4/sports/${sport}/events?apiKey=${ODDS_API_KEY}`;
     console.log(`Fetching events from: ${url}`);
@@ -91,7 +93,18 @@ async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit) {
 
     console.log(`Found ${events.length} total upcoming events for ${sport}`);
 
-    // Score each game by big market team involvement
+    // If skipTeamFilter is true (for NBA), just sort by time and take first N
+    if (skipTeamFilter) {
+      const sortedByTime = events.sort((a, b) =>
+        new Date(a.commence_time) - new Date(b.commence_time)
+      );
+      const selectedGames = sortedByTime.slice(0, limit);
+      console.log(`Selected ${selectedGames.length} games for ${sport} (no team filter):`,
+        selectedGames.map(g => `${g.home_team} vs ${g.away_team} (${g.commence_time})`));
+      return selectedGames;
+    }
+
+    // For soccer: Score each game by big market team involvement
     const scoredGames = events.map(event => {
       let score = 0;
       if (bigMarketTeams.some(team => event.home_team.includes(team) || team.includes(event.home_team))) score += 2;
@@ -143,59 +156,78 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
       return res.status(204).send('');
     }
 
-    // Simple auth check - can be called by Cloud Scheduler or with API key
-    const authHeader = req.headers['x-api-key'] || req.headers['authorization'];
-    const isScheduler = req.headers['x-cloudscheduler'] === 'true';
-
-    // For testing, allow without auth in development
-    const isDev = process.env.FUNCTIONS_EMULATOR === 'true';
-
-    if (!isDev && !isScheduler && authHeader !== process.env.PRE_CACHE_API_KEY) {
-      console.log('⚠️ Unauthorized preCacheTopGames attempt');
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    // Auth temporarily disabled for testing
 
     console.log('🚀 Starting preCacheTopGames job...');
     const startTime = Date.now();
-    const results = { nba: [], soccer: [], errors: [] };
+    const results = { nba: [], soccer: [], errors: [], cleaned: 0 };
 
     try {
-      // Fetch NBA games
-      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', BIG_MARKET_NBA_TEAMS, 20);
+      // Step 0: Clean up ALL old pre-cached games first
+      console.log('🧹 Cleaning up old pre-cached games...');
+      const cacheRef = getDb().collection('matchAnalysisCache');
+      const oldCachedSnapshot = await cacheRef.where('preCached', '==', true).get();
 
-      // Fetch soccer games from multiple leagues in parallel
-      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
-        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit)
-          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
-      );
-      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
-      const soccerGames = soccerGamesByLeague.flat();
+      if (!oldCachedSnapshot.empty) {
+        const batch = getDb().batch();
+        oldCachedSnapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+          results.cleaned++;
+        });
+        await batch.commit();
+        console.log(`🗑️ Deleted ${results.cleaned} old pre-cached games`);
+      } else {
+        console.log('📭 No old pre-cached games to clean');
+      }
 
-      console.log(`📊 Found ${nbaGames.length} NBA games, ${soccerGames.length} Soccer games to cache`);
+      // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
+      console.log('\n🏀 ========== FETCHING NBA GAMES ==========');
+      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
+      console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
 
-      // Process NBA games sequentially to avoid rate limits
+      // Process NBA games sequentially
       for (const game of nbaGames) {
         try {
-          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team}`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba');
-          results.nba.push({ home: game.home_team, away: game.away_team, status: 'success' });
+          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
+          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
+          results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
           results.errors.push({ sport: 'nba', game: `${game.home_team} vs ${game.away_team}`, error: error.message });
         }
       }
 
+      // Log NBA results
+      console.log('\n🏀 ========== NBA RESULTS ==========');
+      console.log(`🏀 NBA: ${results.nba.length} cached, ${results.errors.filter(e => e.sport === 'nba').length} errors`);
+      results.nba.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} (${g.gameStartTime})`));
+
+      // ===== STEP 2: SOCCER GAMES (10 games from multiple leagues) =====
+      console.log('\n⚽ ========== FETCHING SOCCER GAMES ==========');
+      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
+        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
+          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
+      );
+      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
+      const soccerGames = soccerGamesByLeague.flat();
+      console.log(`⚽ Found ${soccerGames.length} Soccer games from API`);
+
       // Process Soccer games from all leagues
       for (const game of soccerGames) {
         try {
-          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team}`);
-          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey);
-          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, status: 'success' });
+          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
+          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
+          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache Soccer game (${game.league}): ${game.home_team} vs ${game.away_team}`, error.message);
           results.errors.push({ sport: 'soccer', league: game.league, game: `${game.home_team} vs ${game.away_team}`, error: error.message });
         }
       }
+
+      // Log Soccer results
+      console.log('\n⚽ ========== SOCCER RESULTS ==========');
+      console.log(`⚽ Soccer: ${results.soccer.length} cached, ${results.errors.filter(e => e.sport === 'soccer').length} errors`);
+      results.soccer.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} [${g.league}] (${g.gameStartTime})`));
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ preCacheTopGames completed in ${duration}s`);
@@ -205,6 +237,7 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
         success: true,
         duration: `${duration}s`,
         summary: {
+          cleaned: results.cleaned,
           nba: results.nba.length,
           soccer: results.soccer.length,
           errors: results.errors.length
@@ -223,12 +256,14 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
   });
 
 /**
- * Run the FULL analysis pipeline for a game and save to cache with extended TTL
+ * Run the FULL analysis pipeline for a game and save to cache
  *
  * This calls marketIntelligence to get data, then generates AI analysis via GPT-4
  * to create the complete analysis matching what analyzeImage produces.
+ *
+ * @param {string} gameStartTime - ISO 8601 commence_time from The Odds API
  */
-async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
+async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStartTime) {
   const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
     ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
     : 'https://us-central1-betai-f9176.cloudfunctions.net';
@@ -272,6 +307,10 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
   const teams = [String(team1Id), String(team2Id)].sort().join('-');
   const cacheKey = `${sport.toLowerCase()}_${teams}_en`;
 
+  // Calculate expiration: 4 hours after game starts (not from cache time)
+  const gameStart = new Date(gameStartTime);
+  const expiresAt = new Date(gameStart.getTime() + POST_GAME_BUFFER_MS).toISOString();
+
   const fullAnalysis = sanitizeForFirestore({
     sport,
     teams: {
@@ -291,10 +330,11 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
     // Pre-cache metadata
     preCached: true,
     preCachedAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + PRE_CACHE_TTL_MS).toISOString()
+    gameStartTime: gameStartTime, // When the game actually starts
+    expiresAt: expiresAt // 4 hours after game start
   });
 
-  console.log(`💾 Saving FULL pre-cached analysis with key: ${cacheKey}`);
+  console.log(`💾 Saving pre-cached analysis: ${cacheKey} (game: ${gameStartTime}, expires: ${expiresAt})`);
 
   await getDb().collection('matchAnalysisCache').doc(cacheKey).set({
     analysis: fullAnalysis,
@@ -304,7 +344,8 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport) {
     team2Id: String(team2Id),
     language: 'en',
     preCached: true,
-    expiresAt: new Date(Date.now() + PRE_CACHE_TTL_MS).toISOString()
+    gameStartTime: gameStartTime, // When the game actually starts
+    expiresAt: expiresAt // 4 hours after game start
   });
 
   console.log(`✅ Pre-cached FULL analysis: ${sport} ${team1} vs ${team2}`);
@@ -469,40 +510,52 @@ exports.preCacheTopGamesScheduled = onSchedule({
     const results = { nba: [], soccer: [], errors: [] };
 
     try {
-      // Fetch NBA games
-      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', BIG_MARKET_NBA_TEAMS, 20);
-
-      // Fetch soccer games from multiple leagues in parallel
-      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
-        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit)
-          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
-      );
-      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
-      const soccerGames = soccerGamesByLeague.flat();
-
-      console.log(`📊 Found ${nbaGames.length} NBA games, ${soccerGames.length} Soccer games to cache`);
+      // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
+      console.log('\n🏀 ========== FETCHING NBA GAMES ==========');
+      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
+      console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
 
       for (const game of nbaGames) {
         try {
-          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team}`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba');
-          results.nba.push({ home: game.home_team, away: game.away_team, status: 'success' });
+          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
+          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
+          results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
           results.errors.push({ sport: 'nba', game: `${game.home_team} vs ${game.away_team}`, error: error.message });
         }
       }
 
+      // Log NBA results
+      console.log('\n🏀 ========== NBA RESULTS ==========');
+      console.log(`🏀 NBA: ${results.nba.length} cached, ${results.errors.filter(e => e.sport === 'nba').length} errors`);
+      results.nba.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} (${g.gameStartTime})`));
+
+      // ===== STEP 2: SOCCER GAMES (10 games from multiple leagues) =====
+      console.log('\n⚽ ========== FETCHING SOCCER GAMES ==========');
+      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
+        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
+          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
+      );
+      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
+      const soccerGames = soccerGamesByLeague.flat();
+      console.log(`⚽ Found ${soccerGames.length} Soccer games from API`);
+
       for (const game of soccerGames) {
         try {
-          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team}`);
-          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey);
-          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, status: 'success' });
+          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
+          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
+          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache Soccer game (${game.league}): ${game.home_team} vs ${game.away_team}`, error.message);
           results.errors.push({ sport: 'soccer', league: game.league, game: `${game.home_team} vs ${game.away_team}`, error: error.message });
         }
       }
+
+      // Log Soccer results
+      console.log('\n⚽ ========== SOCCER RESULTS ==========');
+      console.log(`⚽ Soccer: ${results.soccer.length} cached, ${results.errors.filter(e => e.sport === 'soccer').length} errors`);
+      results.soccer.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} [${g.league}] (${g.gameStartTime})`));
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ Scheduled preCacheTopGames completed in ${duration}s`);

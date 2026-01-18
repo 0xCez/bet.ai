@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { AppState, AppStateStatus } from "react-native";
+import { collection, query, where, getDocsFromServer } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { CachedGame } from "../../components/ui/CachedGameCard";
 
@@ -11,10 +12,11 @@ interface UseCachedGamesResult {
 }
 
 /**
- * Hook to fetch pre-cached games from Firestore
- * Returns games that were pre-cached by the weekly cron job
+ * Hook to fetch ALL pre-cached games from Firestore
+ * Always fetches from server (bypasses offline cache)
+ * Returns games sorted by game start time (soonest first)
  */
-export const useCachedGames = (maxGames: number = 10): UseCachedGamesResult => {
+export const useCachedGames = (): UseCachedGamesResult => {
   const [games, setGames] = useState<CachedGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,68 +28,103 @@ export const useCachedGames = (maxGames: number = 10): UseCachedGamesResult => {
 
       const cacheRef = collection(db, "matchAnalysisCache");
 
-      // Query for pre-cached games
-      // Note: We filter expired games client-side and sort by confidence
-      const now = new Date().toISOString();
+      // Query for ALL pre-cached games (no limit)
       const q = query(
         cacheRef,
-        where("preCached", "==", true),
-        limit(50) // Fetch more to ensure we get all valid games
+        where("preCached", "==", true)
       );
 
-      const snapshot = await getDocs(q);
+      // ALWAYS fetch from server - never use cached data
+      const snapshot = await getDocsFromServer(q);
+
+      console.log(`[useCachedGames] Fetched ${snapshot.size} pre-cached games from server`);
 
       const cachedGames: CachedGame[] = [];
+      const now = new Date();
+      const nowIso = now.toISOString();
 
       snapshot.forEach((doc) => {
         const data = doc.data();
+        const gameStartTime = data.gameStartTime || data.analysis?.gameStartTime;
 
-        // Check if not expired
-        if (data.expiresAt && data.expiresAt > now) {
-          const analysis = data.analysis || {};
+        // Only filter out games that have ENDED (started more than 4 hours ago)
+        // We keep games that haven't started yet OR are currently in progress
+        const fourHoursMs = 4 * 60 * 60 * 1000;
+        const gameStartedTooLongAgo = gameStartTime &&
+          new Date(gameStartTime).getTime() < (Date.now() - fourHoursMs);
 
-          // Extract team names from analysis.teams (structure: { home: "Team1", away: "Team2" })
-          const teams = analysis.teams || {};
-          const team1Name = teams.home || "Team 1";
-          const team2Name = teams.away || "Team 2";
+        // Check expiry
+        const isExpired = data.expiresAt && data.expiresAt < nowIso;
 
-          // Extract Win Probability from marketConsensus display (e.g., "61% Los Angeles Lakers" -> 61)
-          // This is the market-implied win probability calculated from the odds
-          const marketConsensusDisplay = analysis.keyInsightsNew?.marketConsensus?.display;
-          const extractedConfidence = marketConsensusDisplay
-            ? parseInt(marketConsensusDisplay.match(/(\d+)%/)?.[1] || '0', 10)
-            : null;
-          const confidence = extractedConfidence || 75;
-
-          cachedGames.push({
-            id: doc.id,
-            sport: data.sport as "nba" | "soccer",
-            team1: team1Name,
-            team2: team2Name,
-            team1Id: data.team1Id,
-            team2Id: data.team2Id,
-            confidence: confidence,
-            league: analysis.league || undefined,
-            timestamp: data.timestamp,
-            analysis: analysis,
-          });
+        if (isExpired || gameStartedTooLongAgo) {
+          console.log(`[useCachedGames] Skipping expired/ended game: ${data.analysis?.teams?.home} vs ${data.analysis?.teams?.away}`);
+          return;
         }
+
+        const analysis = data.analysis || {};
+        const teams = analysis.teams || {};
+        const team1Name = teams.home || "Team 1";
+        const team2Name = teams.away || "Team 2";
+
+        // Extract confidence from market consensus
+        const marketConsensusDisplay = analysis.keyInsightsNew?.marketConsensus?.display;
+        const extractedConfidence = marketConsensusDisplay
+          ? parseInt(marketConsensusDisplay.match(/(\d+)%/)?.[1] || '0', 10)
+          : null;
+        const confidence = extractedConfidence || 75;
+
+        cachedGames.push({
+          id: doc.id,
+          sport: data.sport as "nba" | "soccer",
+          team1: team1Name,
+          team2: team2Name,
+          team1Id: data.team1Id,
+          team2Id: data.team2Id,
+          confidence: confidence,
+          league: analysis.league || undefined,
+          timestamp: data.timestamp,
+          gameStartTime: gameStartTime,
+          analysis: analysis,
+        });
       });
 
-      // Sort by confidence (highest first) and limit to maxGames
-      cachedGames.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+      // Sort by game start time (soonest first)
+      cachedGames.sort((a, b) => {
+        const timeA = a.gameStartTime ? new Date(a.gameStartTime).getTime() : Infinity;
+        const timeB = b.gameStartTime ? new Date(b.gameStartTime).getTime() : Infinity;
+        return timeA - timeB;
+      });
 
-      setGames(cachedGames.slice(0, maxGames));
+      console.log(`[useCachedGames] Returning ${cachedGames.length} valid games`);
+      setGames(cachedGames);
     } catch (err) {
-      console.error("Error fetching cached games:", err);
+      console.error("[useCachedGames] Error fetching cached games:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch games");
     } finally {
       setLoading(false);
     }
-  }, [maxGames]);
+  }, []);
 
+  // Fetch on mount
   useEffect(() => {
     fetchCachedGames();
+  }, [fetchCachedGames]);
+
+  // Refresh when app comes back to foreground
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
+      // App came to foreground from background
+      if (appState.current.match(/inactive|background/) && nextAppState === "active") {
+        console.log("[useCachedGames] App returned to foreground, refreshing games...");
+        fetchCachedGames();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [fetchCachedGames]);
 
   return {

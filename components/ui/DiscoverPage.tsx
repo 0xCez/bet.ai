@@ -7,13 +7,7 @@ import { FloatingParticles } from "./FloatingParticles";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-interface DiscoverPageProps {
-  maxGames?: number;
-}
-
-export const DiscoverPage: React.FC<DiscoverPageProps> = ({
-  maxGames = 8,
-}) => {
+export const DiscoverPage: React.FC = () => {
   const insets = useSafeAreaInsets();
 
   return (
@@ -30,7 +24,7 @@ export const DiscoverPage: React.FC<DiscoverPageProps> = ({
           paddingBottom: insets.bottom + 100, // Space for page indicator
         }
       ]}>
-        <HeroGamesCarousel maxGames={maxGames} />
+        <HeroGamesCarousel />
       </View>
     </View>
   );
