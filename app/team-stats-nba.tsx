@@ -798,13 +798,13 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   shimmerContainer: {
     width: "100%",
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 8,
   },
   shimmerGroup: {
     width: "100%",

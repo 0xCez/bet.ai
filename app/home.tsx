@@ -11,7 +11,7 @@ import {
   NativeScrollEvent,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { Logo } from "../components/ui/Logo";
@@ -39,12 +39,20 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const RATING_SHOWN_KEY = "@rating_shown";
 
+type HomeParams = {
+  page?: "discover" | "scan";
+};
+
 export default function HomeScreen() {
+  const params = useLocalSearchParams<HomeParams>();
   const { isSubscribed, purchaseLoading } = useRevenueCatPurchases();
   const insets = useSafeAreaInsets();
 
+  // Determine initial page based on params (0 = Discover, 1 = Scan)
+  const initialPage = params.page === "discover" ? 0 : 1;
+
   // Page state for horizontal swiping
-  const [activePage, setActivePage] = useState(1); // Start on Scan page (index 1)
+  const [activePage, setActivePage] = useState(initialPage);
   const scrollViewRef = useRef<ScrollView>(null);
   const isScrollingProgrammatically = useRef(false);
 
@@ -229,7 +237,7 @@ export default function HomeScreen() {
         });
         router.push({
           pathname: "/analysis",
-          params: { imageUri: compressedUri },
+          params: { imageUri: compressedUri, from: "scan" },
         });
       }
     } catch (error) {
@@ -266,7 +274,7 @@ export default function HomeScreen() {
         });
         router.push({
           pathname: "/analysis",
-          params: { imageUri: compressedUri },
+          params: { imageUri: compressedUri, from: "scan" },
         });
       }
     } catch (error) {
@@ -335,7 +343,7 @@ export default function HomeScreen() {
           onScroll={handlePageScroll}
           scrollEventThrottle={16}
           bounces={false}
-          contentOffset={{ x: SCREEN_WIDTH, y: 0 }} // Start on page 2 (Scan)
+          contentOffset={{ x: initialPage * SCREEN_WIDTH, y: 0 }} // Start on the appropriate page
           style={styles.pagesContainer}
         >
           {/* Page 1: Discover - Hero Game Cards */}

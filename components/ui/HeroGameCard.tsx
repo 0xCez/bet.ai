@@ -5,9 +5,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, spacing, borderRadius, typography, glass } from "../../constants/designTokens";
+import { createShimmerPlaceHolder } from "expo-shimmer-placeholder";
+import { colors, spacing, borderRadius, typography, glass, shimmerColors } from "../../constants/designTokens";
 import { getNBATeamLogo, getSoccerTeamLogo } from "../../utils/teamLogos";
 import { CachedGame } from "./CachedGameCard";
+
+// Create shimmer placeholder component
+const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HORIZONTAL_PADDING = spacing[6]; // 24px on each side
@@ -597,6 +601,236 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.2)",
     alignItems: "center",
     justifyContent: "center",
+  },
+});
+
+// ============================================================================
+// SKELETON COMPONENT
+// ============================================================================
+
+/**
+ * Skeleton loading state for HeroGameCard
+ * Matches the exact structure of the card for a seamless loading experience
+ */
+export const HeroGameCardSkeleton: React.FC = () => {
+  // Cast shimmerColors to mutable array for ShimmerPlaceholder
+  const shimmerColorsArray = shimmerColors as unknown as string[];
+
+  return (
+    <View style={styles.card}>
+      {/* Glass Background */}
+      <BlurView
+        intensity={glass.card.blurIntensity}
+        tint="dark"
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Content Container */}
+      <View style={styles.content}>
+        {/* Header Skeleton: Sport Badge + Game Time */}
+        <View style={styles.header}>
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.sportBadge}
+          />
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.gameTime}
+          />
+        </View>
+
+        {/* Teams Section Skeleton */}
+        <View style={styles.teamsSection}>
+          {/* Team 1 */}
+          <View style={styles.teamColumn}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.teamLogo}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.teamName}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.oddsChip}
+            />
+          </View>
+
+          {/* VS Divider */}
+          <View style={styles.vsDivider}>
+            <View style={styles.vsCircle}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
+          </View>
+
+          {/* Team 2 */}
+          <View style={styles.teamColumn}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.teamLogo}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.teamName}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.oddsChip}
+            />
+          </View>
+        </View>
+
+        {/* AI Pick Banner Skeleton */}
+        <View style={skeletonStyles.aiPickBanner}>
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.aiPickIcon}
+          />
+          <View style={skeletonStyles.aiPickContent}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.aiPickLabel}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.aiPickText}
+            />
+          </View>
+        </View>
+
+        {/* Stats Pills Row Skeleton */}
+        <View style={styles.statsPillsRow}>
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.statPill}
+          />
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.statPill}
+          />
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.statPill}
+          />
+        </View>
+
+        {/* Key Edge Skeleton */}
+        <ShimmerPlaceholder
+          shimmerColors={shimmerColorsArray}
+          style={skeletonStyles.keyEdge}
+        />
+
+        {/* Confidence Section Skeleton */}
+        <View style={styles.confidenceSection}>
+          <View style={styles.confidenceHeader}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.confidenceLabel}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={skeletonStyles.confidenceValue}
+            />
+          </View>
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={skeletonStyles.confidenceBar}
+          />
+        </View>
+
+        {/* CTA Footer Skeleton */}
+        <ShimmerPlaceholder
+          shimmerColors={shimmerColorsArray}
+          style={skeletonStyles.ctaButton}
+        />
+      </View>
+    </View>
+  );
+};
+
+const skeletonStyles = StyleSheet.create({
+  sportBadge: {
+    width: 70,
+    height: 24,
+    borderRadius: borderRadius.full,
+  },
+  gameTime: {
+    width: 100,
+    height: 24,
+    borderRadius: borderRadius.full,
+  },
+  teamLogo: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  teamName: {
+    width: 80,
+    height: 18,
+    borderRadius: borderRadius.sm,
+  },
+  oddsChip: {
+    width: 50,
+    height: 26,
+    borderRadius: borderRadius.full,
+  },
+  aiPickBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    padding: spacing[3],
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.rgba.primary10,
+  },
+  aiPickIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  aiPickContent: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  aiPickLabel: {
+    width: 100,
+    height: 10,
+    borderRadius: borderRadius.sm,
+  },
+  aiPickText: {
+    width: 150,
+    height: 14,
+    borderRadius: borderRadius.sm,
+  },
+  statPill: {
+    flex: 1,
+    height: 52,
+    borderRadius: borderRadius.md,
+  },
+  keyEdge: {
+    width: "80%",
+    height: 14,
+    borderRadius: borderRadius.sm,
+  },
+  confidenceLabel: {
+    width: 90,
+    height: 14,
+    borderRadius: borderRadius.sm,
+  },
+  confidenceValue: {
+    width: 40,
+    height: 16,
+    borderRadius: borderRadius.sm,
+  },
+  confidenceBar: {
+    width: "100%",
+    height: 6,
+    borderRadius: 3,
+  },
+  ctaButton: {
+    width: "100%",
+    height: 38,
+    borderRadius: borderRadius.lg,
   },
 });
 

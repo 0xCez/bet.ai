@@ -1,7 +1,7 @@
 /**
  * preCacheTopGames.js
  *
- * Weekly cron job to pre-cache FULL AI analysis for top upcoming NBA and Soccer games.
+ * Runs every 2 days to pre-cache FULL AI analysis for top upcoming NBA and Soccer games.
  * This ensures users have complete analysis (including AI breakdown, xFactors, etc.)
  * available instantly when they tap on a game from the carousel.
  *
@@ -9,7 +9,8 @@
  * Test: curl -X POST https://us-central1-betai-f9176.cloudfunctions.net/preCacheTopGames -H "x-api-key: YOUR_KEY"
  */
 
-const functions = require("firebase-functions");
+const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const axios = require("axios");
 require('dotenv').config();
@@ -57,6 +58,58 @@ const SOCCER_LEAGUES = [
 // Post-game buffer: keep analysis available for 4 hours after game starts
 // This allows users to still view analysis during/shortly after the game
 const POST_GAME_BUFFER_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+/**
+ * Generate cache key for a game based on team IDs
+ * This matches the key format used in preCacheGameAnalysis
+ */
+function getCacheKey(sport, team1Id, team2Id) {
+  const teams = [String(team1Id), String(team2Id)].sort().join('-');
+  return `${sport.toLowerCase()}_${teams}_en`;
+}
+
+/**
+ * Check if a game is already cached and still valid
+ * Returns true if we should skip caching this game
+ */
+async function isGameAlreadyCached(cacheRef, sport, team1, team2) {
+  try {
+    // We need to get team IDs first - call a lightweight endpoint or check by team names
+    // For now, we'll check by querying existing docs that match the teams
+    const snapshot = await cacheRef
+      .where('preCached', '==', true)
+      .where('sport', '==', sport.toLowerCase())
+      .get();
+
+    const now = new Date().toISOString();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const analysis = data.analysis || {};
+      const teams = analysis.teams || {};
+
+      // Check if this doc matches our teams (either order)
+      const isMatch =
+        (teams.home === team1 && teams.away === team2) ||
+        (teams.home === team2 && teams.away === team1);
+
+      if (isMatch) {
+        // Check if still valid (not expired and game hasn't started)
+        const isExpired = data.expiresAt && data.expiresAt < now;
+        const gameStarted = data.gameStartTime && data.gameStartTime < now;
+
+        if (!isExpired && !gameStarted) {
+          return true; // Game is cached and valid
+        }
+      }
+    }
+
+    return false; // Not cached or expired
+  } catch (error) {
+    console.error(`Error checking cache for ${team1} vs ${team2}:`, error.message);
+    return false; // On error, proceed with caching
+  }
+}
 
 /**
  * Recursively removes empty string keys from objects
@@ -145,7 +198,11 @@ async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeam
  * Timeout defaults to 60s for HTTP functions. For longer runs,
  * consider using Cloud Tasks or breaking into smaller batches.
  */
-exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
+exports.preCacheTopGames = onRequest({
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  cors: true
+}, async (req, res) => {
 
     // CORS headers
     res.set('Access-Control-Allow-Origin', '*');
@@ -160,24 +217,37 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
 
     console.log('🚀 Starting preCacheTopGames job...');
     const startTime = Date.now();
-    const results = { nba: [], soccer: [], errors: [], cleaned: 0 };
+    const results = { nba: [], soccer: [], errors: [], cleaned: 0, skipped: 0 };
 
     try {
-      // Step 0: Clean up ALL old pre-cached games first
-      console.log('🧹 Cleaning up old pre-cached games...');
+      // Step 0: Clean up only EXPIRED pre-cached games (smart cleanup)
+      console.log('🧹 Cleaning up expired pre-cached games...');
       const cacheRef = getDb().collection('matchAnalysisCache');
-      const oldCachedSnapshot = await cacheRef.where('preCached', '==', true).get();
+      const now = new Date().toISOString();
 
-      if (!oldCachedSnapshot.empty) {
+      // Query for all pre-cached games, filter expired ones in code (avoids composite index)
+      const allPreCachedSnapshot = await cacheRef
+        .where('preCached', '==', true)
+        .get();
+
+      if (!allPreCachedSnapshot.empty) {
         const batch = getDb().batch();
-        oldCachedSnapshot.docs.forEach((doc) => {
-          batch.delete(doc.ref);
-          results.cleaned++;
+        allPreCachedSnapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          // Only delete if expired
+          if (data.expiresAt && data.expiresAt < now) {
+            batch.delete(doc.ref);
+            results.cleaned++;
+          }
         });
-        await batch.commit();
-        console.log(`🗑️ Deleted ${results.cleaned} old pre-cached games`);
+        if (results.cleaned > 0) {
+          await batch.commit();
+          console.log(`🗑️ Deleted ${results.cleaned} expired pre-cached games`);
+        } else {
+          console.log('📭 No expired pre-cached games to clean');
+        }
       } else {
-        console.log('📭 No old pre-cached games to clean');
+        console.log('📭 No pre-cached games found');
       }
 
       // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
@@ -185,9 +255,17 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
       const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
       console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
 
-      // Process NBA games sequentially
+      // Process NBA games sequentially (skip already cached)
       for (const game of nbaGames) {
         try {
+          // Check if game is already cached and valid
+          const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
+          if (alreadyCached) {
+            console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
+            results.skipped++;
+            continue;
+          }
+
           console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
           await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
           results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
@@ -212,9 +290,17 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
       const soccerGames = soccerGamesByLeague.flat();
       console.log(`⚽ Found ${soccerGames.length} Soccer games from API`);
 
-      // Process Soccer games from all leagues
+      // Process Soccer games from all leagues (skip already cached)
       for (const game of soccerGames) {
         try {
+          // Check if game is already cached and valid
+          const alreadyCached = await isGameAlreadyCached(cacheRef, 'soccer', game.home_team, game.away_team);
+          if (alreadyCached) {
+            console.log(`⏭️ Skipping already cached Soccer: ${game.home_team} vs ${game.away_team}`);
+            results.skipped++;
+            continue;
+          }
+
           console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
           await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
           results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
@@ -231,13 +317,14 @@ exports.preCacheTopGames = functions.https.onRequest(async (req, res) => {
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ preCacheTopGames completed in ${duration}s`);
-      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Errors: ${results.errors.length}`);
+      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Skipped: ${results.skipped}, Errors: ${results.errors.length}`);
 
       res.status(200).json({
         success: true,
         duration: `${duration}s`,
         summary: {
           cleaned: results.cleaned,
+          skipped: results.skipped,
           nba: results.nba.length,
           soccer: results.soccer.length,
           errors: results.errors.length
@@ -494,22 +581,50 @@ function generateFallbackAnalysis(team1, team2, keyInsightsNew, teamStats, gameD
 }
 
 /**
- * Scheduled version - runs every Sunday at 6 AM UTC
+ * Scheduled version - runs every 2 days at 6 AM UTC
  * This automatically creates a Cloud Scheduler job on deploy
  */
-const { onSchedule } = require("firebase-functions/v2/scheduler");
-
 exports.preCacheTopGamesScheduled = onSchedule({
-  schedule: '0 6 * * 0',
+  schedule: '0 6 */2 * *',
   timeZone: 'UTC',
   timeoutSeconds: 540,
   memory: '512MiB'
 }, async () => {
     console.log('🚀 Starting scheduled preCacheTopGames job...');
     const startTime = Date.now();
-    const results = { nba: [], soccer: [], errors: [] };
+    const results = { nba: [], soccer: [], errors: [], cleaned: 0, skipped: 0 };
 
     try {
+      // Step 0: Clean up only EXPIRED pre-cached games (smart cleanup)
+      console.log('🧹 Cleaning up expired pre-cached games...');
+      const cacheRef = getDb().collection('matchAnalysisCache');
+      const now = new Date().toISOString();
+
+      // Query for all pre-cached games, filter expired ones in code (avoids composite index)
+      const allPreCachedSnapshot = await cacheRef
+        .where('preCached', '==', true)
+        .get();
+
+      if (!allPreCachedSnapshot.empty) {
+        const batch = getDb().batch();
+        allPreCachedSnapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          // Only delete if expired
+          if (data.expiresAt && data.expiresAt < now) {
+            batch.delete(doc.ref);
+            results.cleaned++;
+          }
+        });
+        if (results.cleaned > 0) {
+          await batch.commit();
+          console.log(`🗑️ Deleted ${results.cleaned} expired pre-cached games`);
+        } else {
+          console.log('📭 No expired pre-cached games to clean');
+        }
+      } else {
+        console.log('📭 No pre-cached games found');
+      }
+
       // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
       console.log('\n🏀 ========== FETCHING NBA GAMES ==========');
       const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
@@ -517,6 +632,14 @@ exports.preCacheTopGamesScheduled = onSchedule({
 
       for (const game of nbaGames) {
         try {
+          // Check if game is already cached and valid
+          const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
+          if (alreadyCached) {
+            console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
+            results.skipped++;
+            continue;
+          }
+
           console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
           await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
           results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
@@ -543,6 +666,14 @@ exports.preCacheTopGamesScheduled = onSchedule({
 
       for (const game of soccerGames) {
         try {
+          // Check if game is already cached and valid
+          const alreadyCached = await isGameAlreadyCached(cacheRef, 'soccer', game.home_team, game.away_team);
+          if (alreadyCached) {
+            console.log(`⏭️ Skipping already cached Soccer: ${game.home_team} vs ${game.away_team}`);
+            results.skipped++;
+            continue;
+          }
+
           console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
           await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
           results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
@@ -559,7 +690,7 @@ exports.preCacheTopGamesScheduled = onSchedule({
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ Scheduled preCacheTopGames completed in ${duration}s`);
-      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Errors: ${results.errors.length}`);
+      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Skipped: ${results.skipped}, Errors: ${results.errors.length}`);
 
       return null;
     } catch (error) {

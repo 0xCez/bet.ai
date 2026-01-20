@@ -146,7 +146,7 @@ export default function HistoryScreen() {
     // Navigate to analysis details screen, passing only the Firestore document ID
     router.push({
       pathname: "/analysis",
-      params: { analysisId: item.id }, // Pass only the ID
+      params: { analysisId: item.id, from: "history" },
     });
   };
 

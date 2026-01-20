@@ -7,7 +7,6 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  ActivityIndicator,
   Pressable,
   Modal,
 } from "react-native";
@@ -15,7 +14,7 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
-import { HeroGameCard, HERO_CARD_WIDTH, HERO_CARD_MARGIN } from "./HeroGameCard";
+import { HeroGameCard, HeroGameCardSkeleton, HERO_CARD_WIDTH, HERO_CARD_MARGIN } from "./HeroGameCard";
 import { CachedGame } from "./CachedGameCard";
 import { colors, spacing, typography, borderRadius } from "../../constants/designTokens";
 import { useCachedGames } from "../../app/hooks/useCachedGames";
@@ -74,6 +73,7 @@ export const HeroGamesCarousel: React.FC = () => {
         team1Id: game.team1Id,
         team2Id: game.team2Id,
         fromCache: "true",
+        from: "discover",
       },
     });
   };
@@ -157,15 +157,16 @@ export const HeroGamesCarousel: React.FC = () => {
     </Modal>
   );
 
-  // Loading state
+  // Loading state - show skeleton card
   if (loading) {
     return (
       <View style={styles.container}>
         {renderHeader()}
         {renderDropdown()}
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Finding best games...</Text>
+        <View style={styles.scrollContent}>
+          <View style={styles.cardWrapper}>
+            <HeroGameCardSkeleton />
+          </View>
         </View>
       </View>
     );
@@ -340,17 +341,6 @@ const styles = StyleSheet.create({
   },
   lastCardWrapper: {
     marginRight: HORIZONTAL_PADDING,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing[12],
-  },
-  loadingText: {
-    color: colors.mutedForeground,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily.regular,
-    marginTop: spacing[3],
   },
   emptyContainer: {
     alignItems: "center",

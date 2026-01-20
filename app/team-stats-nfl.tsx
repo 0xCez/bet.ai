@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 120, // Extra padding for FloatingBottomNav
   },
   selectionTitle: {
@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   shimmerContainer: {
     width: "100%",
     paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingTop: 6,
   },
   shimmerGroup: {
     width: "100%",

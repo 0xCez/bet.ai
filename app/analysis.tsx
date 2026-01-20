@@ -186,6 +186,8 @@ type AnalysisParams = {
   team1Id?: string;
   team2Id?: string;
   fromCache?: string;
+  // Navigation context - where the user came from
+  from?: "discover" | "history" | "scan";
 };
 
 // Helper function to remove empty string keys from objects (Firestore doesn't allow them)
@@ -1387,9 +1389,29 @@ export default function AnalysisScreen() {
     );
   };
 
+  // Handle back navigation based on where the user came from
+  const handleBackNavigation = () => {
+    switch (params.from) {
+      case "discover":
+        // Go back to home and show the Discover page
+        router.replace({ pathname: "/home", params: { page: "discover" } });
+        break;
+      case "history":
+        router.replace("/history");
+        break;
+      case "scan":
+        // Go back to home (scan page is default)
+        router.replace("/home");
+        break;
+      default:
+        // Fallback: go to home
+        router.replace("/home");
+    }
+  };
+
   return (
     <ScreenBackground hideBg>
-      <TopBar onBackPress={() => router.replace("/")} />
+      <TopBar onBackPress={handleBackNavigation} />
 
       <View style={styles.container}>
         <ScrollView
@@ -1473,7 +1495,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
   },
   analysisContainer: {
-    paddingTop: 20,
+    paddingTop: 4,
     flex: 1,
   },
   shimmerContainer: {
