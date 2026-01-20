@@ -6,7 +6,6 @@ import {
   Alert,
   Share,
   Linking,
-  Platform,
   Animated,
   ActivityIndicator,
 } from "react-native";
@@ -21,7 +20,6 @@ import { httpsCallable } from "firebase/functions";
 import { updateAppState } from "../../utils/appStorage";
 import * as WebBrowser from "expo-web-browser";
 import * as Haptics from "expo-haptics";
-import { useRevenueCatPurchases } from "../../app/hooks/useRevenueCatPurchases";
 import { useRevenueCat } from "../../app/providers/RevenueCatProvider";
 import i18n from "../../i18n";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/designTokens";
@@ -45,7 +43,6 @@ export function SettingsBottomSheet({
   onClose,
 }: SettingsBottomSheetProps) {
   const actionSheetRef = useRef<ActionSheetRef>(null);
-  const { checkSubscriptionStatus } = useRevenueCatPurchases();
   const { restorePurchases } = useRevenueCat();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -182,63 +179,19 @@ export function SettingsBottomSheet({
     }
   };
 
-  const handleDeleteAccount = async () => {
-    try {
-      const hasActiveSubscription = await checkSubscriptionStatus();
-
-      if (hasActiveSubscription) {
-        Alert.alert(
-          "Active Subscription Found",
-          i18n.t("settingsActiveSubscription"),
-          [
-            { text: i18n.t("common.cancel"), style: "cancel" },
-            {
-              text: i18n.t("settingsManageSubscriptions"),
-              onPress: () => {
-                if (Platform.OS === "ios") {
-                  Linking.openURL(
-                    "itms-apps://apps.apple.com/account/subscriptions"
-                  );
-                } else if (Platform.OS === "android") {
-                  Linking.openURL(
-                    "https://play.google.com/store/account/subscriptions"
-                  );
-                }
-              },
-            },
-          ]
-        );
-        return;
-      }
-
-      Alert.alert(
-        i18n.t("settingsDeleteAccount"),
-        i18n.t("settingsDeleteConfirm"),
-        [
-          { text: i18n.t("common.cancel"), style: "cancel" },
-          {
-            text: i18n.t("settingsDeleteAction"),
-            style: "destructive",
-            onPress: performAccountDeletion,
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Error checking subscription status:", error);
-      // If subscription check fails, still allow deletion
-      Alert.alert(
-        i18n.t("settingsDeleteAccount"),
-        i18n.t("settingsDeleteConfirm"),
-        [
-          { text: i18n.t("common.cancel"), style: "cancel" },
-          {
-            text: i18n.t("settingsDeleteAction"),
-            style: "destructive",
-            onPress: performAccountDeletion,
-          },
-        ]
-      );
-    }
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      i18n.t("settingsDeleteAccount"),
+      i18n.t("settingsDeleteConfirm"),
+      [
+        { text: i18n.t("common.cancel"), style: "cancel" },
+        {
+          text: i18n.t("settingsDeleteAction"),
+          style: "destructive",
+          onPress: performAccountDeletion,
+        },
+      ]
+    );
   };
 
   const handleClose = async () => {
