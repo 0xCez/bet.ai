@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,14 +8,16 @@ import {
   Linking,
   Platform,
   Animated,
+  ActivityIndicator,
 } from "react-native";
 import ActionSheet, { ActionSheetRef } from "react-native-actions-sheet";
 import { TouchableOpacity } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { Logo } from "./Logo";
 import { router } from "expo-router";
-import { auth } from "../../firebaseConfig";
-import { deleteUser, signOut } from "firebase/auth";
+import { auth, functions } from "../../firebaseConfig";
+import { signOut } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { updateAppState } from "../../utils/appStorage";
 import * as WebBrowser from "expo-web-browser";
 import * as Haptics from "expo-haptics";
@@ -45,6 +47,7 @@ export function SettingsBottomSheet({
   const actionSheetRef = useRef<ActionSheetRef>(null);
   const { checkSubscriptionStatus } = useRevenueCatPurchases();
   const { restorePurchases } = useRevenueCat();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Animation values for staggered menu items
   const itemAnimations = useRef(
@@ -141,6 +144,44 @@ export function SettingsBottomSheet({
     }
   };
 
+  const performAccountDeletion = async () => {
+    if (isDeleting) return; // Prevent double-tap
+
+    setIsDeleting(true);
+    try {
+      if (!auth.currentUser) {
+        throw new Error("No authenticated user found");
+      }
+
+      // Call Cloud Function to delete account and all data
+      const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+      await deleteUserAccount();
+
+      // Clear local app state
+      await updateAppState({
+        onboardingComplete: false,
+        signupComplete: false,
+        signupAnswers: {},
+        signupStep: 0,
+      });
+
+      // Sign out locally (auth account already deleted server-side)
+      await signOut(auth);
+
+      // Close the sheet and navigate to login
+      onClose();
+      router.replace("/login");
+    } catch (error: any) {
+      console.error("Error deleting account:", error);
+      Alert.alert(
+        i18n.t("common.error"),
+        "Failed to delete account. Please try again."
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     try {
       const hasActiveSubscription = await checkSubscriptionStatus();
@@ -178,42 +219,13 @@ export function SettingsBottomSheet({
           {
             text: i18n.t("settingsDeleteAction"),
             style: "destructive",
-            onPress: async () => {
-              try {
-                if (!auth.currentUser) {
-                  throw new Error("No authenticated user found");
-                }
-                await deleteUser(auth.currentUser);
-                await signOut(auth);
-                router.replace("/login");
-              } catch (error: any) {
-                if (error?.code === "auth/requires-recent-login") {
-                  Alert.alert(
-                    "Re-authentication Required",
-                    i18n.t("settingsReauthentication"),
-                    [
-                      { text: i18n.t("common.cancel"), style: "cancel" },
-                      {
-                        text: i18n.t("settingsLogoutNow"),
-                        style: "destructive",
-                        onPress: handleLogout,
-                      },
-                    ]
-                  );
-                } else {
-                  console.error("Error deleting account:", error);
-                  Alert.alert(
-                    i18n.t("common.error"),
-                    "Failed to delete account. Please try again."
-                  );
-                }
-              }
-            },
+            onPress: performAccountDeletion,
           },
         ]
       );
     } catch (error) {
       console.error("Error checking subscription status:", error);
+      // If subscription check fails, still allow deletion
       Alert.alert(
         i18n.t("settingsDeleteAccount"),
         i18n.t("settingsDeleteConfirm"),
@@ -222,37 +234,7 @@ export function SettingsBottomSheet({
           {
             text: i18n.t("settingsDeleteAction"),
             style: "destructive",
-            onPress: async () => {
-              try {
-                if (!auth.currentUser) {
-                  throw new Error("No authenticated user found");
-                }
-                await deleteUser(auth.currentUser);
-                await signOut(auth);
-                router.replace("/login");
-              } catch (error: any) {
-                if (error?.code === "auth/requires-recent-login") {
-                  Alert.alert(
-                    "Re-authentication Required",
-                    i18n.t("settingsReauthentication"),
-                    [
-                      { text: i18n.t("common.cancel"), style: "cancel" },
-                      {
-                        text: i18n.t("settingsLogoutNow"),
-                        style: "destructive",
-                        onPress: handleLogout,
-                      },
-                    ]
-                  );
-                } else {
-                  console.error("Error deleting account:", error);
-                  Alert.alert(
-                    i18n.t("common.error"),
-                    "Failed to delete account. Please try again."
-                  );
-                }
-              }
-            },
+            onPress: performAccountDeletion,
           },
         ]
       );
@@ -309,9 +291,17 @@ export function SettingsBottomSheet({
       onClose={handleClose}
       containerStyle={styles.container}
       indicatorStyle={styles.indicator}
-      gestureEnabled={true}
+      gestureEnabled={!isDeleting}
     >
       <View style={styles.contentContainer}>
+        {/* Loading overlay for account deletion */}
+        {isDeleting && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Deleting account...</Text>
+          </View>
+        )}
+
         {/* Drag indicator */}
         <View style={styles.dragIndicator} />
 
@@ -480,5 +470,24 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: colors.destructive,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.rgba.background90 || "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 100,
+    borderTopLeftRadius: borderRadius.xl * 2,
+    borderTopRightRadius: borderRadius.xl * 2,
+  },
+  loadingText: {
+    color: colors.foreground,
+    fontSize: typography.sizes.md,
+    fontFamily: typography.fontFamily.medium,
+    marginTop: spacing[4],
   },
 });
