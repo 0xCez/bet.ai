@@ -188,6 +188,10 @@ type AnalysisParams = {
   fromCache?: string;
   // Navigation context - where the user came from
   from?: "discover" | "history" | "scan";
+  // Pre-loaded analysis from premium loader flow
+  analysisData?: string;
+  imageUrl?: string;
+  skipApiCall?: string;
 };
 
 // Helper function to remove empty string keys from objects (Firestore doesn't allow them)
@@ -428,6 +432,68 @@ export default function AnalysisScreen() {
           );
           setError("Authentication error: Please log in to view history.");
         }
+      }
+    }
+    // --- Pre-loaded Analysis Flow (from premium loader via single-prediction) ---
+    else if (params.skipApiCall === "true" && params.analysisData) {
+      console.log("Pre-loaded Flow: Using analysis data from premium loader");
+      console.log("Pre-loaded Flow: imageUrl param:", params.imageUrl);
+      try {
+        const preloadedData = JSON.parse(params.analysisData);
+        setAnalysisResult(preloadedData);
+        cachedAnalysisResult = preloadedData;
+
+        // Set image URL for display
+        // Note: expo-router decodes %2F to / in route params, but Firebase Storage
+        // requires the path to stay encoded. Re-encode the path portion.
+        if (params.imageUrl) {
+          // Fix URL encoding: "images/filename" should be "images%2Ffilename"
+          const fixedUrl = params.imageUrl.replace('/o/images/', '/o/images%2F');
+          console.log("Pre-loaded Flow: Setting displayImageUrl to:", fixedUrl);
+          setDisplayImageUrl(fixedUrl);
+          cachedDisplayImageUrl = fixedUrl;
+        } else {
+          console.log("Pre-loaded Flow: No imageUrl param found");
+        }
+
+        // Save to history (same logic as creation flow)
+        const userId = auth.currentUser?.uid;
+        // Use the fixed URL for saving to history
+        const fixedUrlForHistory = params.imageUrl ? params.imageUrl.replace('/o/images/', '/o/images%2F') : null;
+        if (userId && !hasAnalysisSaved.current && fixedUrlForHistory) {
+          const userAnalysesCol = collection(
+            db,
+            "userAnalyses",
+            userId,
+            "analyses"
+          );
+          const newAnalysisRef = doc(userAnalysesCol);
+
+          const analysisDataToSave = {
+            teams: `${preloadedData.teams.home} vs ${preloadedData.teams.away}`,
+            confidence: parseInt(preloadedData.aiAnalysis?.confidenceScore) || 50,
+            sport: preloadedData.sport || "nfl",
+            imageUrl: fixedUrlForHistory,
+            createdAt: serverTimestamp(),
+            analysis: sanitizeForFirestore(preloadedData),
+          };
+
+          setDoc(newAnalysisRef, analysisDataToSave)
+            .then(() => {
+              hasAnalysisSaved.current = true;
+              setCurrentAnalysisId(newAnalysisRef.id);
+              console.log("Pre-loaded Flow: Saved to history with ID:", newAnalysisRef.id);
+            })
+            .catch((err) => {
+              console.error("Pre-loaded Flow: Error saving to history:", err);
+            });
+        }
+
+        setIsLoading(false);
+      } catch (e) {
+        console.error("Failed to parse pre-loaded analysis data:", e);
+        setError("Failed to load analysis data.");
+        setIsLoading(false);
       }
     }
     // --- Creation Flow ---
@@ -961,6 +1027,7 @@ export default function AnalysisScreen() {
   const renderAnalysisContent = () => {
     console.log("Rendering analysis content with result:", analysisResult);
     console.log("Display Image URL:", displayImageUrl);
+    console.log("isFromPreCache:", isFromPreCache);
 
     if (error) {
       return (
@@ -1007,7 +1074,9 @@ export default function AnalysisScreen() {
               <Image
                 source={{ uri: displayImageUrl }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
+                onError={(e) => console.log("Image load error:", e)}
+                onLoad={() => console.log("Image loaded successfully")}
               />
             ) : (
               // Optional: Placeholder if no image URL is available yet
