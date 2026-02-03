@@ -1,9 +1,6 @@
 import React from "react";
-import { StyleSheet, View, ViewStyle, Image, ImageStyle } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Text } from "react-native";
-import MaskedView from "@react-native-masked-view/masked-view";
-import { RFValue } from "react-native-responsive-fontsize";
+import { StyleSheet, View, ViewStyle, ImageStyle } from "react-native";
+import { Image } from "expo-image";
 
 interface LogoProps {
   size?: "small" | "medium" | "large";
@@ -13,16 +10,16 @@ interface LogoProps {
 
 const SIZES = {
   small: {
-    width: 80,
-    height: 32,
+    width: 69,
+    height: 69,
   },
   medium: {
-    width: 90,
-    height: 36,
+    width: 86,
+    height: 86,
   },
   large: {
-    width: 150,
-    height: 56,
+    width: 121,
+    height: 121,
   },
 };
 
@@ -36,9 +33,9 @@ export function Logo({
   return (
     <View style={[styles.container, containerStyle]}>
       <Image
-        source={require("../../assets/images/logo.png")}
+        source={require("../../assets/images/soloBlogo.svg")}
         style={[styles.image, sizeStyles, imageStyle]}
-        resizeMode="contain"
+        contentFit="contain"
       />
     </View>
   );
@@ -50,31 +47,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   image: {
-    width: 100,
-    height: 40,
-  },
-  title: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: RFValue(24),
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: 8,
-    paddingHorizontal: 0,
-  },
-  gradient: {
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  text: {
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
-  logo: {
-    fontFamily: "Aeonik-Regular",
-    fontSize: 30,
-    color: "#FFFFFF",
-    textAlign: "center",
+    width: 86,
+    height: 86,
   },
 });

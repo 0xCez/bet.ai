@@ -543,6 +543,6 @@ const styles = StyleSheet.create({
   },
   pageIndicatorContainer: {
     alignItems: "center",
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[1],
   },
 });

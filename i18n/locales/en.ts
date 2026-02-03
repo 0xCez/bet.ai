@@ -261,7 +261,7 @@ export default {
 
   // Image Picker Sheet
   imagePickerChooseFromLibrary: "Choose from library",
-  imagePickerTakePhoto: "Scan a Bet or Game",
+  imagePickerTakePhoto: "Scan a Slip or Game",
   imagePickerCancel: "Cancel",
 
   // History Screen

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StatusBar,
   Animated as RNAnimated,
   Easing as RNEasing,
+  ActivityIndicator,
 } from "react-native";
 import Animated, {
   FadeIn,
@@ -17,7 +18,9 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, typography, spacing, borderRadius, shadows } from "../constants/designTokens";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebaseConfig";
+import { colors, typography, spacing, borderRadius } from "../constants/designTokens";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "../utils/teamLogos";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
@@ -68,9 +71,13 @@ export default function SinglePredictionScreen() {
 
   const analysisResult = rawApiResponse;
 
+  // === STATE ===
+  const [bulletPoints, setBulletPoints] = useState<string[]>([]);
+  const [isLoadingReasons, setIsLoadingReasons] = useState(true);
+
   // === COUNT-UP ANIMATION ===
   const countAnim = useRef(new RNAnimated.Value(0)).current;
-  const [displayedCount, setDisplayedCount] = React.useState(0);
+  const [displayedCount, setDisplayedCount] = useState(0);
 
   // === CTA SHIMMER ===
   const shimmerAnim = useRef(new RNAnimated.Value(0)).current;
@@ -119,8 +126,8 @@ export default function SinglePredictionScreen() {
   const favoredTeam = teamSide === "home" ? homeTeam : teamSide === "away" ? awayTeam : homeTeam;
   const opponentTeam = teamSide === "home" ? awayTeam : teamSide === "away" ? homeTeam : awayTeam;
 
-  // === BUILD COMPELLING "WHY THEY WIN" REASONS ===
-  const buildWinReasons = (): string[] => {
+  // === FALLBACK "WHY THEY WIN" REASONS (used if LLM fails) ===
+  const buildFallbackReasons = (): string[] => {
     const reasons: string[] = [];
     const isFavoredHome = teamSide === "home";
 
@@ -173,10 +180,58 @@ export default function SinglePredictionScreen() {
     return reasons.slice(0, 3); // Max 3 reasons
   };
 
-  const bulletPoints = buildWinReasons();
-
   // Get game time from analysis data
   const gameTime = formatGameTime(analysisResult?.gameStartTime);
+
+  // === FETCH AI-GENERATED WIN REASONS ===
+  useEffect(() => {
+    const fetchWinReasons = async () => {
+      try {
+        setIsLoadingReasons(true);
+
+        console.log("Calling generateWinReasons with:", {
+          favoredTeam,
+          opponentTeam,
+          confidence: confidenceNumber,
+          hasAnalysisData: !!analysisResult,
+        });
+
+        // Send only the data we need to avoid payload size issues
+        const compactAnalysisData = {
+          xFactors: analysisResult?.xFactors || [],
+          keyInsights: analysisResult?.keyInsights || {},
+          keyInsightsNew: analysisResult?.keyInsightsNew || {},
+          matchSnapshot: analysisResult?.matchSnapshot || {},
+          sport: analysisResult?.sport,
+        };
+
+        const generateWinReasons = httpsCallable(functions, "generateWinReasons");
+        const result = await generateWinReasons({
+          favoredTeam,
+          opponentTeam,
+          confidence: confidenceNumber,
+          analysisData: compactAnalysisData,
+        });
+
+        const data = result.data as { success: boolean; reasons: string[] };
+
+        if (data.success && data.reasons?.length === 3) {
+          setBulletPoints(data.reasons);
+        } else {
+          // Fallback to old logic if LLM didn't return 3 reasons
+          setBulletPoints(buildFallbackReasons());
+        }
+      } catch (error) {
+        console.error("Error fetching AI reasons:", error);
+        // Fallback to old logic on error
+        setBulletPoints(buildFallbackReasons());
+      } finally {
+        setIsLoadingReasons(false);
+      }
+    };
+
+    fetchWinReasons();
+  }, []);
 
   // === ANIMATIONS ===
   useEffect(() => {
@@ -306,12 +361,25 @@ export default function SinglePredictionScreen() {
           style={styles.factorsCard}
         >
           <Text style={styles.factorsTitle}>WHY {favoredTeam.toUpperCase()} WINS</Text>
-          {bulletPoints.map((point, index) => (
-            <View key={index} style={styles.factorRow}>
-              <Feather name="zap" size={16} color={colors.primary} />
-              <Text style={styles.factorText}>{point}</Text>
+          {isLoadingReasons ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Analyzing matchup...</Text>
             </View>
-          ))}
+          ) : (
+            bulletPoints.map((point, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.factorRow,
+                  index === bulletPoints.length - 1 && styles.factorRowLast
+                ]}
+              >
+                <Feather name="zap" size={16} color={colors.primary} />
+                <Text style={styles.factorText}>{point}</Text>
+              </View>
+            ))
+          )}
         </Animated.View>
 
         {/* CTA Section */}
@@ -440,66 +508,96 @@ const styles = StyleSheet.create({
 
   // Factors Card - glass effect
   factorsCard: {
-    backgroundColor: "rgba(30, 35, 45, 0.85)",
+    backgroundColor: "rgba(30, 35, 45, 0.9)",
     borderRadius: borderRadius.xl,
     padding: spacing[5],
     borderWidth: 1,
-    borderColor: "rgba(0, 215, 215, 0.15)",
-    marginBottom: spacing[4],
+    borderColor: "rgba(0, 215, 215, 0.2)",
+    marginBottom: spacing[5],
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   factorsTitle: {
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.sizes.xs,
+    fontSize: typography.sizes.sm,
     color: colors.primary,
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     marginBottom: spacing[4],
   },
   factorRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     marginBottom: spacing[3],
-    gap: spacing[3],
+    gap: spacing[2],
+    paddingBottom: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  factorRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
   },
   factorText: {
     flex: 1,
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.base,
+    color: colors.foreground,
+    lineHeight: 21,
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingVertical: spacing[4],
+  },
+  loadingText: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.base,
     color: colors.mutedForeground,
-    lineHeight: 20,
   },
 
   // CTA - positioned above safe area
   ctaSection: {
     alignItems: "center",
     marginTop: "auto",
+    paddingTop: spacing[2],
   },
   ctaButton: {
     width: "100%",
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.full,
     overflow: "hidden",
-    ...shadows.buttonGlow,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
   },
   ctaPressed: {
-    transform: [{ scale: 0.98 }],
-    opacity: 0.9,
+    transform: [{ scale: 0.97 }],
+    shadowOpacity: 0.6,
   },
   ctaGradient: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing[2],
-    paddingVertical: spacing[4],
+    gap: spacing[3],
+    paddingVertical: spacing[5],
   },
   ctaText: {
-    fontFamily: typography.fontFamily.semibold,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.sizes.lg,
     color: colors.background,
+    letterSpacing: 0.5,
   },
   ctaSubtext: {
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.sizes.xs,
+    fontSize: typography.sizes.sm,
     color: colors.mutedForeground,
     marginTop: spacing[3],
+    textAlign: "center",
   },
 
   // Shimmer effect
