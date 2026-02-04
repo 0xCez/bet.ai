@@ -50,6 +50,9 @@ export const HeroGamesCarousel: React.FC = () => {
     return allGames.filter(game => game.sport === sportFilter);
   }, [allGames, sportFilter]);
 
+  // Debug logging
+  console.log(`[HeroGamesCarousel] Loading: ${loading}, Filter: ${sportFilter}, AllGames: ${allGames.length}, Filtered: ${games.length}, NBA games: ${allGames.filter(g => g.sport === 'nba').length}`);
+
   // Get current sport label
   const currentSportOption = SPORT_OPTIONS.find(opt => opt.id === sportFilter) || SPORT_OPTIONS[0];
 
@@ -158,7 +161,8 @@ export const HeroGamesCarousel: React.FC = () => {
   );
 
   // Loading state - show skeleton card
-  if (loading) {
+  // Show loading if explicitly loading OR if we have no data yet (prevents empty state flash)
+  if (loading || (allGames.length === 0 && !error)) {
     return (
       <View style={styles.container}>
         {renderHeader()}
