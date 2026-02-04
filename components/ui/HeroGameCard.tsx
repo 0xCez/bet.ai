@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable, Dimensions, Animated, Easing } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,67 +14,14 @@ import { CachedGame } from "./CachedGameCard";
 const ShimmerPlaceholder = createShimmerPlaceHolder(LinearGradient);
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const HORIZONTAL_PADDING = spacing[6]; // 24px on each side
+const HORIZONTAL_PADDING = spacing[6];
 export const HERO_CARD_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2;
-export const HERO_CARD_MARGIN = 0; // No margin - padding handles spacing
+export const HERO_CARD_MARGIN = 0;
 
 interface HeroGameCardProps {
   game: CachedGame;
   onPress: (game: CachedGame) => void;
 }
-
-// ============================================================================
-// HELPER COMPONENTS
-// ============================================================================
-
-const StatPill: React.FC<{
-  label: string;
-  value: string | number;
-  highlight?: boolean;
-}> = ({ label, value, highlight }) => (
-  <View style={[styles.statPill, highlight && styles.statPillHighlight]}>
-    <Text style={styles.statPillValue}>{value}</Text>
-    <Text style={styles.statPillLabel}>{label}</Text>
-  </View>
-);
-
-const ConfidenceBar: React.FC<{
-  value: number;
-  color: string;
-}> = ({ value, color }) => {
-  const animatedWidth = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(animatedWidth, {
-      toValue: value,
-      duration: 800,
-      delay: 200,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [value]);
-
-  const widthInterpolate = animatedWidth.interpolate({
-    inputRange: [0, 100],
-    outputRange: ["0%", "100%"],
-  });
-
-  return (
-    <View style={styles.confidenceBarContainer}>
-      <View style={styles.confidenceBarTrack}>
-        <Animated.View
-          style={[
-            styles.confidenceBarFill,
-            {
-              width: widthInterpolate,
-              backgroundColor: color,
-            },
-          ]}
-        />
-      </View>
-    </View>
-  );
-};
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -115,36 +62,6 @@ const getTeamLogo = (teamName: string, sport: string) => {
   return getSoccerTeamLogo(teamName);
 };
 
-// Format game start time (e.g., "Today 7:30 PM", "Sat 3:00 PM")
-const formatGameTime = (isoString?: string): string | null => {
-  if (!isoString) return null;
-
-  const gameDate = new Date(isoString);
-  const now = new Date();
-
-  // Check if today
-  const isToday = gameDate.toDateString() === now.toDateString();
-
-  // Check if tomorrow
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const isTomorrow = gameDate.toDateString() === tomorrow.toDateString();
-
-  // Format time (e.g., "7:30 PM")
-  const timeStr = gameDate.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-
-  if (isToday) return `Today ${timeStr}`;
-  if (isTomorrow) return `Tomorrow ${timeStr}`;
-
-  // Format as "Sat 3:00 PM"
-  const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
-  return `${dayStr} ${timeStr}`;
-};
-
 // Format decimal odds to American odds
 const formatOdds = (decimalOdds?: number): string => {
   if (!decimalOdds) return "-110";
@@ -160,6 +77,66 @@ const getShortTeamName = (name: string): string => {
   if (!name) return "";
   const parts = name.split(" ");
   return parts[parts.length - 1];
+};
+
+const formatGameTime = (isoString?: string): string | null => {
+  if (!isoString) return null;
+
+  const gameDate = new Date(isoString);
+  const now = new Date();
+
+  const isToday = gameDate.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = gameDate.toDateString() === tomorrow.toDateString();
+
+  const timeStr = gameDate.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (isToday) return `Today ${timeStr}`;
+  if (isTomorrow) return `Tomorrow ${timeStr}`;
+
+  const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
+  return `${dayStr} ${timeStr}`;
+};
+
+// ============================================================================
+// ANIMATED CONFIDENCE BAR
+// ============================================================================
+
+const ConfidenceBar: React.FC<{ value: number; color: string }> = ({ value, color }) => {
+  const animatedWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedWidth, {
+      toValue: value,
+      duration: 800,
+      delay: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [value]);
+
+  const widthInterpolate = animatedWidth.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
+
+  return (
+    <View style={styles.confidenceBarContainer}>
+      <View style={styles.confidenceBarTrack}>
+        <Animated.View
+          style={[
+            styles.confidenceBarFill,
+            { width: widthInterpolate, backgroundColor: color },
+          ]}
+        />
+      </View>
+    </View>
+  );
 };
 
 // ============================================================================
@@ -203,6 +180,10 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
     ? bestLines?.consensusAwayMLFractional
     : (awayML ? formatOdds(awayML) : null);
 
+  // ML Player Props (NBA only)
+  const mlProps = game.analysis?.mlPlayerProps?.topProps || [];
+  const hasProps = mlProps.length > 0;
+
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onPress(game);
@@ -212,6 +193,7 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
   const team2Logo = getTeamLogo(game.team2, game.sport);
   const team1Short = getShortTeamName(game.team1);
   const team2Short = getShortTeamName(game.team2);
+
   const gameTime = formatGameTime(game.gameStartTime);
 
   return (
@@ -290,45 +272,66 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
             </View>
             <View style={styles.aiPickContent}>
               <Text style={styles.aiPickLabel}>AI RECOMMENDATION</Text>
-              <Text style={styles.aiPickText} numberOfLines={1}>{aiPick}</Text>
+              <View style={styles.aiPickRow}>
+                <View style={styles.aiPickTeamContainer}>
+                  <Text style={styles.aiPickTeam}>{aiPick}</Text>
+                  {/* Best Odds */}
+                  {(homeMLDisplay || awayMLDisplay) && (
+                    <Text style={styles.aiPickOdds}>
+                      Best ML: {homeMLDisplay || awayMLDisplay}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.aiPickConfidenceBadge}>
+                  <Text style={[styles.aiPickConfidenceText, { color: confidenceColor }]}>
+                    {confidence}%
+                  </Text>
+                </View>
+              </View>
             </View>
           </LinearGradient>
         )}
 
-        {/* Stats Pills Row */}
-        <View style={styles.statsPillsRow}>
-          {!isSoccer && spread != null && (
-            <StatPill label="Spread" value={spread > 0 ? `+${spread}` : spread} highlight />
-          )}
-          {!isSoccer && total != null && (
-            <StatPill label="O/U" value={total} />
-          )}
-          {isSoccer && (
-            <StatPill label="Match" value={game.league || "Soccer"} />
-          )}
-          {edge != null && (
-            <StatPill label="Edge" value={`${edge}%`} highlight={edge >= 5} />
-          )}
-        </View>
+        {/* ML Player Props Banner - NBA Only */}
+        {hasProps && (
+          <View style={styles.propsContainer}>
+            <View style={styles.propsHeader}>
+              <View style={styles.propsIconWrapper}>
+                <Ionicons name="trending-up" size={16} color={colors.success} />
+              </View>
+              <Text style={styles.propsLabel}>TOP PLAYER PROPS</Text>
+            </View>
 
-        {/* Key Edge Insight */}
-        {keyEdge && (
-          <View style={styles.keyEdgeRow}>
-            <Ionicons name="trending-up" size={14} color={colors.success} />
-            <Text style={styles.keyEdgeText} numberOfLines={1}>{keyEdge}</Text>
+            <View style={styles.propsList}>
+              {mlProps.slice(0, 3).map((prop, index) => {
+                // Show the PROBABILITY (not confidence)
+                const probability = prop.prediction === 'over'
+                  ? prop.probabilityOver || prop.probability_over
+                  : prop.probabilityUnder || prop.probability_under;
+
+                const probabilityPercent = typeof probability === 'number'
+                  ? `${(probability * 100).toFixed(0)}%`
+                  : (prop.probabilityOverPercent || prop.probabilityUnderPercent || '0%');
+
+                return (
+                  <View key={index} style={styles.propCard}>
+                    <View style={styles.propCardLeft}>
+                      <Text style={styles.propPlayerName} numberOfLines={1}>
+                        {prop.playerName}
+                      </Text>
+                      <Text style={styles.propDetails}>
+                        {prop.statType.replace('_', ' ').toUpperCase()} {prop.prediction === 'over' ? '▲' : '▼'} {prop.line}
+                      </Text>
+                    </View>
+                    <View style={styles.propProbabilityPill}>
+                      <Text style={styles.propProbability}>{probabilityPercent}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
           </View>
         )}
-
-        {/* Confidence Progress Section */}
-        <View style={styles.confidenceSection}>
-          <View style={styles.confidenceHeader}>
-            <Text style={styles.confidenceLabel}>AI Confidence</Text>
-            <Text style={[styles.confidenceValue, { color: confidenceColor }]}>
-              {confidence}%
-            </Text>
-          </View>
-          <ConfidenceBar value={confidence} color={confidenceColor} />
-        </View>
 
         {/* CTA Footer */}
         <Pressable
@@ -343,6 +346,79 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
             <Ionicons name="arrow-forward" size={16} color={colors.background} />
           </View>
         </Pressable>
+      </View>
+    </View>
+  );
+};
+
+// ============================================================================
+// SKELETON LOADING COMPONENT
+// ============================================================================
+
+export const HeroGameCardSkeleton: React.FC = () => {
+  const shimmerColorsArray = shimmerColors as unknown as string[];
+
+  return (
+    <View style={styles.card}>
+      <BlurView
+        intensity={glass.card.blurIntensity}
+        tint="dark"
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.content}>
+        {/* Header Skeleton */}
+        <View style={styles.header}>
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={{ width: 80, height: 24, borderRadius: borderRadius.full }}
+          />
+          <ShimmerPlaceholder
+            shimmerColors={shimmerColorsArray}
+            style={{ width: 100, height: 16, borderRadius: borderRadius.md }}
+          />
+        </View>
+
+        {/* Teams Skeleton */}
+        <View style={styles.teamsSection}>
+          <View style={styles.teamColumn}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={{ width: 64, height: 64, borderRadius: borderRadius.lg }}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={{ width: 80, height: 16, borderRadius: borderRadius.md }}
+            />
+          </View>
+          <View style={styles.vsDivider}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={{ width: 32, height: 32, borderRadius: 16 }}
+            />
+          </View>
+          <View style={styles.teamColumn}>
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={{ width: 64, height: 64, borderRadius: borderRadius.lg }}
+            />
+            <ShimmerPlaceholder
+              shimmerColors={shimmerColorsArray}
+              style={{ width: 80, height: 16, borderRadius: borderRadius.md }}
+            />
+          </View>
+        </View>
+
+        {/* Prediction Skeleton */}
+        <ShimmerPlaceholder
+          shimmerColors={shimmerColorsArray}
+          style={{ width: '100%', height: 120, borderRadius: borderRadius.lg, marginBottom: spacing[4] }}
+        />
+
+        {/* CTA Skeleton */}
+        <ShimmerPlaceholder
+          shimmerColors={shimmerColorsArray}
+          style={{ width: '100%', height: 48, borderRadius: borderRadius.lg }}
+        />
       </View>
     </View>
   );
@@ -369,31 +445,16 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   content: {
-    paddingTop: spacing[4],
+    paddingTop: spacing[3],
     paddingHorizontal: spacing[4],
-    paddingBottom: spacing[5],
-    gap: spacing[3],
+    paddingBottom: spacing[4],
+    gap: spacing[2] + 2,
   },
   // Header
   header: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: spacing[2],
-  },
-  gameTimeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-    borderRadius: borderRadius.full,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-  },
-  gameTimeText: {
-    color: colors.mutedForeground,
-    fontSize: typography.sizes.xs,
-    fontFamily: typography.fontFamily.medium,
   },
   sportBadge: {
     flexDirection: "row",
@@ -410,6 +471,16 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     letterSpacing: 1,
   },
+  gameTimeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  gameTimeText: {
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+  },
   // Teams Section
   teamsSection: {
     flexDirection: "row",
@@ -419,7 +490,7 @@ const styles = StyleSheet.create({
   teamColumn: {
     flex: 1,
     alignItems: "center",
-    gap: spacing[2],
+    gap: spacing[1],
   },
   logoWrapper: {
     width: 72,
@@ -472,108 +543,124 @@ const styles = StyleSheet.create({
   aiPickBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[3],
+    gap: spacing[2],
     padding: spacing[3],
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.rgba.primary30,
   },
   aiPickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.rgba.primary15,
     alignItems: "center",
     justifyContent: "center",
   },
   aiPickContent: {
     flex: 1,
+    gap: spacing[1],
   },
   aiPickLabel: {
     color: colors.primary,
     fontSize: 10,
     fontFamily: typography.fontFamily.bold,
     letterSpacing: 1,
+  },
+  aiPickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[2],
+  },
+  aiPickTeamContainer: {
+    flex: 1,
+  },
+  aiPickTeam: {
+    color: colors.foreground,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
     marginBottom: 2,
   },
-  aiPickText: {
-    color: colors.foreground,
-    fontSize: typography.sizes.sm,
+  aiPickOdds: {
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.medium,
   },
-  // Stats Pills Row
-  statsPillsRow: {
-    flexDirection: "row",
-    gap: spacing[2],
-  },
-  statPill: {
-    flex: 1,
-    backgroundColor: colors.secondary,
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[2],
-    alignItems: "center",
-  },
-  statPillHighlight: {
+  aiPickConfidenceBadge: {
     backgroundColor: colors.rgba.primary15,
-    borderWidth: 1,
-    borderColor: colors.rgba.primary30,
+    paddingHorizontal: spacing[2] + 4,
+    paddingVertical: spacing[1] + 2,
+    borderRadius: borderRadius.full,
   },
-  statPillValue: {
-    fontSize: typography.sizes.lg,
+  aiPickConfidenceText: {
+    fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
   },
-  statPillLabel: {
-    fontSize: 10,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.mutedForeground,
-    marginTop: 2,
+  // Props Container
+  propsContainer: {
+    backgroundColor: "rgba(76, 175, 80, 0.08)",
+    borderRadius: borderRadius.lg,
+    padding: spacing[3],
+    borderWidth: 1,
+    borderColor: "rgba(76, 175, 80, 0.2)",
+    gap: spacing[2],
   },
-  // Key Edge
-  keyEdgeRow: {
+  propsHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
-    paddingHorizontal: spacing[1],
   },
-  keyEdgeText: {
-    flex: 1,
+  propsIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.rgba.success15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  propsLabel: {
     color: colors.success,
+    fontSize: 10,
+    fontFamily: typography.fontFamily.bold,
+    letterSpacing: 1,
+  },
+  propsList: {
+    gap: spacing[1] + 2,
+  },
+  propCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderRadius: borderRadius.md,
+    padding: spacing[2],
+    gap: spacing[2],
+  },
+  propCardLeft: {
+    flex: 1,
+  },
+  propPlayerName: {
+    color: colors.foreground,
     fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
+    marginBottom: 2,
+  },
+  propDetails: {
+    color: colors.mutedForeground,
+    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.medium,
   },
-  // Confidence Section
-  confidenceSection: {
-    gap: spacing[2],
+  propProbabilityPill: {
+    backgroundColor: "rgba(76, 175, 80, 0.25)",
+    paddingHorizontal: spacing[2] + 4,
+    paddingVertical: spacing[1] + 2,
+    borderRadius: borderRadius.full,
   },
-  confidenceHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  confidenceLabel: {
-    color: colors.mutedForeground,
+  propProbability: {
     fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily.regular,
-  },
-  confidenceValue: {
-    fontSize: typography.sizes.base,
     fontFamily: typography.fontFamily.bold,
-  },
-  confidenceBarContainer: {
-    height: 6,
-  },
-  confidenceBarTrack: {
-    flex: 1,
-    height: 6,
-    backgroundColor: colors.secondary,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  confidenceBarFill: {
-    height: "100%",
-    borderRadius: 3,
+    color: colors.success,
   },
   // CTA Footer
   ctaFooter: {
@@ -601,236 +688,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.2)",
     alignItems: "center",
     justifyContent: "center",
-  },
-});
-
-// ============================================================================
-// SKELETON COMPONENT
-// ============================================================================
-
-/**
- * Skeleton loading state for HeroGameCard
- * Matches the exact structure of the card for a seamless loading experience
- */
-export const HeroGameCardSkeleton: React.FC = () => {
-  // Cast shimmerColors to mutable array for ShimmerPlaceholder
-  const shimmerColorsArray = shimmerColors as unknown as string[];
-
-  return (
-    <View style={styles.card}>
-      {/* Glass Background */}
-      <BlurView
-        intensity={glass.card.blurIntensity}
-        tint="dark"
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Content Container */}
-      <View style={styles.content}>
-        {/* Header Skeleton: Sport Badge + Game Time */}
-        <View style={styles.header}>
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.sportBadge}
-          />
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.gameTime}
-          />
-        </View>
-
-        {/* Teams Section Skeleton */}
-        <View style={styles.teamsSection}>
-          {/* Team 1 */}
-          <View style={styles.teamColumn}>
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.teamLogo}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.teamName}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.oddsChip}
-            />
-          </View>
-
-          {/* VS Divider */}
-          <View style={styles.vsDivider}>
-            <View style={styles.vsCircle}>
-              <Text style={styles.vsText}>VS</Text>
-            </View>
-          </View>
-
-          {/* Team 2 */}
-          <View style={styles.teamColumn}>
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.teamLogo}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.teamName}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.oddsChip}
-            />
-          </View>
-        </View>
-
-        {/* AI Pick Banner Skeleton */}
-        <View style={skeletonStyles.aiPickBanner}>
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.aiPickIcon}
-          />
-          <View style={skeletonStyles.aiPickContent}>
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.aiPickLabel}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.aiPickText}
-            />
-          </View>
-        </View>
-
-        {/* Stats Pills Row Skeleton */}
-        <View style={styles.statsPillsRow}>
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.statPill}
-          />
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.statPill}
-          />
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.statPill}
-          />
-        </View>
-
-        {/* Key Edge Skeleton */}
-        <ShimmerPlaceholder
-          shimmerColors={shimmerColorsArray}
-          style={skeletonStyles.keyEdge}
-        />
-
-        {/* Confidence Section Skeleton */}
-        <View style={styles.confidenceSection}>
-          <View style={styles.confidenceHeader}>
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.confidenceLabel}
-            />
-            <ShimmerPlaceholder
-              shimmerColors={shimmerColorsArray}
-              style={skeletonStyles.confidenceValue}
-            />
-          </View>
-          <ShimmerPlaceholder
-            shimmerColors={shimmerColorsArray}
-            style={skeletonStyles.confidenceBar}
-          />
-        </View>
-
-        {/* CTA Footer Skeleton */}
-        <ShimmerPlaceholder
-          shimmerColors={shimmerColorsArray}
-          style={skeletonStyles.ctaButton}
-        />
-      </View>
-    </View>
-  );
-};
-
-const skeletonStyles = StyleSheet.create({
-  sportBadge: {
-    width: 70,
-    height: 24,
-    borderRadius: borderRadius.full,
-  },
-  gameTime: {
-    width: 100,
-    height: 24,
-    borderRadius: borderRadius.full,
-  },
-  teamLogo: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  teamName: {
-    width: 80,
-    height: 18,
-    borderRadius: borderRadius.sm,
-  },
-  oddsChip: {
-    width: 50,
-    height: 26,
-    borderRadius: borderRadius.full,
-  },
-  aiPickBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[3],
-    padding: spacing[3],
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.rgba.primary10,
-  },
-  aiPickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  aiPickContent: {
-    flex: 1,
-    gap: spacing[1],
-  },
-  aiPickLabel: {
-    width: 100,
-    height: 10,
-    borderRadius: borderRadius.sm,
-  },
-  aiPickText: {
-    width: 150,
-    height: 14,
-    borderRadius: borderRadius.sm,
-  },
-  statPill: {
-    flex: 1,
-    height: 52,
-    borderRadius: borderRadius.md,
-  },
-  keyEdge: {
-    width: "80%",
-    height: 14,
-    borderRadius: borderRadius.sm,
-  },
-  confidenceLabel: {
-    width: 90,
-    height: 14,
-    borderRadius: borderRadius.sm,
-  },
-  confidenceValue: {
-    width: 40,
-    height: 16,
-    borderRadius: borderRadius.sm,
-  },
-  confidenceBar: {
-    width: "100%",
-    height: 6,
-    borderRadius: 3,
-  },
-  ctaButton: {
-    width: "100%",
-    height: 38,
-    borderRadius: borderRadius.lg,
   },
 });
 

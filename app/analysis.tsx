@@ -160,6 +160,13 @@ interface AnalysisResult {
   // Lightweight data for chatbot context (~4k total)
   marketIntelligence?: any;  // Small or null
   teamStats?: any;  // ~2k chars - reasonable for chatbot
+  // ML Player Props for NBA games
+  mlPlayerProps?: {
+    topProps: any[];
+    totalPropsAvailable: number;
+    highConfidenceCount: number;
+    gameTime: string | null;
+  };
 }
 
 // Type for the data passed from history screen (matches Firestore doc structure)
@@ -1507,6 +1514,7 @@ export default function AnalysisScreen() {
               isDemo: isDemo,
               fromCache: params.fromCache === "true",
               cachedGameId: params.cachedGameId || undefined,
+              mlProps: analysisResult?.mlPlayerProps?.topProps || [],
           }}
           isSubscribed={isSubscribed}
         />

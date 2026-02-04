@@ -43,19 +43,22 @@ interface FloatingBottomNavProps {
     isDemo?: boolean;
     fromCache?: boolean; // True when viewing pre-cached games from carousel
     cachedGameId?: string; // The Firestore doc ID for pre-cached games
+    mlProps?: any[]; // ML Player Props data
   };
   isSubscribed?: boolean;
 }
 
 // Tab configuration with icons
-const TAB_CONFIG = [
+const BASE_TAB_CONFIG = [
   { key: "insight", label: "Insight", icon: "bulb-outline" as const, activeIcon: "bulb" as const },
   { key: "market", label: "Market", icon: "trending-up-outline" as const, activeIcon: "trending-up" as const },
   { key: "teams", label: "Teams", icon: "shield-outline" as const, activeIcon: "shield" as const },
   { key: "players", label: "Players", icon: "person-outline" as const, activeIcon: "person" as const },
-  // { key: "props", label: "Props", icon: "stats-chart-outline" as const, activeIcon: "stats-chart" as const },
   { key: "expert", label: "Expert", icon: "chatbubble-ellipses-outline" as const, activeIcon: "chatbubble-ellipses" as const },
 ];
+
+// Props tab for NBA games only
+const PROPS_TAB = { key: "props", label: "Props", icon: "stats-chart-outline" as const, activeIcon: "stats-chart" as const };
 
 // Individual nav item component
 const NavItem: React.FC<{
@@ -129,6 +132,22 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   // Initialize from persisted state so button stays visible across tab navigations
   const [showNextButton, setShowNextButton] = React.useState(demoNextButtonShown);
+
+  // Build tab config dynamically based on sport
+  const TAB_CONFIG = React.useMemo(() => {
+    const isNBA = (analysisData?.sport || "").toLowerCase() === "nba";
+
+    if (isNBA) {
+      // Insert Props tab before Expert tab for NBA games
+      return [
+        ...BASE_TAB_CONFIG.slice(0, 4), // insight, market, teams, players
+        PROPS_TAB,
+        BASE_TAB_CONFIG[4], // expert
+      ];
+    }
+
+    return BASE_TAB_CONFIG;
+  }, [analysisData?.sport]);
 
   // Demo mode animations
   const glowOpacity = useSharedValue(0.3);
@@ -276,7 +295,13 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           router.push({ pathname: playerStatsPath, params: baseParams });
           break;
         case "props":
-          router.push({ pathname: "/player-props" as any, params: baseParams });
+          router.push({
+            pathname: "/player-props" as any,
+            params: {
+              ...baseParams,
+              mlProps: analysisData?.mlProps ? JSON.stringify(analysisData.mlProps) : undefined,
+            }
+          });
           break;
         case "expert":
           router.push({ pathname: "/chat", params: baseParams });
