@@ -7192,3 +7192,7 @@ exports.updateFrenchDemoAnalysis = functions.https.onRequest(async (req, res) =>
 // Re-export deleteUserAccount from separate file
 const { deleteUserAccount } = require('./deleteUserAccount');
 exports.deleteUserAccount = deleteUserAccount;
+
+// Re-export generateWinReasons from separate file
+const { generateWinReasons } = require('./generateWinReasons');
+exports.generateWinReasons = generateWinReasons;

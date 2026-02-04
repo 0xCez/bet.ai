@@ -16,6 +16,22 @@ export default function StackLayout() {
       <Stack.Screen name="signup" />
       <Stack.Screen name="tutorial" />
       <Stack.Screen
+        name="premium-loader"
+        options={{
+          gestureEnabled: false,
+          animation: "fade",
+          animationDuration: 300,
+        }}
+      />
+      <Stack.Screen
+        name="single-prediction"
+        options={{
+          gestureEnabled: false,
+          animation: "fade",
+          animationDuration: 400,
+        }}
+      />
+      <Stack.Screen
         name="analysis"
         options={{
           freezeOnBlur: true,

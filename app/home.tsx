@@ -235,8 +235,9 @@ export default function HomeScreen() {
           userId: auth.currentUser?.uid || null,
           timestamp: new Date().toISOString(),
         });
-        router.push({
-          pathname: "/analysis",
+        // Replace to avoid flash back to home
+        router.replace({
+          pathname: "/premium-loader",
           params: { imageUri: compressedUri, from: "scan" },
         });
       }
@@ -272,8 +273,9 @@ export default function HomeScreen() {
           userId: auth.currentUser?.uid || null,
           timestamp: new Date().toISOString(),
         });
-        router.push({
-          pathname: "/analysis",
+        // Replace to avoid flash back to home
+        router.replace({
+          pathname: "/premium-loader",
           params: { imageUri: compressedUri, from: "scan" },
         });
       }
@@ -541,6 +543,6 @@ const styles = StyleSheet.create({
   },
   pageIndicatorContainer: {
     alignItems: "center",
-    paddingVertical: spacing[3],
+    paddingVertical: spacing[1],
   },
 });
