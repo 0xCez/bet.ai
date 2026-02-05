@@ -313,6 +313,15 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
                   ? `${(probability * 100).toFixed(0)}%`
                   : (prop.probabilityOverPercent || prop.probabilityUnderPercent || '0%');
 
+                // Determine confidence tier for color coding
+                const confidenceTier = prop.confidenceTier || prop.bettingValue || 'medium';
+                const pillColor = confidenceTier === 'high'
+                  ? "rgba(76, 175, 80, 0.25)" // Green for high
+                  : "rgba(255, 184, 0, 0.25)"; // Orange for medium
+                const textColor = confidenceTier === 'high'
+                  ? colors.success // Green text
+                  : "#FFB800"; // Orange text
+
                 return (
                   <View key={index} style={styles.propCard}>
                     <View style={styles.propCardLeft}>
@@ -323,8 +332,8 @@ export const HeroGameCard: React.FC<HeroGameCardProps> = ({ game, onPress }) => 
                         {prop.statType.replace('_', ' ').toUpperCase()} {prop.prediction === 'over' ? '▲' : '▼'} {prop.line}
                       </Text>
                     </View>
-                    <View style={styles.propProbabilityPill}>
-                      <Text style={styles.propProbability}>{probabilityPercent}</Text>
+                    <View style={[styles.propProbabilityPill, { backgroundColor: pillColor }]}>
+                      <Text style={[styles.propProbability, { color: textColor }]}>{probabilityPercent}</Text>
                     </View>
                   </View>
                 );
@@ -652,7 +661,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
   },
   propProbabilityPill: {
-    backgroundColor: "rgba(76, 175, 80, 0.25)",
+    // Background color set dynamically based on confidence tier
     paddingHorizontal: spacing[2] + 4,
     paddingVertical: spacing[1] + 2,
     borderRadius: borderRadius.full,
@@ -660,7 +669,7 @@ const styles = StyleSheet.create({
   propProbability: {
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
-    color: colors.success,
+    // Color set dynamically based on confidence tier
   },
   // CTA Footer
   ctaFooter: {

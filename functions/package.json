@@ -20,6 +20,7 @@
     "dotenv": "^16.4.7",
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.3.2",
+    "google-auth-library": "^9.0.0",
     "openai": "^4.89.1",
     "string-similarity": "^4.0.4"
   },

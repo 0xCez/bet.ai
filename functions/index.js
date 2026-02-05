@@ -9,9 +9,14 @@ const path = require("path");
 require('dotenv').config();
 
 // Re-export preCacheTopGames functions from separate file
-const { preCacheTopGames, preCacheTopGamesScheduled } = require('./preCacheTopGames');
+const { preCacheTopGames, preCacheTopGamesScheduled, refreshMLPropsDaily } = require('./preCacheTopGames');
 exports.preCacheTopGames = preCacheTopGames;
 exports.preCacheTopGamesScheduled = preCacheTopGamesScheduled;
+exports.refreshMLPropsDaily = refreshMLPropsDaily;
+
+// Re-export ML Player Props function
+const { getMLPlayerPropsForGame } = require('./mlPlayerProps');
+exports.getMLPlayerPropsForGame = getMLPlayerPropsForGame;
 
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
@@ -250,6 +255,52 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
             // NEW: Add Player Statistics data
             getPlayerStatsForSport(sport, team1Id, team2Id)
           ]);
+
+          /**
+           * Internal helper to fetch ML Player Props
+           * Calls the getMLPlayerPropsForGame endpoint internally
+           */
+          async function getMLPlayerPropsInternal(team1, team2, gameDate) {
+            const axios = require('axios');
+            const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
+              ? 'http://localhost:5001/betai-f9176/us-central1'
+              : 'https://us-central1-betai-f9176.cloudfunctions.net';
+
+            console.log(`[ML Props] 🎯 Fetching props for ${team1} vs ${team2} (gameDate: ${gameDate})`);
+
+            const response = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+              team1,
+              team2,
+              sport: 'nba',
+              gameDate
+            }, {
+              timeout: 30000
+            });
+
+            console.log(`[ML Props] ✅ Received ${response.data.topProps?.length || 0} high-confidence props`);
+
+            return response.data;
+          }
+
+          // Fetch ML Player Props for NBA games (after we have gameData with game time)
+          let mlPlayerProps = null;
+          if (sport === 'nba' && gameData?.upcomingGame?.date?.start) {
+            try {
+              console.log(`[ML Props] 🎯 Starting ML Props fetch for NBA game: ${team1} vs ${team2}`);
+              mlPlayerProps = await getMLPlayerPropsInternal(team1, team2, gameData.upcomingGame.date.start);
+              console.log(`[ML Props] ✅ ML Props fetch completed successfully`);
+            } catch (error) {
+              console.error('[ML Props] ❌ Failed to fetch ML props:', error.message);
+              console.error('[ML Props] Error stack:', error.stack);
+              // Don't block main flow if ML props fail
+            }
+          } else {
+            if (sport === 'nba') {
+              console.log('[ML Props] ⚠️ Skipping - no game date available');
+            } else {
+              console.log(`[ML Props] ⚠️ Skipping - sport is ${sport}, not NBA`);
+            }
+          }
 
           let weatherData = null;
           if (gameData.upcomingGame !== null) {
@@ -528,6 +579,17 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
 
             // Add lightweight data for chatbot context (~4k chars total)
             jsonResponse.marketIntelligence = marketIntelligence;  // ~2 chars (null) or small
+
+            // Add ML Player Props for NBA games
+            if (mlPlayerProps && mlPlayerProps.success) {
+              jsonResponse.mlPlayerProps = {
+                topProps: mlPlayerProps.topProps || [],
+                totalPropsAvailable: mlPlayerProps.totalPropsAvailable || 0,
+                highConfidenceCount: mlPlayerProps.highConfidenceCount || 0,
+                gameTime: mlPlayerProps.gameTime || null
+              };
+              console.log(`[ML Props] Added ${mlPlayerProps.topProps?.length || 0} ML props to response`);
+            }
 
             // NEW: Calculate Key Insights V2 from existing data (LIGHTWEIGHT - only 4 metrics)
             // First enhance teamStats with game data to add pointsPerGame fields
@@ -6639,6 +6701,44 @@ async function getPlayerStatsForSport(sport, team1Id, team2Id) {
   }
 }
 
+// ====================================================================
+// ML PLAYER PROPS INTEGRATION FOR MAIN WORKFLOW
+// ====================================================================
+
+/**
+ * Internal helper to call ML Player Props function
+ * This avoids circular dependency issues by calling the cloud function internally
+ */
+async function getMLPlayerPropsInternal(team1, team2, gameDate) {
+  try {
+    console.log(`[ML Props Internal] Fetching ML props for ${team1} vs ${team2}`);
+
+    const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
+      ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
+      : 'https://us-central1-betai-f9176.cloudfunctions.net';
+
+    const response = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+      team1,
+      team2,
+      sport: 'nba',
+      gameDate
+    }, {
+      timeout: 30000 // 30 second timeout
+    });
+
+    if (response.data.success) {
+      console.log(`[ML Props Internal] Successfully fetched ${response.data.topProps?.length || 0} ML props`);
+      return response.data;
+    } else {
+      console.log('[ML Props Internal] No ML props available:', response.data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('[ML Props Internal] Error fetching ML props:', error.message);
+    return null; // Graceful failure - don't block main flow
+  }
+}
+
 async function getSingleTeamPlayerStats(sport, teamId) {
   try {
     const sportLower = sport.toLowerCase();
@@ -7196,3 +7296,9 @@ exports.deleteUserAccount = deleteUserAccount;
 // Re-export generateWinReasons from separate file
 const { generateWinReasons } = require('./generateWinReasons');
 exports.generateWinReasons = generateWinReasons;
+
+// Re-export NBA Props ML functions from separate file
+const { getNBAPropsWithML, getPlayerGameLogs, testVertexAI } = require('./nbaPropsML');
+exports.getNBAPropsWithML = getNBAPropsWithML;
+exports.getPlayerGameLogs = getPlayerGameLogs;
+exports.testVertexAI = testVertexAI;

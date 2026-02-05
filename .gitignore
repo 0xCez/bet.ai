@@ -56,3 +56,6 @@ app/firebaseConfig.ts
 .env.local
 .env.production
 bet.ai/
+service-account-key.json
+functions/.env.prod
+functions/.env.yaml

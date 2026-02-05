@@ -59,10 +59,10 @@ export default function PlayerPropsScreen() {
         const preloadedProps = JSON.parse(params.mlProps);
         setMlProps(preloadedProps);
         setLoading(false);
-        console.log("[Props Page] Using pre-loaded ML props");
+        console.log("[Props Page] ✅ Using pre-loaded ML props");
         return;
       } catch (e) {
-        console.error("[Props Page] Failed to parse pre-loaded props:", e);
+        console.error("[Props Page] ❌ Failed to parse pre-loaded props:", e);
       }
     }
 
@@ -124,22 +124,23 @@ export default function PlayerPropsScreen() {
       ? `${(probability * 100).toFixed(1)}%`
       : prop.confidencePercent || "N/A";
 
-    // Determine confidence tier based on confidence value
-    const confidenceValue = typeof prop.confidence === 'number'
-      ? prop.confidence
-      : parseFloat(prop.confidencePercent?.replace('%', '') || '0') / 100;
+    // Use confidence tier from backend or calculate from confidence value
+    const bettingValue = prop.confidenceTier || (
+      typeof prop.confidence === 'number'
+        ? (prop.confidence > 0.15 ? 'high' : prop.confidence >= 0.10 ? 'medium' : 'low')
+        : parseFloat(prop.confidencePercent?.replace('%', '') || '0') / 100 > 0.15
+        ? 'high'
+        : parseFloat(prop.confidencePercent?.replace('%', '') || '0') / 100 >= 0.10
+        ? 'medium'
+        : 'low'
+    );
 
-    const bettingValue = confidenceValue > 0.15
-      ? 'high'
-      : confidenceValue >= 0.10
-      ? 'medium'
-      : 'low';
-
+    // Color-code by tier: Green (high), Orange (medium)
     const confidenceColor = bettingValue === 'high'
-      ? colors.success
+      ? colors.success // Green for high confidence
       : bettingValue === 'medium'
-      ? '#FFB800'
-      : colors.mutedForeground;
+      ? '#FFB800' // Orange for medium confidence
+      : colors.mutedForeground; // Gray for low (shouldn't appear)
 
     return (
       <Animated.View

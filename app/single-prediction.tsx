@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Pressable,
   StatusBar,
+  ScrollView,
   Animated as RNAnimated,
   Easing as RNEasing,
   ActivityIndicator,
@@ -282,7 +283,11 @@ export default function SinglePredictionScreen() {
       <FloatingParticles verticalPosition={0.38} count={12} spread={180} />
       <GradientOrb verticalPosition={0.38} size={380} opacity={0.55} />
 
-      <View style={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16, paddingBottom: 120 }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Hero Section */}
         <View style={styles.heroSection}>
           {/* Small header */}
@@ -382,40 +387,96 @@ export default function SinglePredictionScreen() {
           )}
         </Animated.View>
 
-        {/* CTA Section */}
-        <Animated.View
-          entering={FadeInUp.duration(500).delay(400)}
-          style={styles.ctaSection}
-        >
-          <Pressable
-            style={({ pressed }) => [
-              styles.ctaButton,
-              pressed && styles.ctaPressed,
-            ]}
-            onPress={handleFullAnalysis}
+        {/* ML Player Props Card - Below Why They Win */}
+        {analysisResult?.mlPlayerProps?.topProps && analysisResult.mlPlayerProps.topProps.length > 0 && (
+          <Animated.View
+            entering={FadeInUp.duration(500).delay(450)}
+            style={styles.mlPropsCard}
           >
-            <LinearGradient
-              colors={[colors.primary, "#00B8B8"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.ctaGradient}
-            >
-              <Text style={styles.ctaText}>See Full Analysis</Text>
-              <Feather name="arrow-right" size={20} color={colors.background} />
+            <View style={styles.mlPropsHeader}>
+              <Feather name="trending-up" size={16} color={colors.success} />
+              <Text style={styles.mlPropsTitle}>ML PLAYER PROPS</Text>
+            </View>
+            <Text style={styles.mlPropsSubtitle}>
+              {analysisResult.mlPlayerProps.topProps.length} AI-Powered Predictions
+            </Text>
 
-              {/* Shimmer overlay */}
-              <RNAnimated.View
-                style={[
-                  styles.shimmer,
-                  { transform: [{ translateX: shimmerTranslate }] },
-                ]}
-              />
-            </LinearGradient>
-          </Pressable>
-          <Text style={styles.ctaSubtext}>
-            Deep dive into stats, matchups & betting edges
-          </Text>
-        </Animated.View>
+            <View style={styles.propsList}>
+              {analysisResult.mlPlayerProps.topProps.map((prop, index) => {
+                // Show the PROBABILITY (not confidence)
+                const probability = prop.prediction === 'over'
+                  ? prop.probabilityOver || prop.probability_over
+                  : prop.probabilityUnder || prop.probability_under;
+
+                const probabilityPercent = typeof probability === 'number'
+                  ? `${(probability * 100).toFixed(0)}%`
+                  : (prop.probabilityOverPercent || prop.probabilityUnderPercent || '0%');
+
+                return (
+                  <View key={index} style={styles.propItem}>
+                    <View style={styles.propItemHeader}>
+                      <View style={styles.propPlayerInfo}>
+                        <Text style={styles.propPlayerName}>{prop.playerName}</Text>
+                        <Text style={styles.propTeamName}>{prop.team}</Text>
+                      </View>
+                      <View style={[styles.propProbabilityBadge, { backgroundColor: parseInt(probabilityPercent) >= 65 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(0, 215, 215, 0.2)' }]}>
+                        <Text style={[styles.propProbabilityText, { color: parseInt(probabilityPercent) >= 65 ? colors.success : colors.primary }]}>
+                          {probabilityPercent}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.propPrediction}>
+                      <View style={styles.propStatInfo}>
+                        <Text style={styles.propStatType}>
+                          {prop.statType.replace('_', ' ').toUpperCase()}
+                        </Text>
+                        <View style={styles.propLineWrapper}>
+                          <Feather
+                            name={prop.prediction === 'over' ? 'trending-up' : 'trending-down'}
+                            size={14}
+                            color={prop.prediction === 'over' ? colors.success : colors.warning}
+                          />
+                          <Text style={styles.propLineText}>
+                            {prop.prediction === 'over' ? 'OVER' : 'UNDER'} {prop.line}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </Animated.View>
+        )}
+      </ScrollView>
+
+      {/* Fixed CTA at Bottom */}
+      <View style={[styles.fixedCTA, { paddingBottom: insets.bottom + 16 }]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.ctaButton,
+            pressed && styles.ctaPressed,
+          ]}
+          onPress={handleFullAnalysis}
+        >
+          <LinearGradient
+            colors={[colors.primary, "#00B8B8"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.ctaGradient}
+          >
+            <Text style={styles.ctaText}>See Full Analysis</Text>
+            <Feather name="arrow-right" size={20} color={colors.background} />
+
+            {/* Shimmer overlay */}
+            <RNAnimated.View
+              style={[
+                styles.shimmer,
+                { transform: [{ translateX: shimmerTranslate }] },
+              ]}
+            />
+          </LinearGradient>
+        </Pressable>
       </View>
     </View>
   );
@@ -426,18 +487,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: spacing[5],
-    zIndex: 2,
   },
 
   // Hero Section
   heroSection: {
     alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    paddingBottom: spacing[2],
+    paddingTop: spacing[10],
+    paddingBottom: spacing[8],
   },
   headerLabel: {
     fontFamily: typography.fontFamily.medium,
@@ -559,11 +620,14 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
 
-  // CTA - positioned above safe area
-  ctaSection: {
-    alignItems: "center",
-    marginTop: "auto",
-    paddingTop: spacing[2],
+  // Fixed CTA at bottom
+  fixedCTA: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[4],
   },
   ctaButton: {
     width: "100%",
@@ -621,5 +685,97 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.sizes.xs,
     color: colors.mutedForeground,
+  },
+
+  // ML Player Props Card
+  mlPropsCard: {
+    backgroundColor: "rgba(25, 28, 35, 0.6)",
+    borderRadius: borderRadius.xl,
+    padding: spacing[4],
+    borderWidth: 1,
+    borderColor: "rgba(76, 175, 80, 0.15)",
+    marginTop: spacing[6],
+  },
+  mlPropsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    marginBottom: spacing[1],
+  },
+  mlPropsTitle: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.xs,
+    color: colors.success,
+    letterSpacing: 2,
+  },
+  mlPropsSubtitle: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+    marginBottom: spacing[4],
+    opacity: 0.7,
+  },
+  propsList: {
+    gap: spacing[3],
+  },
+  propItem: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderRadius: borderRadius.lg,
+    padding: spacing[3],
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
+  },
+  propItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: spacing[2],
+  },
+  propPlayerInfo: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  propPlayerName: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.base,
+    color: colors.foreground,
+  },
+  propTeamName: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+    opacity: 0.6,
+  },
+  propProbabilityBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.md,
+  },
+  propProbabilityText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.sm,
+  },
+  propPrediction: {
+    marginTop: spacing[1],
+  },
+  propStatInfo: {
+    gap: spacing[2],
+  },
+  propStatType: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  propLineWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  propLineText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.base,
+    color: colors.foreground,
   },
 });

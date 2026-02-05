@@ -219,8 +219,15 @@ exports.preCacheTopGames = onRequest({
     const startTime = Date.now();
     const results = { nba: [], soccer: [], errors: [], cleaned: 0, skipped: 0 };
 
+    // Check for force refresh parameter
+    const forceRefresh = req.body?.forceRefresh === true;
+    if (forceRefresh) {
+      console.log('🔄 FORCE REFRESH MODE ENABLED - Will re-cache all games');
+    }
+
     try {
       // Step 0: Clean up only EXPIRED pre-cached games (smart cleanup)
+      // If forceRefresh is true, also delete all NBA games to force complete refresh
       console.log('🧹 Cleaning up expired pre-cached games...');
       const cacheRef = getDb().collection('matchAnalysisCache');
       const now = new Date().toISOString();
@@ -234,17 +241,19 @@ exports.preCacheTopGames = onRequest({
         const batch = getDb().batch();
         allPreCachedSnapshot.docs.forEach((doc) => {
           const data = doc.data();
-          // Only delete if expired
-          if (data.expiresAt && data.expiresAt < now) {
+          // Delete if expired OR if forceRefresh and NBA game
+          const shouldDelete = (data.expiresAt && data.expiresAt < now) ||
+                               (forceRefresh && data.sport === 'nba');
+          if (shouldDelete) {
             batch.delete(doc.ref);
             results.cleaned++;
           }
         });
         if (results.cleaned > 0) {
           await batch.commit();
-          console.log(`🗑️ Deleted ${results.cleaned} expired pre-cached games`);
+          console.log(`🗑️ Deleted ${results.cleaned} ${forceRefresh ? 'NBA' : 'expired'} pre-cached games`);
         } else {
-          console.log('📭 No expired pre-cached games to clean');
+          console.log('📭 No pre-cached games to clean');
         }
       } else {
         console.log('📭 No pre-cached games found');
@@ -255,15 +264,17 @@ exports.preCacheTopGames = onRequest({
       const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
       console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
 
-      // Process NBA games sequentially (skip already cached)
+      // Process NBA games sequentially (skip already cached unless forceRefresh)
       for (const game of nbaGames) {
         try {
-          // Check if game is already cached and valid
-          const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
-          if (alreadyCached) {
-            console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
-            results.skipped++;
-            continue;
+          // Check if game is already cached and valid (skip check if forceRefresh)
+          if (!forceRefresh) {
+            const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
+            if (alreadyCached) {
+              console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
+              results.skipped++;
+              continue;
+            }
           }
 
           console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
@@ -378,6 +389,35 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStart
     throw new Error('Could not determine team IDs from response');
   }
 
+  // Step 1.5: Fetch ML Player Props for NBA games
+  let mlPlayerProps = null;
+  if (sport.toLowerCase() === 'nba') {
+    try {
+      console.log(`🤖 Fetching ML Player Props for ${team1} vs ${team2}...`);
+      const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+        team1,
+        team2,
+        sport: 'nba',
+        gameDate: gameStartTime
+      }, {
+        timeout: 30000
+      });
+
+      if (mlPropsResponse.data.success) {
+        mlPlayerProps = {
+          topProps: mlPropsResponse.data.topProps || [],
+          totalPropsAvailable: mlPropsResponse.data.totalPropsAvailable || 0,
+          highConfidenceCount: mlPropsResponse.data.highConfidenceCount || 0,
+          gameTime: mlPropsResponse.data.gameTime || null
+        };
+        console.log(`✅ ML Props cached: ${mlPlayerProps.topProps.length} high-confidence props`);
+      }
+    } catch (error) {
+      console.error(`⚠️ ML Props fetch failed (non-blocking): ${error.message}`);
+      // Don't throw - ML props are optional enhancement
+    }
+  }
+
   // Step 2: Generate AI analysis using GPT-4 (same as analyzeImage)
   console.log(`🤖 Generating AI analysis for ${team1} vs ${team2}...`);
   const aiAnalysis = await generateAIAnalysis(
@@ -414,6 +454,8 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStart
     marketIntelligence: data.marketIntelligence,
     teamStats: data.teamStats,
     keyInsightsNew: data.keyInsightsNew,
+    // ML Player Props (NBA only)
+    ...(mlPlayerProps && { mlPlayerProps }),
     // Pre-cache metadata
     preCached: true,
     preCachedAt: new Date().toISOString(),
@@ -698,3 +740,110 @@ exports.preCacheTopGamesScheduled = onSchedule({
       throw error;
     }
   });
+
+/**
+ * Daily ML Props Refresh Job
+ * Runs daily at 6 PM UTC to update mlPlayerProps for existing cached NBA games
+ * This ensures props are available when SGO releases them (typically 1 day before game)
+ */
+exports.refreshMLPropsDaily = onSchedule({
+  schedule: '0 18 * * *', // Daily at 6 PM UTC
+  timeZone: 'UTC',
+  timeoutSeconds: 300,
+  memory: '256MiB'
+}, async () => {
+  console.log('🤖 Starting daily ML Props refresh...');
+  const startTime = Date.now();
+
+  try {
+    const db = getDb();
+    const now = new Date();
+    const next48Hours = new Date(now.getTime() + (48 * 60 * 60 * 1000)).toISOString();
+
+    // Find all pre-cached NBA games in next 48 hours
+    const snapshot = await db.collection('matchAnalysisCache')
+      .where('sport', '==', 'nba')
+      .where('preCached', '==', true)
+      .get();
+
+    const gamesNeedingProps = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      const gameTime = data.gameStartTime;
+      if (!gameTime) return false;
+
+      // Only refresh games within next 48 hours
+      return gameTime <= next48Hours && gameTime > now.toISOString();
+    });
+
+    console.log(`📊 Found ${gamesNeedingProps.length} NBA games needing props refresh`);
+
+    let updated = 0;
+    let failed = 0;
+
+    for (const doc of gamesNeedingProps) {
+      const data = doc.data();
+      const analysis = data.analysis;
+      const team1 = analysis?.teams?.home;
+      const team2 = analysis?.teams?.away;
+      const gameStartTime = data.gameStartTime;
+
+      if (!team1 || !team2) continue;
+
+      try {
+        console.log(`  🎯 Refreshing props: ${team1} vs ${team2}`);
+
+        const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
+          ? 'http://localhost:5001/betai-f9176/us-central1'
+          : 'https://us-central1-betai-f9176.cloudfunctions.net';
+
+        const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+          team1,
+          team2,
+          sport: 'nba',
+          gameDate: gameStartTime
+        }, {
+          timeout: 30000
+        });
+
+        if (mlPropsResponse.data.success && mlPropsResponse.data.topProps?.length > 0) {
+          // Update ONLY the mlPlayerProps field in the nested analysis object
+          const propsData = {
+            topProps: mlPropsResponse.data.topProps,
+            totalPropsAvailable: mlPropsResponse.data.totalPropsAvailable || 0,
+            highConfidenceCount: mlPropsResponse.data.highConfidenceCount || 0,
+            mediumConfidenceCount: mlPropsResponse.data.mediumConfidenceCount || 0,
+            gameTime: mlPropsResponse.data.gameTime || null
+          };
+
+          console.log(`    📝 Writing props to Firestore (${propsData.topProps.length} props)...`);
+          await doc.ref.update({
+            'analysis.mlPlayerProps': propsData
+          });
+          console.log(`    ✅ Firestore update completed for doc ${doc.id}`);
+
+          // Verify the update worked
+          const verifyDoc = await doc.ref.get();
+          const hasProps = !!verifyDoc.data().analysis?.mlPlayerProps;
+          console.log(`    🔍 Verification: mlPlayerProps exists = ${hasProps}`);
+
+          updated++;
+        } else {
+          console.log(`    ⚠️ No props available yet`);
+        }
+
+      } catch (error) {
+        console.error(`    ❌ Failed to refresh props: ${error.message}`);
+        failed++;
+      }
+    }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`✅ ML Props refresh completed in ${duration}s`);
+    console.log(`   Updated: ${updated}, Failed: ${failed}, Skipped: ${gamesNeedingProps.length - updated - failed}`);
+
+    return null;
+  } catch (error) {
+    console.error('❌ ML Props refresh fatal error:', error);
+    throw error;
+  }
+});

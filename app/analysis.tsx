@@ -710,6 +710,7 @@ export default function AnalysisScreen() {
         },
         marketIntelligence: analysis.marketIntelligence,
         teamStats: analysis.teamStats,
+        mlPlayerProps: analysis.mlPlayerProps,
       };
 
       setAnalysisResult(analysisData);

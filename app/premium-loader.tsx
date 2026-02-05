@@ -170,6 +170,7 @@ export default function PremiumLoaderScreen() {
           },
           marketIntelligence: response?.marketIntelligence,
           teamStats: response?.teamStats,
+          mlPlayerProps: response?.mlPlayerProps || null,
         };
 
         analysisResultRef.current = analysisData;

@@ -295,11 +295,12 @@ export const FloatingBottomNav: React.FC<FloatingBottomNavProps> = ({
           router.push({ pathname: playerStatsPath, params: baseParams });
           break;
         case "props":
+          const propsParam = analysisData?.mlProps ? JSON.stringify(analysisData.mlProps) : undefined;
           router.push({
             pathname: "/player-props" as any,
             params: {
               ...baseParams,
-              mlProps: analysisData?.mlProps ? JSON.stringify(analysisData.mlProps) : undefined,
+              mlProps: propsParam,
             }
           });
           break;

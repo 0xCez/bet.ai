@@ -1,0 +1,18 @@
+{
+  "team1": "Los Angeles Lakers",
+  "team2": "Golden State Warriors",
+  "team1_code": "LAL",
+  "team2_code": "GSW",
+  "gameDate": "2026-02-10T02:00:00Z",
+  "props": [
+    {
+      "playerId": 265,
+      "playerName": "LeBron James",
+      "team": "Los Angeles Lakers",
+      "statType": "points",
+      "consensusLine": 28.5,
+      "bestOver": { "bookmaker": "DraftKings", "odds": -110, "line": 28.5 },
+      "bestUnder": { "bookmaker": "FanDuel", "odds": -110, "line": 28.5 }
+    }
+  ]
+}
