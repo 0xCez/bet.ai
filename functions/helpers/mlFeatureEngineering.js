@@ -72,9 +72,9 @@ function calculateL3Stats(gameLogs) {
     L3_REB: totalReb / gamesCount,
     L3_AST: totalAst / gamesCount,
     L3_MIN: totalMin / gamesCount,
-    L3_FG_PCT: totalFga > 0 ? (totalFgm / totalFga) * 100 : 0,
+    L3_FG_PCT: totalFga > 0 ? (totalFgm / totalFga) : 0,
     L3_FG3M: totalFg3m / gamesCount,
-    L3_FG3_PCT: totalFg3a > 0 ? (totalFg3m / totalFg3a) * 100 : 0,
+    L3_FG3_PCT: totalFg3a > 0 ? (totalFg3m / totalFg3a) : 0,
     L3_STL: totalStl / gamesCount,
     L3_BLK: totalBlk / gamesCount,
     L3_TOV: totalTov / gamesCount,
@@ -141,9 +141,9 @@ function calculateL10Stats(gameLogs) {
     rebArray.push(reb);
     astArray.push(ast);
     minArray.push(min);
-    fgPctArray.push(fga > 0 ? (fgm / fga) * 100 : 0);
-    fg3PctArray.push(fg3a > 0 ? (fg3m / fg3a) * 100 : 0);
-    ftPctArray.push(fta > 0 ? (ftm / fta) * 100 : 0);
+    fgPctArray.push(fga > 0 ? (fgm / fga) : 0);
+    fg3PctArray.push(fg3a > 0 ? (fg3m / fg3a) : 0);
+    ftPctArray.push(fta > 0 ? (ftm / fta) : 0);
 
     totalPoints += pts;
     totalReb += reb;
@@ -167,9 +167,9 @@ function calculateL10Stats(gameLogs) {
     L10_REB: totalReb / gamesCount,
     L10_AST: totalAst / gamesCount,
     L10_MIN: totalMin / gamesCount,
-    L10_FG_PCT: totalFga > 0 ? (totalFgm / totalFga) * 100 : 0,
+    L10_FG_PCT: totalFga > 0 ? (totalFgm / totalFga) : 0,
     L10_FG3M: totalFg3m / gamesCount,
-    L10_FG3_PCT: totalFg3a > 0 ? (totalFg3m / totalFg3a) * 100 : 0,
+    L10_FG3_PCT: totalFg3a > 0 ? (totalFg3m / totalFg3a) : 0,
     L10_STL: totalStl / gamesCount,
     L10_BLK: totalBlk / gamesCount,
     L10_TOV: totalTov / gamesCount,
@@ -269,7 +269,7 @@ function calculateAdvancedMetrics(l3Stats, l10Stats, context) {
   const ACCELERATION_PTS = context.DAYS_REST > 0 ? TREND_PTS / context.DAYS_REST : TREND_PTS;
 
   // Efficiency stability: 1 if FG% difference between L3 and L10 is small (<5%)
-  const EFFICIENCY_STABLE = Math.abs(l3Stats.L3_FG_PCT - l10Stats.L10_FG_PCT) < 5 ? 1 : 0;
+  const EFFICIENCY_STABLE = Math.abs(l3Stats.L3_FG_PCT - l10Stats.L10_FG_PCT) < 0.05 ? 1 : 0;
 
   return {
     SCORING_EFFICIENCY,
@@ -331,7 +331,7 @@ function calculateCompositeMetrics(l3Stats, l10Stats, context, advanced) {
   const PLAYMAKING_EFFICIENCY = l3Stats.L3_AST * advanced.ASSIST_TO_RATIO;
 
   // Three-point threat: Makes * percentage (higher = more dangerous)
-  const THREE_POINT_THREAT = l3Stats.L3_FG3M * (l3Stats.L3_FG3_PCT / 100);
+  const THREE_POINT_THREAT = l3Stats.L3_FG3M * l3Stats.L3_FG3_PCT;
 
   // Defensive impact: Steals + blocks + small bonus for being positive
   const DEFENSIVE_IMPACT = l3Stats.L3_STL + l3Stats.L3_BLK + 0.5;
