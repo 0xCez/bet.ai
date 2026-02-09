@@ -78,7 +78,7 @@ export default function PlayerPropsScreen() {
       const team1 = params.team1 || "";
       const team2 = params.team2 || "";
 
-      const apiUrl = "https://us-central1-betai-f9176.cloudfunctions.net/getMLPlayerPropsForGame";
+      const apiUrl = "https://us-central1-betai-f9176.cloudfunctions.net/getMLPlayerPropsV2";
 
       console.log("[Props Page] Fetching ML props for:", team1, "vs", team2);
 

@@ -13,6 +13,7 @@ interface PageIndicatorProps {
 const pages = [
   { id: 0, label: "Picks", icon: "flame" as const },
   { id: 1, label: "Scan", icon: "scan" as const },
+  { id: 2, label: "Props", icon: "person" as const },
 ];
 
 export const PageIndicator: React.FC<PageIndicatorProps> = ({
@@ -38,8 +39,8 @@ export const PageIndicator: React.FC<PageIndicatorProps> = ({
   };
 
   const translateX = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 108], // Width of one tab + gap
+    inputRange: [0, 1, 2],
+    outputRange: [0, 108, 216], // Width of one tab + gap
   });
 
   return (

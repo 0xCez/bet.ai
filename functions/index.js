@@ -14,9 +14,13 @@ exports.preCacheTopGames = preCacheTopGames;
 exports.preCacheTopGamesScheduled = preCacheTopGamesScheduled;
 exports.refreshMLPropsDaily = refreshMLPropsDaily;
 
-// Re-export ML Player Props function
+// Re-export ML Player Props functions
 const { getMLPlayerPropsForGame } = require('./mlPlayerProps');
 exports.getMLPlayerPropsForGame = getMLPlayerPropsForGame;
+
+// v2 - Clean rewrite with dynamic player ID resolution
+const { getMLPlayerPropsV2 } = require('./mlPlayerPropsV2');
+exports.getMLPlayerPropsV2 = getMLPlayerPropsV2;
 
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;

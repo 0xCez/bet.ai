@@ -6,7 +6,7 @@
  * - Endpoint: Vertex AI CatBoost model (64.9% accuracy)
  * - Region: us-central1
  * - Project: betai-f9176 (ID: 133991312998)
- * - Endpoint ID: 4819237529867780096
+ * - Endpoint ID: 7508590194849742848
  *
  * Authentication: OAuth2 Service Account (requires service-account-key.json)
  */
@@ -18,7 +18,7 @@ const axios = require('axios');
 const VERTEX_AI_CONFIG = {
   projectNumber: '133991312998',
   location: 'us-central1',
-  endpointId: '4819237529867780096',
+  endpointId: '7508590194849742848',
   get endpoint() {
     return `https://${this.location}-aiplatform.googleapis.com/v1/projects/${this.projectNumber}/locations/${this.location}/endpoints/${this.endpointId}:predict`;
   }

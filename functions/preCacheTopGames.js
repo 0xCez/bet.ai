@@ -394,13 +394,13 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStart
   if (sport.toLowerCase() === 'nba') {
     try {
       console.log(`🤖 Fetching ML Player Props for ${team1} vs ${team2}...`);
-      const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+      const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
         team1,
         team2,
         sport: 'nba',
         gameDate: gameStartTime
       }, {
-        timeout: 30000
+        timeout: 300000  // 5 min - v2 resolves player IDs dynamically
       });
 
       if (mlPropsResponse.data.success) {
@@ -796,13 +796,13 @@ exports.refreshMLPropsDaily = onSchedule({
           ? 'http://localhost:5001/betai-f9176/us-central1'
           : 'https://us-central1-betai-f9176.cloudfunctions.net';
 
-        const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsForGame`, {
+        const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
           team1,
           team2,
           sport: 'nba',
           gameDate: gameStartTime
         }, {
-          timeout: 30000
+          timeout: 300000  // 5 min - v2 resolves player IDs dynamically
         });
 
         if (mlPropsResponse.data.success && mlPropsResponse.data.topProps?.length > 0) {

@@ -61,7 +61,7 @@ async function clearAndRefresh() {
       console.log(`  Fetching: ${game.home} vs ${game.away}...`);
 
       const response = await axios.post(
-        'https://us-central1-betai-f9176.cloudfunctions.net/getMLPlayerPropsForGame',
+        'https://us-central1-betai-f9176.cloudfunctions.net/getMLPlayerPropsV2',
         {
           team1: game.home,
           team2: game.away,

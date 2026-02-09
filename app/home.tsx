@@ -32,6 +32,7 @@ import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
 import { PageIndicator } from "../components/ui/PageIndicator";
 import { HeroGamesCarousel } from "../components/ui/HeroGamesCarousel";
+import { PlayerPropsCarousel } from "../components/ui/PlayerPropsCarousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "../i18n";
 
@@ -163,7 +164,7 @@ export default function HomeScreen() {
 
     const offsetX = event.nativeEvent.contentOffset.x;
     const page = Math.round(offsetX / SCREEN_WIDTH);
-    if (page !== activePage && page >= 0 && page <= 1) {
+    if (page !== activePage && page >= 0 && page <= 2) {
       setActivePage(page);
     }
   };
@@ -404,6 +405,11 @@ export default function HomeScreen() {
               </Pressable>
               </Animated.View>
             </View>
+          </View>
+
+          {/* Page 3: Props - ML Player Props */}
+          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+            <PlayerPropsCarousel />
           </View>
         </ScrollView>
 
