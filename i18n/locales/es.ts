@@ -8,17 +8,21 @@ export default {
   onboardingSlide2Title2: "para apuestas ganadoras.",
   onboardingSlide2Description: "Nuestra IA analiza miles de datos y te da un desglose completo en segundos.",
 
-  onboardingSlide3Title: "Obtén jugadas pro",
-  onboardingSlide3Title2: "en cada apuesta.",
-  onboardingSlide3Description: "Análisis de mercado: Dinero pro vs público, movimiento de cuotas y más.",
+  onboardingSlide3Title: "Predicciones de props",
+  onboardingSlide3Title2: "con inteligencia artificial.",
+  onboardingSlide3Description: "Nuestro modelo ML analiza stats, rivales y tendencias para encontrar props de alto valor.",
 
-  onboardingSlide4Title: "Cada detalle importa,",
-  onboardingSlide4Title2: "ve lo invisible.",
-  onboardingSlide4Description: "Lesiones, clima, impulso... Factores decisivos que otros pasan por alto.",
+  onboardingSlide4Title: "Obtén jugadas pro",
+  onboardingSlide4Title2: "en cada apuesta.",
+  onboardingSlide4Description: "Análisis de mercado: Dinero pro vs público, movimiento de cuotas y más.",
 
-  onboardingSlide5Title: "Debate tus selecciones",
-  onboardingSlide5Title2: "con nuestro experto, 24/7.",
-  onboardingSlide5Description: "Pregunta sobre: cuotas, tendencias, riesgos y obtén información al instante.",
+  onboardingSlide5Title: "Cada detalle importa,",
+  onboardingSlide5Title2: "ve lo invisible.",
+  onboardingSlide5Description: "Lesiones, clima, impulso... Factores decisivos que otros pasan por alto.",
+
+  onboardingSlide6Title: "Debate tus selecciones",
+  onboardingSlide6Title2: "con nuestro experto, 24/7.",
+  onboardingSlide6Description: "Pregunta sobre: cuotas, tendencias, riesgos y obtén información al instante.",
 
   onboardingButtonNext: "Siguiente",
   // Welcome Screen

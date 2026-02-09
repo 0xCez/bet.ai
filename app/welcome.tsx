@@ -92,7 +92,7 @@ export default function WelcomeScreen() {
     try {
       const appState = await getAppState();
       if (appState?.signupComplete) {
-        router.push("/tutorial");
+        router.push("/paywall");
       } else {
         router.push("/signup");
       }

@@ -361,9 +361,6 @@ export default function LoginScreen() {
       {/* Concentric circles background */}
       <ConcentricCircles rotate rotationDuration={45000} />
 
-      <Animated.View style={[styles.header, logoAnimatedStyle]}>
-        <Logo size="medium" />
-      </Animated.View>
 
       <View style={styles.container}>
         <View style={styles.content}>

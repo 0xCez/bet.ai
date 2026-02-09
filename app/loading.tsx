@@ -28,6 +28,7 @@ export default function LoadingScreen() {
   });
   const { trackFunnelStep } = useOnboardingAnalytics();
   const hasTracked = useRef(false);
+  const hasNavigated = useRef(false);
 
   // Track loading screen viewed on mount
   useEffect(() => {
@@ -80,7 +81,10 @@ export default function LoadingScreen() {
 
       if (currentProgress >= 100) {
         clearInterval(timer);
-        router.push("/tutorial");
+        if (!hasNavigated.current) {
+          hasNavigated.current = true;
+          router.push("/paywall");
+        }
         return;
       }
 

@@ -8,17 +8,21 @@ export default {
   onboardingSlide2Title2: "insights for winning bets.",
   onboardingSlide2Description: "Our AI analyzes thousands of data points and gives you a full breakdown in seconds.",
 
-  onboardingSlide3Title: "Get instant sharp",
-  onboardingSlide3Title2: "plays on every bet.",
-  onboardingSlide3Description: "Detailed market analysis: Sharp vs Public money, Odds movement, and more.",
+  onboardingSlide3Title: "AI-powered player",
+  onboardingSlide3Title2: "prop predictions.",
+  onboardingSlide3Description: "Our ML model analyzes player stats, matchups, and trends to surface high-confidence props.",
 
-  onboardingSlide4Title: "Every detail matters,",
-  onboardingSlide4Title2: "see what others miss.",
-  onboardingSlide4Description: "Injuries, weather, momentum... See game-changing factors others overlook.",
+  onboardingSlide4Title: "Get instant sharp",
+  onboardingSlide4Title2: "plays on every bet.",
+  onboardingSlide4Description: "Detailed market analysis: Sharp vs Public money, Odds movement, and more.",
 
-  onboardingSlide5Title: "Debate your picks",
-  onboardingSlide5Title2: "with our expert, 24/7.",
-  onboardingSlide5Description: "Ask anything: odds shifts, sharp trends, hidden risks, and get instant insights.",
+  onboardingSlide5Title: "Every detail matters,",
+  onboardingSlide5Title2: "see what others miss.",
+  onboardingSlide5Description: "Injuries, weather, momentum... See game-changing factors others overlook.",
+
+  onboardingSlide6Title: "Debate your picks",
+  onboardingSlide6Title2: "with our expert, 24/7.",
+  onboardingSlide6Description: "Ask anything: odds shifts, sharp trends, hidden risks, and get instant insights.",
 
   onboardingButtonNext: "Next",
   // Welcome Screen

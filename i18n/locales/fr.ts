@@ -8,17 +8,21 @@ export default {
   onboardingSlide2Title2: "pour des paris gagnants.",
   onboardingSlide2Description: "Notre IA analyse des milliers de données et vous offre une analyse complète en quelques secondes.",
 
-  onboardingSlide3Title: "Obtenez des paris de pro",
-  onboardingSlide3Title2: "sur chaque match.",
-  onboardingSlide3Description: "Analyse du marché: Argent des pros vs public, mouvements des cotes, et plus.",
+  onboardingSlide3Title: "Prédictions de props",
+  onboardingSlide3Title2: "par intelligence artificielle.",
+  onboardingSlide3Description: "Notre modèle ML analyse les stats, les matchups et les tendances pour trouver les meilleurs props.",
 
-  onboardingSlide4Title: "Voyez ce que les autres",
-  onboardingSlide4Title2: "ne voient pas.",
-  onboardingSlide4Description: "Blessures, arbitres, météo, fatigue... Bet.AI analyse en profondeur les signaux souvent négligés.",
+  onboardingSlide4Title: "Obtenez des paris de pro",
+  onboardingSlide4Title2: "sur chaque match.",
+  onboardingSlide4Description: "Analyse du marché: Argent des pros vs public, mouvements des cotes, et plus.",
 
-  onboardingSlide5Title: "Discutez vos choix",
-  onboardingSlide5Title2: "avec notre IA, 24/7.",
-  onboardingSlide5Description: "Posez vos questions: cotes, tendances, risques cachés, et obtenez des tips immédiats.",
+  onboardingSlide5Title: "Voyez ce que les autres",
+  onboardingSlide5Title2: "ne voient pas.",
+  onboardingSlide5Description: "Blessures, arbitres, météo, fatigue... Bet.AI analyse en profondeur les signaux souvent négligés.",
+
+  onboardingSlide6Title: "Discutez vos choix",
+  onboardingSlide6Title2: "avec notre IA, 24/7.",
+  onboardingSlide6Description: "Posez vos questions: cotes, tendances, risques cachés, et obtenez des tips immédiats.",
 
   onboardingButtonNext: "Suivant",
     // Welcome Screen

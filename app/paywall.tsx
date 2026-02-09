@@ -86,27 +86,27 @@ const premiumFeatures = [
   {
     icon: "scan-outline" as const,
     title: "Unlimited Bet Scans",
-    desc: "Snap any bet slip for instant AI analysis"
+    desc: "Scan any bet slip, get a full breakdown in seconds"
   },
   {
     icon: "hardware-chip-outline" as const,
     title: "AI Match Analysis",
-    desc: "Deep insights on matchups and value opportunities"
+    desc: "Confidence scores, betting signals, and edge detection"
+  },
+  {
+    icon: "analytics-outline" as const,
+    title: "AI Player Prop Predictions",
+    desc: "ML analyzes 88 features per player to find edges"
   },
   {
     icon: "trending-up-outline" as const,
     title: "Market Intelligence",
-    desc: "Track odds movements across sportsbooks"
+    desc: "Sharp money flow, line movement, and +EV alerts"
   },
   {
     icon: "chatbubbles-outline" as const,
     title: "Expert AI Assistant",
-    desc: "Get personalized betting insights 24/7"
-  },
-  {
-    icon: "people-outline" as const,
-    title: "Player & Team Stats",
-    desc: "Detailed performance data and comparisons"
+    desc: "Ask anything about any game, get instant answers"
   },
 ];
 
@@ -232,10 +232,10 @@ function TrustIndicator({ icon, text, delay }: {
 }
 
 // Testimonial card
-function TestimonialCard() {
+function TestimonialCard({ quote, author, delay = 900 }: { quote: string; author: string; delay?: number }) {
   return (
     <Animated.View
-      entering={FadeInUp.delay(900).duration(500)}
+      entering={FadeInUp.delay(delay).duration(500)}
       style={styles.testimonialCard}
     >
       <View style={styles.testimonialHeader}>
@@ -247,9 +247,9 @@ function TestimonialCard() {
         <Text style={styles.verifiedText}>Verified User</Text>
       </View>
       <Text style={styles.testimonialQuote}>
-        "I was losing money on parlays until I found Bet.AI. Now I actually understand which bets have real value. Already up 3x my subscription cost!"
+        {quote}
       </Text>
-      <Text style={styles.testimonialAuthor}>— Jake M., Sports Bettor</Text>
+      <Text style={styles.testimonialAuthor}>{author}</Text>
     </Animated.View>
   );
 }
@@ -466,7 +466,7 @@ export default function PaywallScreen() {
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/tutorial");
+    router.push("/login");
   };
 
   // Get selected package for CTA
@@ -493,15 +493,6 @@ export default function PaywallScreen() {
       {/* Animated background orb */}
       <AnimatedOrb />
 
-      {/* Close button */}
-      <Animated.View
-        entering={FadeIn.delay(200).duration(300)}
-        style={styles.closeButton}
-      >
-        <Pressable onPress={handleClose} hitSlop={20}>
-          <Ionicons name="close" size={28} color={colors.mutedForeground} />
-        </Pressable>
-      </Animated.View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -525,7 +516,7 @@ export default function PaywallScreen() {
             entering={FadeInDown.delay(150).duration(400)}
             style={styles.heroSubtitle}
           >
-            Join smart bettors using AI to find winning opportunities
+            The same data sharps use — now in your pocket
           </Animated.Text>
         </View>
 
@@ -625,8 +616,17 @@ export default function PaywallScreen() {
           />
         </View>
 
-        {/* Testimonial */}
-        <TestimonialCard />
+        {/* Testimonials */}
+        <TestimonialCard
+          quote={`"I was losing money on parlays until I found Bet.AI. Now I actually understand which bets have real value. Already up 3x my subscription cost!"`}
+          author="— Jake M., Sports Bettor"
+          delay={900}
+        />
+        <TestimonialCard
+          quote={`"The ML prop predictions are insane. Hit 4 out of 5 player props on my first night. It's like having a data scientist in your pocket."`}
+          author="— Marcus T., NBA Bettor"
+          delay={950}
+        />
 
         {/* Spacer for fixed footer */}
         <View style={{ height: 200 }} />

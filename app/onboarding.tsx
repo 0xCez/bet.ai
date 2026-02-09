@@ -13,6 +13,7 @@ import { SharpsVsPublicChart, OddsMovementChart } from "../components/ui/Onboard
 import { OnboardingSlide4Visual } from "../components/ui/OnboardingSlide4Visual";
 import { OnboardingSlide5Visual } from "../components/ui/OnboardingSlide5Visual";
 import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
+import { OnboardingSlide3MLPropsVisual } from "../components/ui/OnboardingSlide3MLPropsVisual";
 import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -49,11 +50,7 @@ const slides: OnboardingSlide[] = [
     title: i18n.t('onboardingSlide3Title'),
     title2: i18n.t('onboardingSlide3Title2'),
     description: i18n.t('onboardingSlide3Description'),
-    image: i18n.locale.startsWith("fr")
-    ? require("../assets/images/onboarding/slide3-fr.png")
-    : i18n.locale.startsWith("es")
-    ? require("../assets/images/onboarding/slide3-es.png")
-    : require("../assets/images/onboarding/slide3.png"),
+    image: null, // Uses custom visual component
   },
   {
     id: 4,
@@ -61,16 +58,27 @@ const slides: OnboardingSlide[] = [
     title2: i18n.t('onboardingSlide4Title2'),
     description: i18n.t('onboardingSlide4Description'),
     image: i18n.locale.startsWith("fr")
-    ? require("../assets/images/onboarding/slide4-fr.png")
+    ? require("../assets/images/onboarding/slide3-fr.png")
     : i18n.locale.startsWith("es")
-    ? require("../assets/images/onboarding/slide4-es.png")
-    : require("../assets/images/onboarding/slide4.png"),
+    ? require("../assets/images/onboarding/slide3-es.png")
+    : require("../assets/images/onboarding/slide3.png"),
   },
   {
     id: 5,
     title: i18n.t('onboardingSlide5Title'),
     title2: i18n.t('onboardingSlide5Title2'),
     description: i18n.t('onboardingSlide5Description'),
+    image: i18n.locale.startsWith("fr")
+    ? require("../assets/images/onboarding/slide4-fr.png")
+    : i18n.locale.startsWith("es")
+    ? require("../assets/images/onboarding/slide4-es.png")
+    : require("../assets/images/onboarding/slide4.png"),
+  },
+  {
+    id: 6,
+    title: i18n.t('onboardingSlide6Title'),
+    title2: i18n.t('onboardingSlide6Title2'),
+    description: i18n.t('onboardingSlide6Description'),
     image: i18n.locale.startsWith("fr")
     ? require("../assets/images/onboarding/slide5-fr.png")
     : i18n.locale.startsWith("es")
@@ -172,20 +180,22 @@ export default function OnboardingScreen() {
         ) : item.id === 2 ? (
           <OnboardingSlide2Visual isActive={activeIndex === 1} />
         ) : item.id === 3 ? (
+          <OnboardingSlide3MLPropsVisual isActive={activeIndex === 2} />
+        ) : item.id === 4 ? (
           <View style={styles.slide3Container}>
             <View style={styles.slide3ChartsWrapper}>
               <View style={styles.sharpsChartPosition}>
-                <SharpsVsPublicChart isActive={activeIndex === 2} />
+                <SharpsVsPublicChart isActive={activeIndex === 3} />
               </View>
               <View style={styles.oddsChartPosition}>
-                <OddsMovementChart isActive={activeIndex === 2} />
+                <OddsMovementChart isActive={activeIndex === 3} />
               </View>
             </View>
           </View>
-        ) : item.id === 4 ? (
-          <OnboardingSlide4Visual isActive={activeIndex === 3} />
         ) : item.id === 5 ? (
-          <OnboardingSlide5Visual isActive={activeIndex === 4} />
+          <OnboardingSlide4Visual isActive={activeIndex === 4} />
+        ) : item.id === 6 ? (
+          <OnboardingSlide5Visual isActive={activeIndex === 5} />
         ) : (
           <View style={styles.imageContainer}>
             <Image

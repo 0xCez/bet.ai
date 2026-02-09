@@ -99,7 +99,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!purchaseLoading && !isSubscribed) {
-      router.replace("/tutorial");
+      router.replace("/paywall");
     }
   }, [isSubscribed, purchaseLoading]);
 
