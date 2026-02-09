@@ -629,6 +629,24 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         buildFeatures(gameLogsMap[prop.playerName], prop, homeTeamCode, awayTeamCode, effectiveGameDate)
       );
 
+      // Build per-player L10 stats lookup (for UI display)
+      const playerStatsMap = {};
+      processableProps.forEach((prop, idx) => {
+        if (!playerStatsMap[prop.playerName]) {
+          const f = featuresList[idx];
+          playerStatsMap[prop.playerName] = {
+            pointsPerGame: parseFloat(f.L10_PTS.toFixed(1)),
+            reboundsPerGame: parseFloat(f.L10_REB.toFixed(1)),
+            assistsPerGame: parseFloat(f.L10_AST.toFixed(1)),
+            stealsPerGame: parseFloat(f.L10_STL.toFixed(1)),
+            blocksPerGame: parseFloat(f.L10_BLK.toFixed(1)),
+            fgPct: parseFloat((f.L10_FG_PCT * 100).toFixed(1)),
+            fg3Pct: parseFloat((f.L10_FG3_PCT * 100).toFixed(1)),
+            minutesPerGame: parseFloat(f.L10_MIN.toFixed(1)),
+          };
+        }
+      });
+
       // Call Vertex AI in batches of 10
       const allPredictions = [];
       for (let i = 0; i < featuresList.length; i += 10) {
@@ -667,7 +685,8 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
             confidenceTier: bettingValue,
             oddsOver: prop.oddsOver,
             oddsUnder: prop.oddsUnder,
-            gamesUsed: gameLogsMap[prop.playerName].length
+            gamesUsed: gameLogsMap[prop.playerName].length,
+            playerStats: playerStatsMap[prop.playerName] || null
           });
         }
       });

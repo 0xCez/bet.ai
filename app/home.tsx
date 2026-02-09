@@ -438,7 +438,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[1],
   },
   logoContainer: {
     flex: 1,
@@ -549,6 +550,7 @@ const styles = StyleSheet.create({
   },
   pageIndicatorContainer: {
     alignItems: "center",
-    paddingVertical: spacing[1],
+    paddingTop: spacing[1],
+    paddingBottom: spacing[3],
   },
 });

@@ -30,8 +30,8 @@ const normalizePlayerName = (name: string): string => {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // strip accents
     .toLowerCase()
-    .replace(/\./g, "")              // remove periods ("Jr." -> "Jr" -> "jr")
-    .replace(/[^a-z0-9\s]/g, "")     // remove non-alphanumeric (except spaces)
+    .replace(/\./g, "")              // remove periods
+    .replace(/[^a-z0-9\s]/g, "")     // remove non-alphanumeric
     .replace(/\s+/g, "_")            // spaces to underscores
     .replace(/_+/g, "_")             // collapse multiple underscores
     .replace(/^_|_$/g, "");           // trim leading/trailing underscores
@@ -39,8 +39,8 @@ const normalizePlayerName = (name: string): string => {
 
 /**
  * Static map of all NBA player images.
- * Key: normalized player name (lowercase, underscores)
- * Value: array of { team, image } for each team folder containing that player
+ * Key: normalized filename (from disk)
+ * Value: array of { team, image } for each team folder
  */
 const PLAYER_IMAGES: { [normalizedName: string]: { team: string; image: any }[] } = {
   "a__estrada": [{ team: "det", image: require("../assets/images/nba-players/det/a__estrada.png") }],
@@ -779,18 +779,37 @@ const PLAYER_IMAGES: { [normalizedName: string]: { team: string; image: any }[] 
 };
 
 /**
- * Get a player's headshot image.
- *
- * @param playerName - Display name from API, e.g. "LeBron James"
- * @param teamAbbrev - Optional team abbreviation, e.g. "LAL", "BKN"
- * @returns The require() image source, or null if not found
+ * Lookup table: normalized API name -> disk filename key.
+ * Handles mismatches like "A. Estrada" (normalizes to "a_estrada") vs disk "a__estrada".
+ */
+const NORMALIZED_LOOKUP: { [key: string]: string } = {};
+
+// Build the normalized lookup at module load time
+(() => {
+  for (const diskName of Object.keys(PLAYER_IMAGES)) {
+    // The disk name itself is a valid lookup key
+    NORMALIZED_LOOKUP[diskName] = diskName;
+    // Also create a "collapsed" version (no double underscores)
+    const collapsed = diskName.replace(/_+/g, "_").replace(/^_|_$/g, "");
+    if (collapsed !== diskName) {
+      NORMALIZED_LOOKUP[collapsed] = diskName;
+    }
+  }
+})();
+
+/**
+ * Get a player's local image by name and optional team abbreviation.
+ * Returns the require() result for <Image source={...} />, or null if not found.
  */
 export const getPlayerImage = (
   playerName: string,
   teamAbbrev?: string
 ): any | null => {
   const normalized = normalizePlayerName(playerName);
-  const entries = PLAYER_IMAGES[normalized];
+
+  // Try direct lookup first, then via normalized lookup table
+  const diskKey = PLAYER_IMAGES[normalized] ? normalized : NORMALIZED_LOOKUP[normalized];
+  const entries = diskKey ? PLAYER_IMAGES[diskKey] : undefined;
 
   if (!entries || entries.length === 0) {
     return null;
@@ -821,11 +840,12 @@ export const hasPlayerImage = (
 };
 
 /**
- * Get all available team codes for a player (useful for debugging).
+ * Get all available team codes for a player.
  */
 export const getPlayerTeams = (playerName: string): string[] => {
   const normalized = normalizePlayerName(playerName);
-  const entries = PLAYER_IMAGES[normalized];
+  const diskKey = PLAYER_IMAGES[normalized] ? normalized : NORMALIZED_LOOKUP[normalized];
+  const entries = diskKey ? PLAYER_IMAGES[diskKey] : undefined;
   if (!entries) return [];
   return entries.map((e) => e.team);
 };
