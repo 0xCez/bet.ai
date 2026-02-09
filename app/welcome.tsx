@@ -14,7 +14,7 @@ import { ScreenBackground } from "../components/ui/ScreenBackground";
 import { Logo } from "../components/ui/Logo";
 import { getAppState } from "../utils/appStorage";
 import { MultilineText } from "@/components/ui/MultilineText";
-import { colors, spacing, typography } from "../constants/designTokens";
+import { colors, spacing, typography, BYPASS_PAYWALL } from "../constants/designTokens";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
 // import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
@@ -92,7 +92,7 @@ export default function WelcomeScreen() {
     try {
       const appState = await getAppState();
       if (appState?.signupComplete) {
-        router.push("/paywall");
+        router.push(BYPASS_PAYWALL ? "/login" : "/paywall");
       } else {
         router.push("/signup");
       }

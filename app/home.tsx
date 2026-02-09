@@ -26,7 +26,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as StoreReview from "expo-store-review";
 import { usePostHog } from "posthog-react-native";
-import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
+import { colors, spacing, borderRadius, typography, BYPASS_PAYWALL } from "../constants/designTokens";
 import { LogoSpinner } from "../components/ui/LogoSpinner";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
@@ -98,7 +98,7 @@ export default function HomeScreen() {
   const posthog = usePostHog();
 
   useEffect(() => {
-    if (!purchaseLoading && !isSubscribed) {
+    if (!purchaseLoading && !isSubscribed && !BYPASS_PAYWALL) {
       router.replace("/paywall");
     }
   }, [isSubscribed, purchaseLoading]);
@@ -295,7 +295,7 @@ export default function HomeScreen() {
   }
 
   // Prevent any flash of home content for unsubscribed users
-  if (!isSubscribed) {
+  if (!isSubscribed && !BYPASS_PAYWALL) {
     return (
       <View style={styles.loadingContainer}>
         <LogoSpinner size={96} />
@@ -364,7 +364,7 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  if (!isSubscribed) {
+                  if (!isSubscribed && !BYPASS_PAYWALL) {
                     router.push("/paywall");
                     return;
                   }
@@ -387,7 +387,7 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (!isSubscribed) {
+                  if (!isSubscribed && !BYPASS_PAYWALL) {
                     router.push("/paywall");
                     return;
                   }

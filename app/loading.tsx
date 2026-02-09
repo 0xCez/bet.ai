@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { ScreenBackground } from "../components/ui/ScreenBackground";
 import CircularProgress from "react-native-circular-progress-indicator";
 import { GradientText } from "../components/ui/GradientText";
-import { colors, spacing, typography } from "../constants/designTokens";
+import { colors, spacing, typography, BYPASS_PAYWALL } from "../constants/designTokens";
 import i18n from "../i18n";
 import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
@@ -83,7 +83,7 @@ export default function LoadingScreen() {
         clearInterval(timer);
         if (!hasNavigated.current) {
           hasNavigated.current = true;
-          router.push("/paywall");
+          router.push(BYPASS_PAYWALL ? "/login" : "/paywall");
         }
         return;
       }
