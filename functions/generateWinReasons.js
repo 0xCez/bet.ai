@@ -1,9 +1,11 @@
 const functions = require("firebase-functions");
 const OpenAI = require("openai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai;
+function getOpenAI() {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 
 /**
  * Cloud Function to generate compelling win reasons using GPT-4o-mini
@@ -81,7 +83,7 @@ Return EXACTLY 3 bullet points using real numbers from the data. No bullet symbo
 
     console.log("Sending enhanced prompt with data points:", dataPoints.length);
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 200,
