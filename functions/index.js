@@ -34,6 +34,7 @@ const TENNIS_API_KEY = process.env.TENNIS_API_KEY || '2cf2f7d9e8e9d7ea2ab285677a
 
 admin.initializeApp();
 const db = admin.firestore();
+db.settings({ ignoreUndefinedProperties: true });
 const CACHE_EXPIRY_TIME = 0; // DISABLED TEMPORARILY - fixing broken data issue
 
 // ====================================================================

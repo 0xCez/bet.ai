@@ -19,7 +19,7 @@ let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
 
 // Config
-const SGO_API_KEY = 'b07ce45b95064ec5b62dcbb1ca5e7cf0';
+const SGO_API_KEY = '8e767501a24d345e14345882dd4e59f0';
 const SGO_BASE_URL = 'https://api.sportsgameodds.com/v2';
 
 const VERTEX_ENDPOINT = 'https://us-central1-aiplatform.googleapis.com/v1/projects/133991312998/locations/us-central1/endpoints/7508590194849742848:predict';
@@ -545,7 +545,7 @@ function extractProps(event) {
 // ──────────────────────────────────────────────
 
 exports.getMLPlayerPropsV2 = functions.https.onRequest(
-  { timeoutSeconds: 300, memory: '1GiB', cors: true },
+  { timeoutSeconds: 300, memory: '1GiB', cors: true, secrets: ['API_SPORTS_KEY'] },
   async (req, res) => {
     try {
       const { team1, team2, sport, gameDate } = req.body;

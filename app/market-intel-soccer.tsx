@@ -22,6 +22,8 @@ import { FloatingBottomNav } from "../components/ui/FloatingBottomNav";
 import { useRevenueCatPurchases } from "./hooks/useRevenueCatPurchases";
 import { usePostHog } from "posthog-react-native";
 import { usePageTransition } from "../hooks/usePageTransition";
+import { useBookmakerTracking } from "@/hooks/useBookmakerTracking";
+import { BookmakerTappable } from "@/components/BookmakerTappable";
 import i18n from "../i18n";
 import { shimmerColors } from "../constants/designTokens";
 
@@ -194,6 +196,26 @@ export default function SoccerMarketIntelScreen() {
   const { isSubscribed } = useRevenueCatPurchases();
   const posthog = usePostHog();
   const { animatedStyle } = usePageTransition(false);
+
+  // Track bookmaker link taps by section
+  const trackBestLinesTap = useBookmakerTracking({
+    section: 'best_lines',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
+  });
+  const trackOddsTableTap = useBookmakerTracking({
+    section: 'odds_table',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
+  });
+  const trackEvOpsTap = useBookmakerTracking({
+    section: 'ev_opportunities',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
+  });
 
   // Track page view time - EXACT same as NFL
   useEffect(() => {
@@ -368,7 +390,12 @@ export default function SoccerMarketIntelScreen() {
           </View>
           <View style={styles.bestLinesContent}>
             {/* 1. Home ML */}
-            <View style={styles.bestLineItem}>
+            <BookmakerTappable
+              bookmaker={marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker}
+              sport={params.sport}
+              onLinkOpened={trackBestLinesTap}
+              style={styles.bestLineItem}
+            >
               <Image
                 source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker)}
                 style={styles.bestLineBookmakerLogo}
@@ -381,10 +408,15 @@ export default function SoccerMarketIntelScreen() {
                   Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Home ML")?.bookmaker || "Pinnacle"}
                 </BlurText>
               </View>
-            </View>
+            </BookmakerTappable>
 
             {/* 2. Draw ML */}
-            <View style={styles.bestLineItem}>
+            <BookmakerTappable
+              bookmaker={marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.bookmaker}
+              sport={params.sport}
+              onLinkOpened={trackBestLinesTap}
+              style={styles.bestLineItem}
+            >
               <Image
                 source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw ML")?.bookmaker)}
                 style={styles.bestLineBookmakerLogo}
@@ -397,10 +429,15 @@ export default function SoccerMarketIntelScreen() {
                   Best available draw odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Draw" || line.label === "Best Draw ML")?.bookmaker || "Fanatics"}
                 </BlurText>
               </View>
-            </View>
+            </BookmakerTappable>
 
             {/* 3. Away ML */}
-            <View style={styles.bestLineItem}>
+            <BookmakerTappable
+              bookmaker={marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.bookmaker}
+              sport={params.sport}
+              onLinkOpened={trackBestLinesTap}
+              style={styles.bestLineItem}
+            >
               <Image
                 source={getBookmakerLogo(marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.bookmaker)}
                 style={styles.bestLineBookmakerLogo}
@@ -413,7 +450,7 @@ export default function SoccerMarketIntelScreen() {
                   Best available odds at {marketResult?.marketIntelligence?.bestLines?.bestLines?.find(line => line.label === "Best Away to Win" || line.label === "Best Away ML")?.bookmaker || "FanDuel"}
                 </BlurText>
               </View>
-            </View>
+            </BookmakerTappable>
           </View>
         </View>
 
@@ -630,7 +667,7 @@ export default function SoccerMarketIntelScreen() {
             <Text style={styles.infoIcon}>ⓘ</Text>
           </View>
           <View style={styles.evOpportunitiesContent}>
-            <SoccerEVSection marketData={marketResult} params={params} />
+            <SoccerEVSection marketData={marketResult} params={params} onBookmakerTap={trackEvOpsTap} />
           </View>
         </View>
 
@@ -651,7 +688,14 @@ export default function SoccerMarketIntelScreen() {
 
             {/* Bookmaker Rows */}
             {(marketResult?.marketIntelligence?.oddsTable || []).map((bookmaker, index) => (
-              <View key={index} style={styles.oddsTableRow}>
+              <BookmakerTappable
+                key={index}
+                bookmaker={bookmaker.bookmakerKey || bookmaker.bookmaker}
+                sport={params.sport}
+                onLinkOpened={trackOddsTableTap}
+                style={styles.oddsTableRow}
+                showLinkIcon={false}
+              >
                 <View style={styles.oddsTableCell}>
                   <Image source={getBookmakerLogo(bookmaker.bookmaker)} style={styles.oddsTableBookmakerLogo} />
                   <Text style={styles.oddsTableBookmakerName}>{bookmaker.bookmaker}</Text>
@@ -671,7 +715,7 @@ export default function SoccerMarketIntelScreen() {
                     {formatOdds(bookmaker.odds?.moneyline?.away)}
                   </BlurText>
                 </View>
-              </View>
+              </BookmakerTappable>
             ))}
           </View>
         </View>
@@ -739,7 +783,8 @@ export default function SoccerMarketIntelScreen() {
 const SoccerEVSection: React.FC<{
   marketData: SoccerMarketIntelResult | null;
   params: SoccerMarketIntelParams;
-}> = ({ marketData, params }) => {
+  onBookmakerTap?: (bookmaker: string, config: any) => void;
+}> = ({ marketData, params, onBookmakerTap }) => {
   const opportunities = marketData?.marketIntelligence?.evOpportunities?.opportunities || [];
 
   if (opportunities.length === 0 || !marketData?.marketIntelligence?.evOpportunities?.hasOpportunities) {
@@ -766,7 +811,13 @@ const SoccerEVSection: React.FC<{
   return (
     <View style={evStyles.evArbContainer}>
       {opportunities.map((opportunity, index) => (
-        <View key={index} style={evStyles.opportunityItem}>
+        <BookmakerTappable
+          key={index}
+          bookmaker={opportunity.bookmaker}
+          sport={params.sport}
+          onLinkOpened={onBookmakerTap}
+          style={evStyles.opportunityItem}
+        >
           <Image
             source={getBookmakerLogo(opportunity.bookmaker)}
             style={evStyles.bookmakerLogo}
@@ -779,7 +830,7 @@ const SoccerEVSection: React.FC<{
               {opportunity.description}
             </BlurText>
           </View>
-        </View>
+        </BookmakerTappable>
       ))}
     </View>
   );

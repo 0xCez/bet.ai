@@ -17,7 +17,7 @@ import Animated, {
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useLocalSearchParams, router } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebaseConfig";
@@ -25,6 +25,56 @@ import { colors, typography, spacing, borderRadius } from "../constants/designTo
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "../utils/teamLogos";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
+import { BookmakerTappable } from "../components/BookmakerTappable";
+import { useBookmakerTracking } from "../hooks/useBookmakerTracking";
+
+// Format decimal odds to American odds string
+function formatOdds(decimalOdds?: number): string {
+  if (!decimalOdds) return "-110";
+  if (decimalOdds >= 2.0) {
+    return `+${Math.round((decimalOdds - 1) * 100)}`;
+  } else {
+    return `-${Math.round(100 / (decimalOdds - 1))}`;
+  }
+}
+
+// Bookmaker logo lookup (supports both display names and API keys)
+const getBookmakerLogo = (bookmakerName?: string) => {
+  if (!bookmakerName) return require("../assets/images/logo.png");
+  const logoMap: { [key: string]: any } = {
+    // Display names
+    'DraftKings': require("../assets/images/Draftkings.png"),
+    'FanDuel': require("../assets/images/Fanduel.png"),
+    'BetMGM': require("../assets/images/Betmgm.png"),
+    'Pinnacle': require("../assets/images/Pinaccle.png"),
+    'BetUS': require("../assets/images/Betus.png"),
+    'BetRivers': require("../assets/images/Betrivers.png"),
+    'Bovada': require("../assets/images/Bovada.png"),
+    'MyBookie.ag': require("../assets/images/mybookie.png"),
+    'ESPN BET': require("../assets/images/Espnbet.png"),
+    'Caesars': require("../assets/images/Caesars.png"),
+    'LowVig.ag': require("../assets/images/Lowvig.png"),
+    'BetOnline.ag': require("../assets/images/Betonline.png"),
+    // API keys / lowercase variants
+    'draftkings': require("../assets/images/Draftkings.png"),
+    'fanduel': require("../assets/images/Fanduel.png"),
+    'betmgm': require("../assets/images/Betmgm.png"),
+    'pinnacle': require("../assets/images/Pinaccle.png"),
+    'betus': require("../assets/images/Betus.png"),
+    'betrivers': require("../assets/images/Betrivers.png"),
+    'bovada': require("../assets/images/Bovada.png"),
+    'mybookieag': require("../assets/images/mybookie.png"),
+    'espnbet': require("../assets/images/Espnbet.png"),
+    'caesars': require("../assets/images/Caesars.png"),
+    'lowvig': require("../assets/images/Lowvig.png"),
+    'betonlineag': require("../assets/images/Betonline.png"),
+    'fanatics': require("../assets/images/fanatics.png"),
+    'Fanatics': require("../assets/images/fanatics.png"),
+    'ballybet': require("../assets/images/logo.png"),
+    'hardrockbet': require("../assets/images/logo.png"),
+  };
+  return logoMap[bookmakerName] || logoMap[bookmakerName.toLowerCase().replace(/[^a-z0-9]/g, '')] || require("../assets/images/logo.png");
+};
 
 // Format game time nicely
 function formatGameTime(isoString?: string): string | null {
@@ -183,6 +233,39 @@ export default function SinglePredictionScreen() {
 
   // Get game time from analysis data
   const gameTime = formatGameTime(analysisResult?.gameStartTime);
+
+  // === MARKET INTEL: Best line for favored team ===
+  const marketIntel = analysisResult?.marketIntelligence;
+  const bestLines = marketIntel?.bestLines?.bestLines || [];
+  const sport = analysisResult?.sport;
+
+  // Find the best moneyline for the predicted/favored team
+  const bestLineForFavored = bestLines.find(
+    (line: any) =>
+      (line.type === "moneyline" || line.type === "soccer_win") &&
+      line.team?.toLowerCase().includes(favoredTeam.split(" ").pop()?.toLowerCase() || "")
+  ) || bestLines.find(
+    (line: any) => line.type === "moneyline" || line.type === "soccer_win"
+  );
+
+  // EV+ opportunities (filter out "no opportunities" entries with icon "x")
+  const evOpportunities = marketIntel?.evOpportunities?.opportunities?.filter(
+    (opp: any) => opp.icon !== "x"
+  ) || [];
+
+  // Bookmaker tracking
+  const trackSmartBetTap = useBookmakerTracking({
+    section: "best_lines",
+    sport,
+    team1: homeTeam,
+    team2: awayTeam,
+  });
+  const trackEvTap = useBookmakerTracking({
+    section: "ev_opportunities",
+    sport,
+    team1: homeTeam,
+    team2: awayTeam,
+  });
 
   // === FETCH AI-GENERATED WIN REASONS ===
   useEffect(() => {
@@ -386,6 +469,94 @@ export default function SinglePredictionScreen() {
             ))
           )}
         </Animated.View>
+
+        {/* Smart Bet Card — Best Line + EV+ Opps */}
+        {(bestLineForFavored || evOpportunities.length > 0) && (
+          <Animated.View
+            entering={FadeInUp.duration(500).delay(400)}
+            style={styles.smartBetCard}
+          >
+            {/* Best Line for favored team */}
+            {bestLineForFavored && (
+              <>
+                <View style={styles.smartBetHeader}>
+                  <Feather name="zap" size={14} color={colors.primary} />
+                  <Text style={styles.smartBetHeaderText}>BEST LINE</Text>
+                </View>
+                <BookmakerTappable
+                  bookmaker={bestLineForFavored.bookmaker}
+                  sport={sport}
+                  onLinkOpened={trackSmartBetTap}
+                  style={styles.smartBetRow}
+                  showLinkIcon={false}
+                >
+                  <Image
+                    source={getBookmakerLogo(bestLineForFavored.bookmaker)}
+                    style={styles.smartBetBookLogo}
+                    contentFit="contain"
+                  />
+                  <View style={styles.smartBetTextCol}>
+                    <Text style={styles.smartBetOdds}>
+                      {favoredTeam.split(" ").pop()}{" "}
+                      {bestLineForFavored.type === "soccer_win"
+                        ? (bestLineForFavored.fractionalOdds || formatOdds(bestLineForFavored.odds)) + " to win"
+                        : bestLineForFavored.type === "moneyline"
+                        ? "ML " + formatOdds(bestLineForFavored.odds)
+                        : bestLineForFavored.type === "spread"
+                        ? (bestLineForFavored.line || "") + " " + formatOdds(bestLineForFavored.odds)
+                        : formatOdds(bestLineForFavored.odds)}
+                    </Text>
+                    <Text style={styles.smartBetBookName}>
+                      on {bestLineForFavored.bookmaker}
+                    </Text>
+                  </View>
+                  <Ionicons name="open-outline" size={14} color={colors.mutedForeground} />
+                </BookmakerTappable>
+                <Text style={styles.smartBetSubtext}>
+                  Lowest vig across 20+ sportsbooks
+                </Text>
+              </>
+            )}
+
+            {/* EV+ Opportunities */}
+            {evOpportunities.length > 0 && (
+              <>
+                <View style={[styles.smartBetHeader, bestLineForFavored && styles.smartBetEvHeader]}>
+                  <Feather name="trending-up" size={14} color={colors.success} />
+                  <Text style={styles.smartBetEvHeaderText}>EV+ OPPORTUNITIES</Text>
+                </View>
+                {evOpportunities.map((opp: any, index: number) => {
+                  // EV opps have no bookmaker field — parse from description ("FanDuel • 9/1") or title ("+EV 5% at DraftKings")
+                  const bookmakerName = opp.bookmaker
+                    || opp.description?.split("•")?.[0]?.trim()
+                    || opp.title?.match(/at\s+(.+)$/)?.[1]?.trim()
+                    || "";
+                  return (
+                    <BookmakerTappable
+                      key={index}
+                      bookmaker={bookmakerName}
+                      sport={sport}
+                      onLinkOpened={trackEvTap}
+                      style={styles.smartBetRow}
+                      showLinkIcon={false}
+                    >
+                      <Image
+                        source={getBookmakerLogo(bookmakerName)}
+                        style={styles.smartBetBookLogo}
+                        contentFit="contain"
+                      />
+                      <View style={styles.smartBetTextCol}>
+                        <Text style={styles.smartBetOdds}>{opp.title}</Text>
+                        <Text style={styles.smartBetBookName}>{opp.description}</Text>
+                      </View>
+                      <Ionicons name="open-outline" size={14} color={colors.mutedForeground} />
+                    </BookmakerTappable>
+                  );
+                })}
+              </>
+            )}
+          </Animated.View>
+        )}
 
         {/* ML Player Props Card - Below Why They Win */}
         {analysisResult?.mlPlayerProps?.topProps && analysisResult.mlPlayerProps.topProps.length > 0 && (
@@ -777,5 +948,74 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.sizes.base,
     color: colors.foreground,
+  },
+
+  // Smart Bet Card
+  smartBetCard: {
+    backgroundColor: "rgba(30, 35, 45, 0.9)",
+    borderRadius: borderRadius.xl,
+    padding: spacing[5],
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    marginBottom: spacing[5],
+  },
+  smartBetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    marginBottom: spacing[3],
+  },
+  smartBetHeaderText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.xs,
+    color: colors.primary,
+    letterSpacing: 2,
+  },
+  smartBetEvHeader: {
+    marginTop: spacing[4],
+    paddingTop: spacing[4],
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.06)",
+  },
+  smartBetEvHeaderText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.xs,
+    color: colors.success,
+    letterSpacing: 2,
+  },
+  smartBetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    backgroundColor: "rgba(255, 255, 255, 0.04)",
+    borderRadius: borderRadius.lg,
+    padding: spacing[3],
+    marginBottom: spacing[2],
+  },
+  smartBetBookLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.md,
+  },
+  smartBetTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  smartBetOdds: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.sizes.base,
+    color: colors.foreground,
+  },
+  smartBetBookName: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+  },
+  smartBetSubtext: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.sizes.xs,
+    color: colors.mutedForeground,
+    opacity: 0.6,
+    marginTop: spacing[1],
   },
 });

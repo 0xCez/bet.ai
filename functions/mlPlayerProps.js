@@ -39,7 +39,7 @@ const getApiKey = () => {
 };
 
 // SGO API Configuration
-const SGO_API_KEY = 'b07ce45b95064ec5b62dcbb1ca5e7cf0';
+const SGO_API_KEY = '8e767501a24d345e14345882dd4e59f0';
 const SGO_BASE_URL = 'https://api.sportsgameodds.com/v2';
 
 /**
@@ -312,7 +312,8 @@ exports.getMLPlayerPropsForGame = functions.https.onRequest(
   {
     timeoutSeconds: 300, // 5 minutes for processing multiple props
     memory: '1GiB',
-    cors: true
+    cors: true,
+    secrets: ['API_SPORTS_KEY']
   },
   async (req, res) => {
     try {

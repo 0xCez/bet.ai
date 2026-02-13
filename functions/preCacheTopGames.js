@@ -57,7 +57,7 @@ const SOCCER_LEAGUES = [
 
 // Post-game buffer: keep analysis available for 4 hours after game starts
 // This allows users to still view analysis during/shortly after the game
-const POST_GAME_BUFFER_MS = 4 * 60 * 60 * 1000; // 4 hours
+const POST_GAME_BUFFER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days - keep for content creators
 
 /**
  * Generate cache key for a game based on team IDs
@@ -241,9 +241,8 @@ exports.preCacheTopGames = onRequest({
         const batch = getDb().batch();
         allPreCachedSnapshot.docs.forEach((doc) => {
           const data = doc.data();
-          // Delete if expired OR if forceRefresh and NBA game
-          const shouldDelete = (data.expiresAt && data.expiresAt < now) ||
-                               (forceRefresh && data.sport === 'nba');
+          // Only delete if expired (7-day TTL). forceRefresh just re-caches, doesn't wipe old games
+          const shouldDelete = (data.expiresAt && data.expiresAt < now);
           if (shouldDelete) {
             batch.delete(doc.ref);
             results.cleaned++;
@@ -623,11 +622,11 @@ function generateFallbackAnalysis(team1, team2, keyInsightsNew, teamStats, gameD
 }
 
 /**
- * Scheduled version - runs every 2 days at 6 AM UTC
+ * Scheduled version - runs twice daily at 6 AM and 6 PM UTC
  * This automatically creates a Cloud Scheduler job on deploy
  */
 exports.preCacheTopGamesScheduled = onSchedule({
-  schedule: '0 6 */2 * *',
+  schedule: '0 6,18 * * *',
   timeZone: 'UTC',
   timeoutSeconds: 540,
   memory: '512MiB'

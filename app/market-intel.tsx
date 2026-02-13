@@ -25,6 +25,8 @@ import { auth, db } from "@/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { getNBATeamLogo, getNFLTeamLogo, getSoccerTeamLogo } from "@/utils/teamLogos";
 import { usePageTracking } from "@/hooks/usePageTracking";
+import { useBookmakerTracking } from "@/hooks/useBookmakerTracking";
+import { BookmakerTappable } from "@/components/BookmakerTappable";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, borderRadius as radii, typography, shimmerColors } from "../constants/designTokens";
 
@@ -212,6 +214,26 @@ export default function MarketIntelNew() {
       analysisId: params.analysisId,
       isDemo: params.isDemo === 'true',
     },
+  });
+
+  // Track bookmaker link taps by section
+  const trackBestLinesTap = useBookmakerTracking({
+    section: 'best_lines',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
+  });
+  const trackOddsTableTap = useBookmakerTracking({
+    section: 'odds_table',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
+  });
+  const trackEvOpsTap = useBookmakerTracking({
+    section: 'ev_opportunities',
+    sport: params.sport,
+    team1: params.team1,
+    team2: params.team2,
   });
 
   // Check if we're navigating with the same params
@@ -874,7 +896,13 @@ export default function MarketIntelNew() {
               <View style={styles.linesList}>
                 {marketResult?.marketIntelligence?.bestLines?.bestLines && marketResult.marketIntelligence.bestLines.bestLines.length > 0 ? (
                   marketResult.marketIntelligence.bestLines.bestLines.slice(0, 6).map((line, index) => (
-                    <View key={index} style={styles.lineItem}>
+                    <BookmakerTappable
+                      key={index}
+                      bookmaker={line.bookmaker}
+                      sport={params.sport}
+                      onLinkOpened={trackBestLinesTap}
+                      style={styles.lineItem}
+                    >
                       <Image
                         source={getBookmakerLogo(line.bookmaker)}
                         style={styles.bookmakerLogo}
@@ -892,7 +920,7 @@ export default function MarketIntelNew() {
                         </Text>
                         <Text style={styles.lineSmallText}>{line.label}</Text>
                       </View>
-                    </View>
+                    </BookmakerTappable>
                   ))
                 ) : (
                   <View style={styles.emptyState}>
@@ -1165,7 +1193,14 @@ export default function MarketIntelNew() {
 
                 {/* Bookmaker Rows */}
                 {marketResult.marketIntelligence.oddsTable.slice(0, 5).map((bookmaker, index) => (
-                  <View key={`soccer-${index}`} style={styles.oddsTableRow}>
+                  <BookmakerTappable
+                    key={`soccer-${index}`}
+                    bookmaker={bookmaker.bookmakerKey || bookmaker.bookmaker}
+                    sport={params.sport}
+                    onLinkOpened={trackOddsTableTap}
+                    style={styles.oddsTableRow}
+                    showLinkIcon={false}
+                  >
                     <View style={styles.oddsTableCell}>
                       <Image
                         source={getBookmakerLogo(bookmaker.bookmaker)}
@@ -1196,7 +1231,7 @@ export default function MarketIntelNew() {
                         {bookmaker.odds?.moneyline?.awayFractional || formatOdds(bookmaker.odds?.moneyline?.away)}
                       </Text>
                     </View>
-                  </View>
+                  </BookmakerTappable>
                 ))}
               </View>
             ) : (
@@ -1214,7 +1249,14 @@ export default function MarketIntelNew() {
 
             {/* Dynamic Bookmaker Rows for Team 1 */}
             {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
-              <View key={`team1-${index}`} style={styles.oddsTableRow}>
+              <BookmakerTappable
+                key={`team1-${index}`}
+                bookmaker={bookmaker.bookmakerKey || bookmaker.bookmaker}
+                sport={params.sport}
+                onLinkOpened={trackOddsTableTap}
+                style={styles.oddsTableRow}
+                showLinkIcon={false}
+              >
                 <View style={styles.oddsTableCell}>
                   <Image
                     source={getBookmakerLogo(bookmaker.bookmaker)}
@@ -1259,7 +1301,7 @@ export default function MarketIntelNew() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </BookmakerTappable>
             ))}
 
             {/* Team 2 Section */}
@@ -1267,7 +1309,14 @@ export default function MarketIntelNew() {
 
             {/* Dynamic Bookmaker Rows for Team 2 */}
             {marketResult.marketIntelligence.oddsTable.slice(0, 3).map((bookmaker, index) => (
-              <View key={`team2-${index}`} style={styles.oddsTableRow}>
+              <BookmakerTappable
+                key={`team2-${index}`}
+                bookmaker={bookmaker.bookmakerKey || bookmaker.bookmaker}
+                sport={params.sport}
+                onLinkOpened={trackOddsTableTap}
+                style={styles.oddsTableRow}
+                showLinkIcon={false}
+              >
                 <View style={styles.oddsTableCell}>
                   <Image
                     source={getBookmakerLogo(bookmaker.bookmaker)}
@@ -1312,7 +1361,7 @@ export default function MarketIntelNew() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </BookmakerTappable>
             ))}
               </View>
               )
@@ -1685,17 +1734,37 @@ export default function MarketIntelNew() {
                marketResult.marketIntelligence.evOpportunities.opportunities.length > 0 ? (
                 <View style={styles.linesList}>
                   {marketResult.marketIntelligence.evOpportunities.opportunities.map((opportunity, index) => (
-                    <View key={index} style={styles.lineItem}>
-                      <Image
-                        source={opportunity.icon === "x" ? require("../assets/images/noevopps.png") : getBookmakerLogo(opportunity.bookmaker)}
-                        style={styles.bookmakerLogo}
-                        contentFit="contain"
-                      />
-                      <View style={styles.lineTextContainer}>
-                        <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
-                        <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                    opportunity.icon === "x" ? (
+                      <View key={index} style={styles.lineItem}>
+                        <Image
+                          source={require("../assets/images/noevopps.png")}
+                          style={styles.bookmakerLogo}
+                          contentFit="contain"
+                        />
+                        <View style={styles.lineTextContainer}>
+                          <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
+                          <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                        </View>
                       </View>
-                    </View>
+                    ) : (
+                      <BookmakerTappable
+                        key={index}
+                        bookmaker={opportunity.bookmaker}
+                        sport={params.sport}
+                        onLinkOpened={trackEvOpsTap}
+                        style={styles.lineItem}
+                      >
+                        <Image
+                          source={getBookmakerLogo(opportunity.bookmaker)}
+                          style={styles.bookmakerLogo}
+                          contentFit="contain"
+                        />
+                        <View style={styles.lineTextContainer}>
+                          <Text style={styles.opportunityBigText}>{opportunity.title}</Text>
+                          <Text style={styles.lineSmallText}>{opportunity.description}</Text>
+                        </View>
+                      </BookmakerTappable>
+                    )
                   ))}
                 </View>
               ) : (
