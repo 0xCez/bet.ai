@@ -288,6 +288,33 @@ async function processPropThroughML(prop, apiSportsId, homeTeam, awayTeam, gameD
     // Get ML prediction
     const prediction = await callVertexAI(mlFeatures);
 
+    // Store prediction in Firestore for feedback loop (retraining)
+    try {
+      await getDb().collection('ml_predictions').add({
+        features: mlFeatures,
+        prediction: {
+          prediction: prediction.prediction,
+          probability_over: prediction.probabilityOver,
+          probability_under: prediction.probabilityUnder,
+          confidence: prediction.confidence,
+          model_version: prediction.modelInfo?.modelVersionId || 'unknown'
+        },
+        playerName: prop.playerName,
+        propType: prop.statType,
+        line: prop.line,
+        gameDate: gameDate,
+        homeTeam,
+        awayTeam,
+        resultRecorded: false,
+        actualStat: null,
+        actualResult: null,
+        wasCorrect: null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (feedbackError) {
+      console.warn('[ML Feedback] Error storing prediction:', feedbackError.message);
+    }
+
     return {
       ...prop,
       gamesUsed: gameLogs.length,

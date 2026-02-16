@@ -22,6 +22,12 @@ exports.getMLPlayerPropsForGame = getMLPlayerPropsForGame;
 const { getMLPlayerPropsV2 } = require('./mlPlayerPropsV2');
 exports.getMLPlayerPropsV2 = getMLPlayerPropsV2;
 
+// ML Feedback Loop - Track prediction results and export for retraining
+const { trackPredictionResults } = require('./trackPredictionResults');
+exports.trackPredictionResults = trackPredictionResults;
+const { exportFeedbackCSV } = require('./exportFeedbackCSV');
+exports.exportFeedbackCSV = exportFeedbackCSV;
+
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
