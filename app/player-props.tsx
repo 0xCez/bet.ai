@@ -26,9 +26,16 @@ interface MLProp {
   probabilityUnder?: number;
   confidence: number;
   confidencePercent?: string;
+  confidenceTier?: string;
+  displayConfidence?: number;
+  displayConfidencePercent?: string;
   oddsOver?: number;
   oddsUnder?: number;
   gamesUsed?: number;
+  hitRates?: {
+    l10?: { over: number; total: number; pct: number };
+    season?: { over: number; total: number; pct: number };
+  };
 }
 
 interface PropsParams {
@@ -116,22 +123,25 @@ export default function PlayerPropsScreen() {
   };
 
   const renderPropCard = (prop: MLProp, index: number) => {
-    const probability = prop.prediction === 'over'
-      ? prop.probabilityOver
-      : prop.probabilityUnder;
+    const predLower = prop.prediction.toLowerCase();
 
-    const probabilityPercent = probability
-      ? `${(probability * 100).toFixed(1)}%`
-      : prop.confidencePercent || "N/A";
+    // Use calibrated displayConfidencePercent from backend (temperature-scaled T=2.0)
+    // Falls back to raw probability if backend hasn't been updated yet
+    const probabilityPercent = prop.displayConfidencePercent
+      ? `${prop.displayConfidencePercent}%`
+      : (() => {
+          const probability = predLower === 'over'
+            ? prop.probabilityOver
+            : prop.probabilityUnder;
+          return probability
+            ? `${(probability * 100).toFixed(1)}%`
+            : "N/A";
+        })();
 
-    // Use confidence tier from backend or calculate from confidence value
+    // Use confidence tier from backend
     const bettingValue = prop.confidenceTier || (
       typeof prop.confidence === 'number'
         ? (prop.confidence > 0.15 ? 'high' : prop.confidence >= 0.10 ? 'medium' : 'low')
-        : parseFloat(prop.confidencePercent?.replace('%', '') || '0') / 100 > 0.15
-        ? 'high'
-        : parseFloat(prop.confidencePercent?.replace('%', '') || '0') / 100 >= 0.10
-        ? 'medium'
         : 'low'
     );
 
@@ -171,7 +181,7 @@ export default function PlayerPropsScreen() {
           <View style={styles.propPrediction}>
             <View style={styles.predictionRow}>
               <Feather
-                name={prop.prediction === 'over' ? 'trending-up' : 'trending-down'}
+                name={predLower === 'over' ? 'trending-up' : 'trending-down'}
                 size={20}
                 color={colors.primary}
               />

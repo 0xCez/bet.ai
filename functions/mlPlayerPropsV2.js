@@ -18,8 +18,14 @@ const { GoogleAuth } = require('google-auth-library');
 let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
 
-// Config
-const SGO_API_KEY = 'b07ce45b95064ec5b62dcbb1ca5e7cf0';
+// Config — SGO API keys with rotation
+const SGO_API_KEYS = [
+  'b07ce45b95064ec5b62dcbb1ca5e7cf0',
+  '8e767501a24d345e14345882dd4e59f0',
+];
+let sgoKeyIndex = 0;
+const getSGOKey = () => SGO_API_KEYS[sgoKeyIndex % SGO_API_KEYS.length];
+const rotateSGOKey = () => { sgoKeyIndex = (sgoKeyIndex + 1) % SGO_API_KEYS.length; };
 const SGO_BASE_URL = 'https://api.sportsgameodds.com/v2';
 
 const VERTEX_ENDPOINT = 'https://us-central1-aiplatform.googleapis.com/v1/projects/133991312998/locations/us-central1/endpoints/7508590194849742848:predict';
@@ -49,6 +55,319 @@ const BOOKMAKER_MAP = {
 function normalizeBookmaker(name) {
   if (!name) return null;
   return BOOKMAKER_MAP[name.toLowerCase()] || name;
+}
+
+// ──────────────────────────────────────────────
+// HIT RATE CALCULATION
+// ──────────────────────────────────────────────
+
+function getStatValue(game, statType) {
+  const pts = game.points || 0;
+  const reb = game.totReb || 0;
+  const ast = game.assists || 0;
+  const stl = game.steals || 0;
+  const blk = game.blocks || 0;
+  const tov = game.turnovers || 0;
+  const tpm = game.tpm || 0;
+
+  switch (statType.toLowerCase()) {
+    case 'points': return pts;
+    case 'rebounds': return reb;
+    case 'assists': return ast;
+    case 'steals': return stl;
+    case 'blocks': return blk;
+    case 'turnovers': return tov;
+    case 'threepointersmade': return tpm;
+    case 'points+rebounds': return pts + reb;
+    case 'points+assists': return pts + ast;
+    case 'rebounds+assists': return reb + ast;
+    case 'points+rebounds+assists': return pts + reb + ast;
+    case 'blocks+steals': return blk + stl;
+    default: return null;
+  }
+}
+
+function calculateHitRates(gameLogs, statType, line) {
+  const l10 = gameLogs.slice(0, 10);
+
+  let l10Over = 0, l10Total = 0;
+  for (const g of l10) {
+    const val = getStatValue(g, statType);
+    if (val !== null) { l10Total++; if (val > line) l10Over++; }
+  }
+
+  let seasonOver = 0, seasonTotal = 0;
+  for (const g of gameLogs) {
+    const val = getStatValue(g, statType);
+    if (val !== null) { seasonTotal++; if (val > line) seasonOver++; }
+  }
+
+  return {
+    l10: { over: l10Over, total: l10Total, pct: l10Total > 0 ? Math.round((l10Over / l10Total) * 100) : 0 },
+    season: { over: seasonOver, total: seasonTotal, pct: seasonTotal > 0 ? Math.round((seasonOver / seasonTotal) * 100) : 0 }
+  };
+}
+
+// ──────────────────────────────────────────────
+// REASONING FEATURES (model's "why")
+// ──────────────────────────────────────────────
+
+function getReasoningFeatures(features, statType) {
+  const st = statType.toLowerCase();
+  const r = { minutesTrend: parseFloat(features.MINUTES_TREND.toFixed(2)) };
+
+  if (st === 'points' || st.includes('points')) {
+    r.trend = parseFloat(features.TREND_PTS.toFixed(2));
+    r.consistency = parseFloat(features.CONSISTENCY_PTS.toFixed(3));
+    r.lineDifficulty = parseFloat(features.LINE_DIFFICULTY_PTS.toFixed(3));
+    r.l3vsL10Ratio = parseFloat(features.L3_vs_L10_PTS_RATIO.toFixed(3));
+  }
+  if (st === 'rebounds' || st.includes('rebounds')) {
+    r.trendReb = parseFloat(features.TREND_REB.toFixed(2));
+    r.consistencyReb = parseFloat(features.CONSISTENCY_REB.toFixed(3));
+    r.lineDifficultyReb = parseFloat(features.LINE_DIFFICULTY_REB.toFixed(3));
+    r.l3vsL10RatioReb = parseFloat(features.L3_vs_L10_REB_RATIO.toFixed(3));
+  }
+  if (st === 'assists' || st.includes('assists')) {
+    r.trendAst = parseFloat(features.TREND_AST.toFixed(2));
+    r.consistencyAst = parseFloat(features.CONSISTENCY_AST.toFixed(3));
+    r.lineDifficultyAst = parseFloat(features.LINE_DIFFICULTY_AST.toFixed(3));
+  }
+
+  return r;
+}
+
+// ──────────────────────────────────────────────
+// OPPONENT DEFENSIVE STATS (NBA.com)
+// ──────────────────────────────────────────────
+
+const OPP_STATS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getOpponentDefensiveStats() {
+  const db = getDb();
+  const season = `${getCurrentNBASeason()}-${String(getCurrentNBASeason() + 1).slice(-2)}`;
+  const cacheKey = `nba_opp_stats_${season}`;
+
+  // Check cache
+  try {
+    const doc = await db.collection('ml_cache').doc(cacheKey).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (Date.now() - data.fetchedAt < OPP_STATS_CACHE_TTL) {
+        console.log('[v2] Opponent stats cache HIT');
+        return data;
+      }
+    }
+  } catch (e) {
+    console.warn('[v2] Opp stats cache read error:', e.message);
+  }
+
+  // Fetch from NBA.com
+  console.log('[v2] Fetching opponent stats from NBA.com...');
+  try {
+    const url = `https://stats.nba.com/stats/leaguedashteamstats?` +
+      `Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&` +
+      `ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Opponent&` +
+      `Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&` +
+      `PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&` +
+      `PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&` +
+      `SeasonType=Regular+Season&ShotClockRange=&StarterBench=&` +
+      `TeamID=0&TwoWay=0&VsConference=&VsDivision=`;
+
+    const resp = await axios.get(url, {
+      headers: {
+        'Referer': 'https://www.nba.com/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://www.nba.com',
+        'x-nba-stats-origin': 'stats',
+        'x-nba-stats-token': 'true',
+      },
+      timeout: 15000
+    });
+
+    const headers = resp.data.resultSets[0].headers;
+    const rows = resp.data.resultSets[0].rowSet;
+    const idx = (name) => headers.indexOf(name);
+    const iCity = idx('TEAM_CITY'), iTeamName = idx('TEAM_NAME');
+    const iOppPts = idx('OPP_PTS'), iOppReb = idx('OPP_REB'), iOppAst = idx('OPP_AST');
+    const iOppStl = idx('OPP_STL'), iOppBlk = idx('OPP_BLK'), iOppTov = idx('OPP_TOV');
+    const iOppFg3m = idx('OPP_FG3M');
+
+    // Build team key: try "City Name" first, fall back to just "Name"
+    const teams = {};
+    for (const row of rows) {
+      const city = iCity >= 0 ? row[iCity] : null;
+      const name = iTeamName >= 0 ? row[iTeamName] : null;
+      if (!name) continue;
+      const fullName = city ? `${city} ${name}` : name;
+      const key = fullName.toLowerCase().trim();
+      teams[key] = {
+        oppPts: row[iOppPts], oppReb: row[iOppReb], oppAst: row[iOppAst],
+        oppStl: row[iOppStl], oppBlk: row[iOppBlk], oppTov: row[iOppTov],
+        oppFg3m: row[iOppFg3m],
+      };
+    }
+
+    // Compute ranks (1 = fewest allowed = best defense, 30 = most allowed = worst)
+    const ranks = {};
+    for (const stat of ['oppPts', 'oppReb', 'oppAst', 'oppStl', 'oppBlk', 'oppTov', 'oppFg3m']) {
+      const sorted = Object.entries(teams).sort((a, b) => a[1][stat] - b[1][stat]);
+      sorted.forEach(([teamKey], i) => {
+        if (!ranks[teamKey]) ranks[teamKey] = {};
+        ranks[teamKey][stat + 'Rank'] = i + 1;
+      });
+    }
+
+    const cacheData = { season, fetchedAt: Date.now(), teams, ranks };
+    try { await db.collection('ml_cache').doc(cacheKey).set(cacheData); } catch (e) { /* silent */ }
+
+    console.log(`[v2] Opponent stats fetched for ${Object.keys(teams).length} teams`);
+    return cacheData;
+
+  } catch (err) {
+    console.error('[v2] NBA.com opponent stats failed:', err.message);
+    return null;
+  }
+}
+
+function getOpponentStatForProp(oppStatsData, oppTeamName, statType) {
+  if (!oppStatsData || !oppTeamName) return null;
+
+  const key = oppTeamName.toLowerCase().trim();
+  const stats = oppStatsData.teams?.[key];
+  const rankData = oppStatsData.ranks?.[key];
+  if (!stats || !rankData) {
+    return null;
+  }
+
+  const st = statType.toLowerCase();
+  const result = {};
+
+  if (st === 'points' || st.includes('points'))     { result.allowed = stats.oppPts; result.rank = rankData.oppPtsRank; result.stat = 'PTS'; }
+  if (st === 'rebounds' || st.includes('rebounds'))   { result.allowedReb = stats.oppReb; result.rankReb = rankData.oppRebRank; result.statReb = 'REB'; }
+  if (st === 'assists' || st.includes('assists'))     { result.allowedAst = stats.oppAst; result.rankAst = rankData.oppAstRank; result.statAst = 'AST'; }
+  if (st === 'steals')              { result.allowed = stats.oppStl; result.rank = rankData.oppStlRank; result.stat = 'STL'; }
+  if (st === 'blocks')              { result.allowed = stats.oppBlk; result.rank = rankData.oppBlkRank; result.stat = 'BLK'; }
+  if (st === 'turnovers')           { result.allowed = stats.oppTov; result.rank = rankData.oppTovRank; result.stat = 'TOV'; }
+  if (st === 'threepointersmade')   { result.allowed = stats.oppFg3m; result.rank = rankData.oppFg3mRank; result.stat = '3PM'; }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+// ──────────────────────────────────────────────
+// TEMPERATURE SCALING & SANITY FILTER
+// ──────────────────────────────────────────────
+
+/**
+ * Temperature scaling: prob → logit → divide by T → re-sigmoid.
+ * T > 1 softens extreme probabilities toward 50% (more honest for a 65%-accurate model).
+ * T = 2.0 empirically tested: 95% → 82%, 5% → 18%, 60% stays ~55%.
+ */
+function calibrateProbability(prob, T = 2.0) {
+  const p = Math.max(0.001, Math.min(0.999, prob));
+  const logit = Math.log(p / (1 - p));
+  return 1 / (1 + Math.exp(-logit / T));
+}
+
+/**
+ * Get the L10 average for a specific stat type (matches SGO stat IDs).
+ * Returns null if we can't compute it.
+ */
+function getL10AvgForStat(playerStats, statType, features) {
+  const st = statType.toLowerCase();
+  switch (st) {
+    case 'points': return playerStats?.pointsPerGame ?? null;
+    case 'rebounds': return playerStats?.reboundsPerGame ?? null;
+    case 'assists': return playerStats?.assistsPerGame ?? null;
+    case 'steals': return playerStats?.stealsPerGame ?? null;
+    case 'blocks': return playerStats?.blocksPerGame ?? null;
+    case 'turnovers': return features?.L10_TOV ?? null;
+    case 'threepointersmade': return features?.L10_FG3M ?? null;
+    case 'points+rebounds':
+      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.reboundsPerGame ?? 0);
+    case 'points+assists':
+      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
+    case 'rebounds+assists':
+      return (playerStats?.reboundsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
+    case 'points+rebounds+assists':
+      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.reboundsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
+    case 'blocks+steals':
+      return (playerStats?.blocksPerGame ?? 0) + (playerStats?.stealsPerGame ?? 0);
+    default: return null;
+  }
+}
+
+/**
+ * Avg-gated sanity check:
+ *
+ *   • Avg on RIGHT side of line → PASS (tags on card show quality signals)
+ *   • Avg on WRONG side of line → need 2+ supporting signals to survive
+ *
+ * Supporting signals (when avg is wrong-side):
+ *   1. Opponent defense rank — weak DEF (21-30) supports Over, strong DEF (1-10) supports Under
+ *   2. L10 hit rate — ≥60% over-rate supports Over, ≤40% supports Under
+ *   3. Season hit rate — same thresholds as L10
+ *
+ * This catches "Under 19.5, avg 19.8, vs 29th DEF" while allowing edge cases
+ * like "Over 25.5, avg 24.0, vs 28th DEF, 8/10 hit" to survive.
+ */
+function passesSanityCheck(prediction, statType, line, playerStats, hitRates, features, opponentDefense) {
+  const l10Avg = getL10AvgForStat(playerStats, statType, features);
+  if (l10Avg === null || line === 0) return { pass: true, reason: 'insufficient_data' };
+
+  const isOver = prediction === 'Over';
+  const avgOnRightSide = isOver ? l10Avg >= line : l10Avg <= line;
+
+  // ── Avg on RIGHT side → PASS ──
+  // Other signals (defense, hit rate) show as color-coded tags on the card
+  if (avgOnRightSide) {
+    return { pass: true, reason: 'avg_supports' };
+  }
+
+  // ── Avg on WRONG side → need 2+ supporting signals to override ──
+  let supporting = 0;
+  const details = [`avg ${l10Avg.toFixed(1)} on wrong side of line ${line}`];
+
+  // Signal 1: Opponent defense rank
+  const defRank = opponentDefense?.rank ?? null;
+  if (defRank != null) {
+    const defSupports = isOver ? defRank >= 21 : defRank <= 10;
+    if (defSupports) {
+      supporting++;
+    } else {
+      details.push(`DEF rank ${defRank} does not support`);
+    }
+  }
+
+  // Signal 2: L10 hit rate (pct = over-rate)
+  const l10HitPct = hitRates?.l10?.pct ?? null;
+  if (l10HitPct != null) {
+    const l10Supports = isOver ? l10HitPct >= 60 : l10HitPct <= 40;
+    if (l10Supports) {
+      supporting++;
+    } else {
+      details.push(`L10 hit ${l10HitPct}% does not support`);
+    }
+  }
+
+  // Signal 3: Season hit rate
+  const seasonHitPct = hitRates?.season?.pct ?? null;
+  if (seasonHitPct != null) {
+    const seasonSupports = isOver ? seasonHitPct >= 60 : seasonHitPct <= 40;
+    if (seasonSupports) {
+      supporting++;
+    } else {
+      details.push(`Season hit ${seasonHitPct}% does not support`);
+    }
+  }
+
+  // Need 2+ supporting signals to override wrong-side avg
+  if (supporting >= 2) {
+    return { pass: true, reason: `avg wrong side but ${supporting}/3 signals support — override` };
+  }
+
+  return { pass: false, reason: `avg wrong side, only ${supporting}/3 support: ${details.join('; ')}` };
 }
 
 // ──────────────────────────────────────────────
@@ -137,7 +456,7 @@ async function findPlayerId(playerName, apiKey) {
 /**
  * Fetch game logs for a player
  */
-async function getGameLogs(playerId, apiKey, limit = 15) {
+async function getGameLogs(playerId, apiKey, limit = 82) {
   try {
     const season = getCurrentNBASeason();
     const response = await axios.get(
@@ -190,9 +509,9 @@ function parseMinutes(minStr) {
 }
 
 function stddev(arr) {
-  if (!arr || arr.length === 0) return 0;
+  if (!arr || arr.length <= 1) return 0;
   const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
-  return Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / arr.length);
+  return Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / (arr.length - 1));
 }
 
 function daysBetween(d1, d2) {
@@ -205,16 +524,60 @@ function americanToImpliedProb(odds) {
 }
 
 /**
+ * Get the L3 stat matching the prop_type (uses SUM for combos).
+ * Used for LINE_VALUE computation per FEATURES_88_COMPLETE.md Section 13.
+ */
+function getL3StatForProp(modelPropType, f) {
+  switch (modelPropType) {
+    case 'points': return f.L3_PTS;
+    case 'rebounds': return f.L3_REB;
+    case 'assists': return f.L3_AST;
+    case 'threes': return f.L3_FG3M;
+    case 'blocks': return f.L3_BLK;
+    case 'steals': return f.L3_STL;
+    case 'turnovers': return f.L3_TOV;
+    case 'points_rebounds': return f.L3_PTS + f.L3_REB;
+    case 'points_assists': return f.L3_PTS + f.L3_AST;
+    case 'rebounds_assists': return f.L3_REB + f.L3_AST;
+    case 'points_rebounds_assists': return f.L3_PTS + f.L3_REB + f.L3_AST;
+    case 'blocks_steals': return f.L3_BLK + f.L3_STL;
+    default: return f.L3_PTS;
+  }
+}
+
+/**
+ * Get the relevant stat for market comparison (uses PRIMARY stat, not combo sum).
+ * Used for L3_vs_market and L10_vs_market per FEATURES_88_COMPLETE.md Section 13.
+ */
+function getMarketStat(modelPropType, f, window) {
+  if (['points', 'points_rebounds', 'points_assists', 'points_rebounds_assists', 'threes'].includes(modelPropType)) {
+    return f[`${window}_PTS`];
+  } else if (['rebounds', 'rebounds_assists'].includes(modelPropType)) {
+    return f[`${window}_REB`];
+  } else if (modelPropType === 'assists') {
+    return f[`${window}_AST`];
+  } else if (['blocks', 'blocks_steals'].includes(modelPropType)) {
+    return f[`${window}_BLK`];
+  } else if (modelPropType === 'steals') {
+    return f[`${window}_STL`];
+  } else if (modelPropType === 'turnovers') {
+    return f[`${window}_TOV`];
+  }
+  return f[`${window}_PTS`];
+}
+
+/**
  * Build all 88 features from game logs + prop data
- * Matches API_DOCUMENTATION.md exactly
+ * Matches FEATURES_88_COMPLETE.md exactly
  */
 function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const l3Games = gameLogs.slice(0, 3);
   const l10Games = gameLogs.slice(0, 10);
 
-  // ── L3 Stats ──
+  // ── L3 Stats (simple mean of per-game values per spec) ──
   const l3Count = l3Games.length || 1;
   let l3 = { pts: 0, reb: 0, ast: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, stl: 0, blk: 0, tov: 0 };
+  const l3FgPctArr = [], l3Fg3PctArr = [];
   l3Games.forEach(g => {
     l3.pts += g.points || 0;
     l3.reb += g.totReb || 0;
@@ -229,25 +592,31 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
     l3.stl += g.steals || 0;
     l3.blk += g.blocks || 0;
     l3.tov += g.turnovers || 0;
+    // Per-game FG_PCT for simple mean (spec: mean of per-game values, not weighted)
+    const gFga = g.fga || 0, gFgm = g.fgm || 0;
+    l3FgPctArr.push(gFga > 0 ? gFgm / gFga : 0);
+    const gTpa = g.tpa || 0, gTpm = g.tpm || 0;
+    l3Fg3PctArr.push(gTpa > 0 ? gTpm / gTpa : 0);
   });
 
   const L3_PTS = l3.pts / l3Count;
   const L3_REB = l3.reb / l3Count;
   const L3_AST = l3.ast / l3Count;
   const L3_MIN = l3.min / l3Count;
-  const L3_FG_PCT = l3.fga > 0 ? l3.fgm / l3.fga : 0;       // 0-1 decimal
+  const L3_FG_PCT = l3FgPctArr.length > 0 ? l3FgPctArr.reduce((a, b) => a + b, 0) / l3FgPctArr.length : 0;
   const L3_FG3M = l3.fg3m / l3Count;
-  const L3_FG3_PCT = l3.fg3a > 0 ? l3.fg3m / l3.fg3a : 0;    // 0-1 decimal
+  const L3_FG3_PCT = l3Fg3PctArr.length > 0 ? l3Fg3PctArr.reduce((a, b) => a + b, 0) / l3Fg3PctArr.length : 0;
   const L3_STL = l3.stl / l3Count;
   const L3_BLK = l3.blk / l3Count;
   const L3_TOV = l3.tov / l3Count;
   const L3_FGM = l3.fgm / l3Count;
   const L3_FGA = l3.fga / l3Count;
 
-  // ── L10 Stats ──
+  // ── L10 Stats (simple mean of per-game values per spec) ──
   const l10Count = l10Games.length || 1;
   let l10 = { pts: 0, reb: 0, ast: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, stl: 0, blk: 0, tov: 0 };
   const ptsArr = [], rebArr = [], astArr = [];
+  const l10FgPctArr = [], l10Fg3PctArr = [];
   l10Games.forEach(g => {
     const pts = g.points || 0;
     const reb = g.totReb || 0;
@@ -264,15 +633,20 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
     l10.stl += g.steals || 0;
     l10.blk += g.blocks || 0;
     l10.tov += g.turnovers || 0;
+    // Per-game FG_PCT for simple mean
+    const gFga = g.fga || 0, gFgm = g.fgm || 0;
+    l10FgPctArr.push(gFga > 0 ? gFgm / gFga : 0);
+    const gTpa = g.tpa || 0, gTpm = g.tpm || 0;
+    l10Fg3PctArr.push(gTpa > 0 ? gTpm / gTpa : 0);
   });
 
   const L10_PTS = l10.pts / l10Count;
   const L10_REB = l10.reb / l10Count;
   const L10_AST = l10.ast / l10Count;
   const L10_MIN = l10.min / l10Count;
-  const L10_FG_PCT = l10.fga > 0 ? l10.fgm / l10.fga : 0;
+  const L10_FG_PCT = l10FgPctArr.length > 0 ? l10FgPctArr.reduce((a, b) => a + b, 0) / l10FgPctArr.length : 0;
   const L10_FG3M = l10.fg3m / l10Count;
-  const L10_FG3_PCT = l10.fg3a > 0 ? l10.fg3m / l10.fg3a : 0;
+  const L10_FG3_PCT = l10Fg3PctArr.length > 0 ? l10Fg3PctArr.reduce((a, b) => a + b, 0) / l10Fg3PctArr.length : 0;
   const L10_STL = l10.stl / l10Count;
   const L10_BLK = l10.blk / l10Count;
   const L10_TOV = l10.tov / l10Count;
@@ -284,10 +658,30 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
 
   // ── Game Context ──
   const HOME_AWAY = prop.isHome ? 1 : 0;
-  // API-Sports game.date is often null; use reasonable defaults
-  const DAYS_REST = 2;        // Typical NBA rest
-  const BACK_TO_BACK = 0;     // Default: not B2B
-  const GAMES_IN_LAST_7 = 3;  // Typical NBA schedule
+
+  // Compute rest/schedule from game log dates when available (spec default: 3)
+  let DAYS_REST = 3;
+  let GAMES_IN_LAST_7 = 3;
+  const upcomingDate = new Date(gameDate);
+  if (!isNaN(upcomingDate.getTime()) && gameLogs.length > 0) {
+    // Try to get date of most recent game for DAYS_REST
+    const mostRecentDate = gameLogs[0]?.game?.date ? new Date(gameLogs[0].game.date) : null;
+    if (mostRecentDate && !isNaN(mostRecentDate.getTime())) {
+      DAYS_REST = Math.max(1, Math.round((upcomingDate - mostRecentDate) / (1000 * 60 * 60 * 24)));
+    }
+    // Count games in last 7 days (exclusive of game day)
+    const sevenDaysAgo = new Date(upcomingDate);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    let gamesIn7 = 0;
+    for (const g of gameLogs) {
+      const gDate = g.game?.date ? new Date(g.game.date) : null;
+      if (gDate && !isNaN(gDate.getTime()) && gDate >= sevenDaysAgo && gDate < upcomingDate) {
+        gamesIn7++;
+      }
+    }
+    if (gamesIn7 > 0) GAMES_IN_LAST_7 = gamesIn7;
+  }
+  const BACK_TO_BACK = DAYS_REST === 1 ? 1 : 0;
   const MINUTES_TREND = L3_MIN - L10_MIN;
 
   // ── Advanced Metrics ──
@@ -302,7 +696,7 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const CONSISTENCY_REB = L10_REB > 0 ? L10_REB_STD / L10_REB : 0;
   const CONSISTENCY_AST = L10_AST > 0 ? L10_AST_STD / L10_AST : 0;
   const ACCELERATION_PTS = DAYS_REST > 0 ? TREND_PTS / DAYS_REST : TREND_PTS;
-  const EFFICIENCY_STABLE = Math.abs(L3_FG_PCT - L10_FG_PCT) < 0.05 ? 1 : 0;
+  const EFFICIENCY_STABLE = L3_PTS >= L10_PTS ? 1 : 0; // Hot streak flag per spec
 
   // ── Interaction Features ──
   const L3_PTS_x_HOME = L3_PTS * HOME_AWAY;
@@ -326,16 +720,39 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const L3_vs_L10_PTS_RATIO = L10_PTS > 0 ? L3_PTS / L10_PTS : 1;
   const L3_vs_L10_REB_RATIO = L10_REB > 0 ? L3_REB / L10_REB : 1;
 
+  // ── Resolve model prop_type BEFORE betting features (needed for prop-dependent calcs) ──
+  const propTypeMap = {
+    'points': 'points',
+    'rebounds': 'rebounds',
+    'assists': 'assists',
+    'threePointersMade': 'threes',   // Bug fix: was 'threePointersMade', model expects 'threes'
+    'steals': 'steals',
+    'blocks': 'blocks',
+    'turnovers': 'turnovers',
+    'points+rebounds': 'points_rebounds',
+    'points+assists': 'points_assists',
+    'rebounds+assists': 'rebounds_assists',
+    'points+rebounds+assists': 'points_rebounds_assists',
+    'blocks+steals': 'blocks_steals'
+  };
+  const modelPropType = propTypeMap[prop.statType] || prop.statType;
+
   // ── Betting Line Features ──
   const line = prop.line;
   const odds_over = prop.oddsOver;
   const odds_under = prop.oddsUnder;
   const implied_prob_over = americanToImpliedProb(odds_over);
   const implied_prob_under = americanToImpliedProb(odds_under);
-  const LINE_VALUE = line !== 0 ? (L3_PTS - line) / line : 0;
+
+  // Prop-type-dependent: LINE_VALUE uses stat sum (combos add up), market uses primary stat
+  const rawFeats = { L3_PTS, L3_REB, L3_AST, L3_FG3M, L3_BLK, L3_STL, L3_TOV, L10_PTS, L10_REB, L10_AST, L10_FG3M, L10_BLK, L10_STL, L10_TOV };
+  const l3Stat = getL3StatForProp(modelPropType, rawFeats);
+  const LINE_VALUE = line !== 0 ? (l3Stat - line) / line : 0;
+
   const ODDS_EDGE = implied_prob_over - implied_prob_under;
   const odds_spread = odds_over - odds_under;
   const market_confidence = Math.abs(implied_prob_over - 0.5);
+  // These ALWAYS compare specific stats vs line regardless of prop_type (cross-stat context)
   const L3_PTS_vs_LINE = L3_PTS - line;
   const L3_REB_vs_LINE = L3_REB - line;
   const L3_AST_vs_LINE = L3_AST - line;
@@ -344,36 +761,25 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const LINE_DIFFICULTY_AST = L10_AST !== 0 ? line / L10_AST : 1;
   const LINE_vs_AVG_PTS = line - L10_PTS;
   const LINE_vs_AVG_REB = line - L10_REB;
-  const L3_vs_market = (L3_PTS - line) * implied_prob_over;
-  const L10_vs_market = (L10_PTS - line) * implied_prob_over;
+  // Market features use PRIMARY stat per prop type (not combo sum)
+  const l3MarketStat = getMarketStat(modelPropType, rawFeats, 'L3');
+  const l10MarketStat = getMarketStat(modelPropType, rawFeats, 'L10');
+  const L3_vs_market = (l3MarketStat - line) * implied_prob_over;
+  const L10_vs_market = (l10MarketStat - line) * implied_prob_over;
 
   // ── Temporal ──
   const date = new Date(gameDate);
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
-  const day_of_week = date.getDay();
+  const day_of_week = (date.getDay() + 6) % 7; // Python weekday convention: Mon=0, Sun=6
 
   // ── Season ──
-  const SEASON = `${getCurrentNBASeason()}-${(getCurrentNBASeason() + 1) % 100}`;
-
-  // Map SGO stat types to model prop types
-  const propTypeMap = {
-    'points': 'points',
-    'rebounds': 'rebounds',
-    'assists': 'assists',
-    'threePointersMade': 'threePointersMade',
-    'steals': 'steals',
-    'blocks': 'blocks',
-    'turnovers': 'turnovers',
-    'points+rebounds': 'points_rebounds',
-    'points+assists': 'points_assists',
-    'rebounds+assists': 'rebounds_assists',
-    'points+rebounds+assists': 'points_rebounds_assists'
-  };
+  const seasonYear = getCurrentNBASeason();
+  const SEASON = `${seasonYear}-${String(seasonYear + 1).slice(-2)}`;
 
   return {
     // Categorical (5)
-    prop_type: propTypeMap[prop.statType] || prop.statType,
+    prop_type: modelPropType,
     home_team: homeTeam,
     away_team: awayTeam,
     bookmaker: normalizeBookmaker(prop.bookmakerOver) || 'DraftKings',
@@ -452,10 +858,23 @@ async function predictBatch(featuresArray) {
 // ──────────────────────────────────────────────
 
 async function fetchSGOEvent(team1, team2) {
-  const url = `${SGO_BASE_URL}/events/?apiKey=${SGO_API_KEY}&leagueID=NBA&oddsAvailable=true&limit=50`;
-  const response = await axios.get(url, { headers: { 'Accept': 'application/json' }, timeout: 15000 });
+  let response;
+  for (let attempt = 0; attempt < SGO_API_KEYS.length; attempt++) {
+    const url = `${SGO_BASE_URL}/events/?apiKey=${getSGOKey()}&leagueID=NBA&oddsAvailable=true&limit=50`;
+    try {
+      response = await axios.get(url, { headers: { 'Accept': 'application/json' }, timeout: 15000 });
+      break;
+    } catch (err) {
+      if (err.response?.status === 429 && attempt < SGO_API_KEYS.length - 1) {
+        console.warn(`[v2] SGO key ${sgoKeyIndex + 1} rate-limited, rotating...`);
+        rotateSGOKey();
+        continue;
+      }
+      throw err;
+    }
+  }
 
-  if (!response.data?.data) return null;
+  if (!response?.data?.data) return null;
 
   const normalize = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
   const t1 = normalize(team1);
@@ -548,7 +967,7 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
   { timeoutSeconds: 300, memory: '1GiB', cors: true },
   async (req, res) => {
     try {
-      const { team1, team2, sport, gameDate } = req.body;
+      const { team1, team2, sport, gameDate, debug } = req.body;
       if (!team1 || !team2 || !sport) {
         return res.status(400).json({ error: 'Missing required fields: team1, team2, sport' });
       }
@@ -575,6 +994,12 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         return res.status(404).json({ error: 'No player props available' });
       }
       console.log(`[v2] Found ${allProps.length} props from SGO`);
+
+      // 2.5: Fetch opponent defensive stats (ONE call, cached 24h)
+      const oppStatsData = await getOpponentDefensiveStats();
+
+      const homeTeamLong = event.teams.home.names.long;
+      const awayTeamLong = event.teams.away.names.long;
 
       // 3. Get unique players and resolve their API-Sports IDs
       const uniquePlayers = [...new Set(allProps.map(p => p.playerName))];
@@ -661,8 +1086,9 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         }
       }
 
-      // 6. Combine props with predictions
+      // 6. Combine props with predictions + enhanced data
       const results = [];
+      let filteredBySanity = 0;
       processableProps.forEach((prop, idx) => {
         const pred = allPredictions[idx];
         if (!pred) return;
@@ -672,35 +1098,90 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         const bettingValue = confidence > 0.15 ? 'high' : confidence >= 0.10 ? 'medium' : 'low';
 
         if (shouldBet) {
+          // Hit rates from raw game logs
+          const hitRates = calculateHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
+          const pStats = playerStatsMap[prop.playerName];
+
+          // Compute opponent defense BEFORE sanity check (needed for multi-signal filter)
+          const opponentTeam = prop.team === homeTeamLong ? awayTeamLong : homeTeamLong;
+          const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
+
+          // Multi-signal sanity check: filters props where 2+ data points contradict
+          const sanity = passesSanityCheck(pred.prediction, prop.statType, prop.line, pStats, hitRates, featuresList[idx], opponentDefense);
+          if (!sanity.pass) {
+            filteredBySanity++;
+            console.log(`[v2] FILTERED: ${prop.playerName} ${pred.prediction} ${prop.line} ${prop.statType} — ${sanity.reason}`);
+            return;
+          }
+
+          // Key reasoning features (model's "why")
+          const reasoning = getReasoningFeatures(featuresList[idx], prop.statType);
+
+          // Temperature-scaled probabilities for display (T=2.0)
+          const calOver = calibrateProbability(pred.probability_over);
+          const calUnder = calibrateProbability(pred.probability_under);
+
+          // Hard cap: model is ~65% accurate, never display probability > 85%
+          const PROB_CAP = 0.85;
+          const cappedOver = Math.min(calOver, PROB_CAP);
+          const cappedUnder = Math.min(calUnder, PROB_CAP);
+          const displayConfidence = Math.min(
+            pred.prediction === 'Over' ? calOver : calUnder,
+            PROB_CAP
+          );
+
           results.push({
+            // Core fields — probabilities are CALIBRATED (T=2.0) and CAPPED at 85%
             playerName: prop.playerName,
             team: prop.team,
             statType: prop.statType,
             line: prop.line,
             prediction: pred.prediction,
-            probabilityOver: pred.probability_over,
-            probabilityUnder: pred.probability_under,
+            probabilityOver: parseFloat(cappedOver.toFixed(4)),
+            probabilityUnder: parseFloat(cappedUnder.toFixed(4)),
             confidence,
             confidencePercent: (confidence * 100).toFixed(1),
             confidenceTier: bettingValue,
             oddsOver: prop.oddsOver,
             oddsUnder: prop.oddsUnder,
             gamesUsed: gameLogsMap[prop.playerName].length,
-            playerStats: playerStatsMap[prop.playerName] || null
+            playerStats: pStats || null,
+
+            // Raw model probabilities (before calibration, for debugging)
+            rawProbabilityOver: pred.probability_over,
+            rawProbabilityUnder: pred.probability_under,
+
+            // Convenience fields (also capped)
+            displayConfidence: parseFloat(displayConfidence.toFixed(4)),
+            displayConfidencePercent: (displayConfidence * 100).toFixed(1),
+
+            // Bookmaker names
+            bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
+            bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
+
+            // Hit rates
+            hitRates,
+
+            // Model reasoning
+            reasoning,
+
+            // Opponent defense
+            opponent: opponentTeam,
+            opponentDefense,
           });
         }
       });
 
-      // Sort by confidence (descending) and take top 10
-      results.sort((a, b) => b.confidence - a.confidence);
+      // Sort by calibrated display confidence (descending) and take top 10
+      results.sort((a, b) => b.displayConfidence - a.displayConfidence);
       const topProps = results.slice(0, 10);
 
       const highCount = topProps.filter(p => p.confidenceTier === 'high').length;
       const mediumCount = topProps.filter(p => p.confidenceTier === 'medium').length;
 
-      console.log(`[v2] ${results.length} recommended props (${highCount} high, ${mediumCount} medium)`);
+      console.log(`[v2] ${results.length} props passed (${highCount} high, ${mediumCount} medium, ${filteredBySanity} filtered by sanity check)`);
 
-      return res.status(200).json({
+      const response = {
         success: true,
         sport: 'NBA',
         eventId: event.eventID,
@@ -708,11 +1189,38 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         gameTime: event.status.startsAt,
         totalPropsAvailable: allProps.length,
         propsAnalyzed: processableProps.length,
+        filteredBySanityCheck: filteredBySanity,
         highConfidenceCount: highCount,
         mediumConfidenceCount: mediumCount,
         topProps,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      // Debug mode: include raw features for top props (sorted by confidence)
+      if (debug) {
+        const propToFeatIdx = new Map();
+        processableProps.forEach((p, idx) => {
+          propToFeatIdx.set(`${p.playerName}|${p.statType}|${p.line}`, idx);
+        });
+        response.debug = {
+          homeTeamCode,
+          awayTeamCode,
+          effectiveGameDate,
+          topPropsFeatures: topProps.map(tp => {
+            const key = `${tp.playerName}|${tp.statType}|${tp.line}`;
+            const idx = propToFeatIdx.get(key);
+            return {
+              playerName: tp.playerName,
+              statType: tp.statType,
+              line: tp.line,
+              features: idx !== undefined ? featuresList[idx] : null,
+              vertexPrediction: idx !== undefined ? allPredictions[idx] : null
+            };
+          })
+        };
+      }
+
+      return res.status(200).json(response);
 
     } catch (error) {
       console.error('[v2] Error:', error);
