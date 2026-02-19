@@ -1,12 +1,14 @@
 /**
- * ML Player Props Cloud Function v2
- * Clean rewrite that correctly integrates with Vertex AI
+ * ML Player Props Cloud Function v2 — EdgeBoard Pipeline
  *
- * Key fixes from v1:
- * - Dynamically resolves player IDs via API-Sports search (no stale ID mapping)
- * - Correct season calculation
- * - Feature engineering matches API_DOCUMENTATION.md exactly
- * - Caches player ID lookups to save API calls
+ * Replaces SGO with The Odds API for props catalog.
+ * Uses shared data layer for all data fetching.
+ *
+ * Key components:
+ * - 88-feature engineering for CatBoost model on Vertex AI
+ * - Temperature scaling (T=2.0) + hard cap (85%)
+ * - Avg-gated sanity filter + green score (0-5)
+ * - Alt lines enrichment with goblin legs
  */
 
 const functions = require('firebase-functions/v2');
@@ -14,98 +16,112 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 const { GoogleAuth } = require('google-auth-library');
 
-// Lazy init
+// ── Shared Modules ──
+const { fetchStandardProps, fetchAltProps, fetchEvents, findBestGoblinLine, normalizeBookmaker } = require('./shared/oddsApi');
+const { resolvePlayerIdsBatch, getGameLogsBatch, getL10AvgForStat, getApiKey, getCurrentNBASeason } = require('./shared/playerStats');
+const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
+const { calculateHitRates } = require('./shared/hitRates');
+const { calibrateProbability, getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
+
+// ── Config ──
 let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
 
-// Config — SGO API keys with rotation
-const SGO_API_KEYS = [
-  'b07ce45b95064ec5b62dcbb1ca5e7cf0',
-  '8e767501a24d345e14345882dd4e59f0',
-];
-let sgoKeyIndex = 0;
-const getSGOKey = () => SGO_API_KEYS[sgoKeyIndex % SGO_API_KEYS.length];
-const rotateSGOKey = () => { sgoKeyIndex = (sgoKeyIndex + 1) % SGO_API_KEYS.length; };
-const SGO_BASE_URL = 'https://api.sportsgameodds.com/v2';
-
 const VERTEX_ENDPOINT = 'https://us-central1-aiplatform.googleapis.com/v1/projects/133991312998/locations/us-central1/endpoints/7508590194849742848:predict';
 
-// Cache for player ID lookups (persists across invocations in same instance)
-const playerIdCache = {};
-
-// Token cache
+// Token cache for Vertex AI
 let cachedToken = null;
 let tokenExpiry = 0;
 
-// SGO bookmaker names are lowercase ("draftkings") but model trained on capitalized ("DraftKings")
-const BOOKMAKER_MAP = {
-  'draftkings': 'DraftKings',
-  'fanduel': 'FanDuel',
-  'betmgm': 'BetMGM',
-  'caesars': 'Caesars',
-  'bovada': 'Bovada',
-  'pointsbet': 'PointsBet',
-  'bet365': 'Bet365',
-  'betrivers': 'BetRivers',
-  'unibet': 'Unibet',
-  'wynnbet': 'WynnBet',
-  'hardrock': 'Hard Rock',
+const PROB_CAP = 0.85;
+
+// EdgeBoard odds ceiling: exclude props with predicted-side odds heavier than this.
+// Heavy juice (-300 and below) belongs on Parlay Stack, not EdgeBoard.
+// EdgeBoard = value territory where ML disagrees with the market.
+const EDGEBOARD_ODDS_CEILING = -300;
+
+// ── NBA Team Name → Code Mapping ──
+const NBA_TEAM_CODES = {
+  'Atlanta Hawks': 'ATL',
+  'Boston Celtics': 'BOS',
+  'Brooklyn Nets': 'BKN',
+  'Charlotte Hornets': 'CHA',
+  'Chicago Bulls': 'CHI',
+  'Cleveland Cavaliers': 'CLE',
+  'Dallas Mavericks': 'DAL',
+  'Denver Nuggets': 'DEN',
+  'Detroit Pistons': 'DET',
+  'Golden State Warriors': 'GSW',
+  'Houston Rockets': 'HOU',
+  'Indiana Pacers': 'IND',
+  'Los Angeles Clippers': 'LAC',
+  'LA Clippers': 'LAC',
+  'Los Angeles Lakers': 'LAL',
+  'LA Lakers': 'LAL',
+  'Memphis Grizzlies': 'MEM',
+  'Miami Heat': 'MIA',
+  'Milwaukee Bucks': 'MIL',
+  'Minnesota Timberwolves': 'MIN',
+  'New Orleans Pelicans': 'NOP',
+  'New York Knicks': 'NYK',
+  'Oklahoma City Thunder': 'OKC',
+  'Orlando Magic': 'ORL',
+  'Philadelphia 76ers': 'PHI',
+  'Phoenix Suns': 'PHX',
+  'Portland Trail Blazers': 'POR',
+  'Sacramento Kings': 'SAC',
+  'San Antonio Spurs': 'SAS',
+  'Toronto Raptors': 'TOR',
+  'Utah Jazz': 'UTA',
+  'Washington Wizards': 'WAS',
 };
 
-function normalizeBookmaker(name) {
-  if (!name) return null;
-  return BOOKMAKER_MAP[name.toLowerCase()] || name;
+function getTeamCode(fullName) {
+  return NBA_TEAM_CODES[fullName] || fullName.split(' ').pop().substring(0, 3).toUpperCase();
 }
 
-// ──────────────────────────────────────────────
-// HIT RATE CALCULATION
-// ──────────────────────────────────────────────
+/**
+ * Determine which team a player is on by checking their game logs
+ * against the known home/away teams.
+ */
+function resolvePlayerTeam(gameLogs, homeTeam, awayTeam) {
+  if (!gameLogs || gameLogs.length === 0) return { team: null, isHome: false };
 
-function getStatValue(game, statType) {
-  const pts = game.points || 0;
-  const reb = game.totReb || 0;
-  const ast = game.assists || 0;
-  const stl = game.steals || 0;
-  const blk = game.blocks || 0;
-  const tov = game.turnovers || 0;
-  const tpm = game.tpm || 0;
+  const recentTeam = gameLogs[0]?.team;
+  if (!recentTeam) return { team: null, isHome: false };
 
-  switch (statType.toLowerCase()) {
-    case 'points': return pts;
-    case 'rebounds': return reb;
-    case 'assists': return ast;
-    case 'steals': return stl;
-    case 'blocks': return blk;
-    case 'turnovers': return tov;
-    case 'threepointersmade': return tpm;
-    case 'points+rebounds': return pts + reb;
-    case 'points+assists': return pts + ast;
-    case 'rebounds+assists': return reb + ast;
-    case 'points+rebounds+assists': return pts + reb + ast;
-    case 'blocks+steals': return blk + stl;
-    default: return null;
-  }
-}
+  const playerTeamName = recentTeam.nickname || recentTeam.name || '';
+  const playerTeamCode = recentTeam.code || '';
 
-function calculateHitRates(gameLogs, statType, line) {
-  const l10 = gameLogs.slice(0, 10);
-
-  let l10Over = 0, l10Total = 0;
-  for (const g of l10) {
-    const val = getStatValue(g, statType);
-    if (val !== null) { l10Total++; if (val > line) l10Over++; }
-  }
-
-  let seasonOver = 0, seasonTotal = 0;
-  for (const g of gameLogs) {
-    const val = getStatValue(g, statType);
-    if (val !== null) { seasonTotal++; if (val > line) seasonOver++; }
-  }
+  const homeCode = getTeamCode(homeTeam);
+  const awayCode = getTeamCode(awayTeam);
+  const isHome = playerTeamCode === homeCode ||
+    homeTeam.toLowerCase().includes(playerTeamName.toLowerCase().split(' ').pop());
 
   return {
-    l10: { over: l10Over, total: l10Total, pct: l10Total > 0 ? Math.round((l10Over / l10Total) * 100) : 0 },
-    season: { over: seasonOver, total: seasonTotal, pct: seasonTotal > 0 ? Math.round((seasonOver / seasonTotal) * 100) : 0 }
+    team: isHome ? homeTeam : awayTeam,
+    isHome,
   };
+}
+
+/**
+ * Find an Odds API event by team names (fallback when eventId not provided).
+ */
+async function findEventByTeams(team1, team2) {
+  const events = await fetchEvents('basketball_nba');
+  const normalize = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const t1 = normalize(team1);
+  const t2 = normalize(team2);
+
+  for (const event of events) {
+    const home = normalize(event.home_team || '');
+    const away = normalize(event.away_team || '');
+    if ((home.includes(t1) || t1.includes(home) || home.includes(t2) || t2.includes(home)) &&
+        (away.includes(t1) || t1.includes(away) || away.includes(t2) || t2.includes(away))) {
+      return event;
+    }
+  }
+  return null;
 }
 
 // ──────────────────────────────────────────────
@@ -138,367 +154,6 @@ function getReasoningFeatures(features, statType) {
 }
 
 // ──────────────────────────────────────────────
-// OPPONENT DEFENSIVE STATS (NBA.com)
-// ──────────────────────────────────────────────
-
-const OPP_STATS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-async function getOpponentDefensiveStats() {
-  const db = getDb();
-  const season = `${getCurrentNBASeason()}-${String(getCurrentNBASeason() + 1).slice(-2)}`;
-  const cacheKey = `nba_opp_stats_${season}`;
-
-  // Check cache
-  try {
-    const doc = await db.collection('ml_cache').doc(cacheKey).get();
-    if (doc.exists) {
-      const data = doc.data();
-      if (Date.now() - data.fetchedAt < OPP_STATS_CACHE_TTL) {
-        console.log('[v2] Opponent stats cache HIT');
-        return data;
-      }
-    }
-  } catch (e) {
-    console.warn('[v2] Opp stats cache read error:', e.message);
-  }
-
-  // Fetch from NBA.com
-  console.log('[v2] Fetching opponent stats from NBA.com...');
-  try {
-    const url = `https://stats.nba.com/stats/leaguedashteamstats?` +
-      `Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&Height=&` +
-      `ISTRound=&LastNGames=0&LeagueID=00&Location=&MeasureType=Opponent&` +
-      `Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&` +
-      `PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&` +
-      `PlusMinus=N&Rank=N&Season=${season}&SeasonSegment=&` +
-      `SeasonType=Regular+Season&ShotClockRange=&StarterBench=&` +
-      `TeamID=0&TwoWay=0&VsConference=&VsDivision=`;
-
-    const resp = await axios.get(url, {
-      headers: {
-        'Referer': 'https://www.nba.com/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Origin': 'https://www.nba.com',
-        'x-nba-stats-origin': 'stats',
-        'x-nba-stats-token': 'true',
-      },
-      timeout: 15000
-    });
-
-    const headers = resp.data.resultSets[0].headers;
-    const rows = resp.data.resultSets[0].rowSet;
-    const idx = (name) => headers.indexOf(name);
-    const iCity = idx('TEAM_CITY'), iTeamName = idx('TEAM_NAME');
-    const iOppPts = idx('OPP_PTS'), iOppReb = idx('OPP_REB'), iOppAst = idx('OPP_AST');
-    const iOppStl = idx('OPP_STL'), iOppBlk = idx('OPP_BLK'), iOppTov = idx('OPP_TOV');
-    const iOppFg3m = idx('OPP_FG3M');
-
-    // Build team key: try "City Name" first, fall back to just "Name"
-    const teams = {};
-    for (const row of rows) {
-      const city = iCity >= 0 ? row[iCity] : null;
-      const name = iTeamName >= 0 ? row[iTeamName] : null;
-      if (!name) continue;
-      const fullName = city ? `${city} ${name}` : name;
-      const key = fullName.toLowerCase().trim();
-      teams[key] = {
-        oppPts: row[iOppPts], oppReb: row[iOppReb], oppAst: row[iOppAst],
-        oppStl: row[iOppStl], oppBlk: row[iOppBlk], oppTov: row[iOppTov],
-        oppFg3m: row[iOppFg3m],
-      };
-    }
-
-    // Compute ranks (1 = fewest allowed = best defense, 30 = most allowed = worst)
-    const ranks = {};
-    for (const stat of ['oppPts', 'oppReb', 'oppAst', 'oppStl', 'oppBlk', 'oppTov', 'oppFg3m']) {
-      const sorted = Object.entries(teams).sort((a, b) => a[1][stat] - b[1][stat]);
-      sorted.forEach(([teamKey], i) => {
-        if (!ranks[teamKey]) ranks[teamKey] = {};
-        ranks[teamKey][stat + 'Rank'] = i + 1;
-      });
-    }
-
-    const cacheData = { season, fetchedAt: Date.now(), teams, ranks };
-    try { await db.collection('ml_cache').doc(cacheKey).set(cacheData); } catch (e) { /* silent */ }
-
-    console.log(`[v2] Opponent stats fetched for ${Object.keys(teams).length} teams`);
-    return cacheData;
-
-  } catch (err) {
-    console.error('[v2] NBA.com opponent stats failed:', err.message);
-    return null;
-  }
-}
-
-function getOpponentStatForProp(oppStatsData, oppTeamName, statType) {
-  if (!oppStatsData || !oppTeamName) return null;
-
-  const key = oppTeamName.toLowerCase().trim();
-  const stats = oppStatsData.teams?.[key];
-  const rankData = oppStatsData.ranks?.[key];
-  if (!stats || !rankData) {
-    return null;
-  }
-
-  const st = statType.toLowerCase();
-  const result = {};
-
-  if (st === 'points' || st.includes('points'))     { result.allowed = stats.oppPts; result.rank = rankData.oppPtsRank; result.stat = 'PTS'; }
-  if (st === 'rebounds' || st.includes('rebounds'))   { result.allowedReb = stats.oppReb; result.rankReb = rankData.oppRebRank; result.statReb = 'REB'; }
-  if (st === 'assists' || st.includes('assists'))     { result.allowedAst = stats.oppAst; result.rankAst = rankData.oppAstRank; result.statAst = 'AST'; }
-  if (st === 'steals')              { result.allowed = stats.oppStl; result.rank = rankData.oppStlRank; result.stat = 'STL'; }
-  if (st === 'blocks')              { result.allowed = stats.oppBlk; result.rank = rankData.oppBlkRank; result.stat = 'BLK'; }
-  if (st === 'turnovers')           { result.allowed = stats.oppTov; result.rank = rankData.oppTovRank; result.stat = 'TOV'; }
-  if (st === 'threepointersmade')   { result.allowed = stats.oppFg3m; result.rank = rankData.oppFg3mRank; result.stat = '3PM'; }
-
-  return Object.keys(result).length > 0 ? result : null;
-}
-
-// ──────────────────────────────────────────────
-// TEMPERATURE SCALING & SANITY FILTER
-// ──────────────────────────────────────────────
-
-/**
- * Temperature scaling: prob → logit → divide by T → re-sigmoid.
- * T > 1 softens extreme probabilities toward 50% (more honest for a 65%-accurate model).
- * T = 2.0 empirically tested: 95% → 82%, 5% → 18%, 60% stays ~55%.
- */
-function calibrateProbability(prob, T = 2.0) {
-  const p = Math.max(0.001, Math.min(0.999, prob));
-  const logit = Math.log(p / (1 - p));
-  return 1 / (1 + Math.exp(-logit / T));
-}
-
-/**
- * Get the L10 average for a specific stat type (matches SGO stat IDs).
- * Returns null if we can't compute it.
- */
-function getL10AvgForStat(playerStats, statType, features) {
-  const st = statType.toLowerCase();
-  switch (st) {
-    case 'points': return playerStats?.pointsPerGame ?? null;
-    case 'rebounds': return playerStats?.reboundsPerGame ?? null;
-    case 'assists': return playerStats?.assistsPerGame ?? null;
-    case 'steals': return playerStats?.stealsPerGame ?? null;
-    case 'blocks': return playerStats?.blocksPerGame ?? null;
-    case 'turnovers': return features?.L10_TOV ?? null;
-    case 'threepointersmade': return features?.L10_FG3M ?? null;
-    case 'points+rebounds':
-      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.reboundsPerGame ?? 0);
-    case 'points+assists':
-      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
-    case 'rebounds+assists':
-      return (playerStats?.reboundsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
-    case 'points+rebounds+assists':
-      return (playerStats?.pointsPerGame ?? 0) + (playerStats?.reboundsPerGame ?? 0) + (playerStats?.assistsPerGame ?? 0);
-    case 'blocks+steals':
-      return (playerStats?.blocksPerGame ?? 0) + (playerStats?.stealsPerGame ?? 0);
-    default: return null;
-  }
-}
-
-/**
- * Avg-gated sanity check:
- *
- *   • Avg on RIGHT side of line → PASS (tags on card show quality signals)
- *   • Avg on WRONG side of line → need 2+ supporting signals to survive
- *
- * Supporting signals (when avg is wrong-side):
- *   1. Opponent defense rank — weak DEF (21-30) supports Over, strong DEF (1-10) supports Under
- *   2. L10 hit rate — ≥60% over-rate supports Over, ≤40% supports Under
- *   3. Season hit rate — same thresholds as L10
- *
- * This catches "Under 19.5, avg 19.8, vs 29th DEF" while allowing edge cases
- * like "Over 25.5, avg 24.0, vs 28th DEF, 8/10 hit" to survive.
- */
-function passesSanityCheck(prediction, statType, line, playerStats, hitRates, features, opponentDefense) {
-  const l10Avg = getL10AvgForStat(playerStats, statType, features);
-  if (l10Avg === null || line === 0) return { pass: true, reason: 'insufficient_data' };
-
-  const isOver = prediction === 'Over';
-  const avgOnRightSide = isOver ? l10Avg >= line : l10Avg <= line;
-
-  // ── Avg on RIGHT side → PASS ──
-  // Other signals (defense, hit rate) show as color-coded tags on the card
-  if (avgOnRightSide) {
-    return { pass: true, reason: 'avg_supports' };
-  }
-
-  // ── Avg on WRONG side → need 2+ supporting signals to override ──
-  let supporting = 0;
-  const details = [`avg ${l10Avg.toFixed(1)} on wrong side of line ${line}`];
-
-  // Signal 1: Opponent defense rank
-  const defRank = opponentDefense?.rank ?? null;
-  if (defRank != null) {
-    const defSupports = isOver ? defRank >= 21 : defRank <= 10;
-    if (defSupports) {
-      supporting++;
-    } else {
-      details.push(`DEF rank ${defRank} does not support`);
-    }
-  }
-
-  // Signal 2: L10 hit rate (pct = over-rate)
-  const l10HitPct = hitRates?.l10?.pct ?? null;
-  if (l10HitPct != null) {
-    const l10Supports = isOver ? l10HitPct >= 60 : l10HitPct <= 40;
-    if (l10Supports) {
-      supporting++;
-    } else {
-      details.push(`L10 hit ${l10HitPct}% does not support`);
-    }
-  }
-
-  // Signal 3: Season hit rate
-  const seasonHitPct = hitRates?.season?.pct ?? null;
-  if (seasonHitPct != null) {
-    const seasonSupports = isOver ? seasonHitPct >= 60 : seasonHitPct <= 40;
-    if (seasonSupports) {
-      supporting++;
-    } else {
-      details.push(`Season hit ${seasonHitPct}% does not support`);
-    }
-  }
-
-  // Need 2+ supporting signals to override wrong-side avg
-  if (supporting >= 2) {
-    return { pass: true, reason: `avg wrong side but ${supporting}/3 signals support — override` };
-  }
-
-  return { pass: false, reason: `avg wrong side, only ${supporting}/3 support: ${details.join('; ')}` };
-}
-
-// ──────────────────────────────────────────────
-// API-SPORTS HELPERS
-// ──────────────────────────────────────────────
-
-function getApiKey() {
-  try {
-    return functions.config().apisports?.key || process.env.API_SPORTS_KEY;
-  } catch (e) {
-    return process.env.API_SPORTS_KEY;
-  }
-}
-
-function getCurrentNBASeason() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  // NBA season starts in October. If Oct-Dec, use current year. If Jan-Sep, use previous year.
-  return month >= 10 ? year : year - 1;
-}
-
-/**
- * Search for a player by name and return their API-Sports ID
- * Caches results to avoid repeated lookups
- */
-async function findPlayerId(playerName, apiKey) {
-  // Check cache first
-  const cacheKey = playerName.toLowerCase().trim();
-  if (playerIdCache[cacheKey]) {
-    return playerIdCache[cacheKey];
-  }
-
-  try {
-    // Use last name for search (more reliable)
-    const parts = playerName.trim().split(' ');
-    const lastName = parts[parts.length - 1];
-
-    const response = await axios.get(
-      `https://v2.nba.api-sports.io/players?search=${encodeURIComponent(lastName)}`,
-      {
-        headers: { 'x-apisports-key': apiKey },
-        timeout: 10000
-      }
-    );
-
-    if (!response.data?.response?.length) {
-      console.log(`[v2] Player not found: ${playerName}`);
-      return null;
-    }
-
-    // Find best match by comparing full names
-    const normalizedSearch = playerName.toLowerCase().replace(/[^a-z\s]/g, '').trim();
-
-    for (const p of response.data.response) {
-      const fullName = `${p.firstname || ''} ${p.lastname || ''}`.toLowerCase().replace(/[^a-z\s]/g, '').trim();
-      if (fullName === normalizedSearch) {
-        playerIdCache[cacheKey] = p.id;
-        console.log(`[v2] Found ${playerName} -> ID ${p.id}`);
-        return p.id;
-      }
-    }
-
-    // Partial match: first + last name contains
-    for (const p of response.data.response) {
-      const fullName = `${p.firstname || ''} ${p.lastname || ''}`.toLowerCase();
-      if (fullName.includes(normalizedSearch) || normalizedSearch.includes(fullName)) {
-        playerIdCache[cacheKey] = p.id;
-        console.log(`[v2] Partial match ${playerName} -> ${p.firstname} ${p.lastname} (ID ${p.id})`);
-        return p.id;
-      }
-    }
-
-    // Fallback: use first result with matching last name
-    const first = response.data.response[0];
-    playerIdCache[cacheKey] = first.id;
-    console.log(`[v2] Best guess ${playerName} -> ${first.firstname} ${first.lastname} (ID ${first.id})`);
-    return first.id;
-
-  } catch (err) {
-    console.error(`[v2] Error searching player ${playerName}:`, err.message);
-    return null;
-  }
-}
-
-/**
- * Fetch game logs for a player
- */
-async function getGameLogs(playerId, apiKey, limit = 82) {
-  try {
-    const season = getCurrentNBASeason();
-    const response = await axios.get(
-      `https://v2.nba.api-sports.io/players/statistics?season=${season}&id=${playerId}`,
-      {
-        headers: { 'x-apisports-key': apiKey },
-        timeout: 10000
-      }
-    );
-
-    if (response.data?.errors?.length > 0 || !response.data?.response?.length) {
-      // Try previous season as fallback
-      const prevResponse = await axios.get(
-        `https://v2.nba.api-sports.io/players/statistics?season=${season - 1}&id=${playerId}`,
-        {
-          headers: { 'x-apisports-key': apiKey },
-          timeout: 10000
-        }
-      );
-
-      if (!prevResponse.data?.response?.length) {
-        return [];
-      }
-
-      let logs = prevResponse.data.response;
-      // Sort by game.id DESC (higher ID = more recent). game.date is often null in API-Sports.
-    logs.sort((a, b) => (b.game?.id || 0) - (a.game?.id || 0));
-      return logs.slice(0, limit);
-    }
-
-    let logs = response.data.response;
-    // Sort by game.id DESC (higher ID = more recent). game.date is often null in API-Sports.
-    logs.sort((a, b) => (b.game?.id || 0) - (a.game?.id || 0));
-    return logs.slice(0, limit);
-
-  } catch (err) {
-    console.error(`[v2] Error fetching game logs for ${playerId}:`, err.message);
-    return [];
-  }
-}
-
-// ──────────────────────────────────────────────
 // FEATURE ENGINEERING (matches API_DOCUMENTATION.md exactly)
 // ──────────────────────────────────────────────
 
@@ -514,19 +169,11 @@ function stddev(arr) {
   return Math.sqrt(arr.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / (arr.length - 1));
 }
 
-function daysBetween(d1, d2) {
-  return Math.ceil(Math.abs(new Date(d2) - new Date(d1)) / (1000 * 60 * 60 * 24));
-}
-
 function americanToImpliedProb(odds) {
   if (odds < 0) return Math.abs(odds) / (Math.abs(odds) + 100);
   return 100 / (odds + 100);
 }
 
-/**
- * Get the L3 stat matching the prop_type (uses SUM for combos).
- * Used for LINE_VALUE computation per FEATURES_88_COMPLETE.md Section 13.
- */
 function getL3StatForProp(modelPropType, f) {
   switch (modelPropType) {
     case 'points': return f.L3_PTS;
@@ -545,10 +192,6 @@ function getL3StatForProp(modelPropType, f) {
   }
 }
 
-/**
- * Get the relevant stat for market comparison (uses PRIMARY stat, not combo sum).
- * Used for L3_vs_market and L10_vs_market per FEATURES_88_COMPLETE.md Section 13.
- */
 function getMarketStat(modelPropType, f, window) {
   if (['points', 'points_rebounds', 'points_assists', 'points_rebounds_assists', 'threes'].includes(modelPropType)) {
     return f[`${window}_PTS`];
@@ -567,14 +210,14 @@ function getMarketStat(modelPropType, f, window) {
 }
 
 /**
- * Build all 88 features from game logs + prop data
- * Matches FEATURES_88_COMPLETE.md exactly
+ * Build all 88 features from game logs + prop data.
+ * Matches FEATURES_88_COMPLETE.md exactly.
  */
 function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const l3Games = gameLogs.slice(0, 3);
   const l10Games = gameLogs.slice(0, 10);
 
-  // ── L3 Stats (simple mean of per-game values per spec) ──
+  // ── L3 Stats ──
   const l3Count = l3Games.length || 1;
   let l3 = { pts: 0, reb: 0, ast: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, stl: 0, blk: 0, tov: 0 };
   const l3FgPctArr = [], l3Fg3PctArr = [];
@@ -592,7 +235,6 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
     l3.stl += g.steals || 0;
     l3.blk += g.blocks || 0;
     l3.tov += g.turnovers || 0;
-    // Per-game FG_PCT for simple mean (spec: mean of per-game values, not weighted)
     const gFga = g.fga || 0, gFgm = g.fgm || 0;
     l3FgPctArr.push(gFga > 0 ? gFgm / gFga : 0);
     const gTpa = g.tpa || 0, gTpm = g.tpm || 0;
@@ -612,7 +254,7 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const L3_FGM = l3.fgm / l3Count;
   const L3_FGA = l3.fga / l3Count;
 
-  // ── L10 Stats (simple mean of per-game values per spec) ──
+  // ── L10 Stats ──
   const l10Count = l10Games.length || 1;
   let l10 = { pts: 0, reb: 0, ast: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, stl: 0, blk: 0, tov: 0 };
   const ptsArr = [], rebArr = [], astArr = [];
@@ -633,7 +275,6 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
     l10.stl += g.steals || 0;
     l10.blk += g.blocks || 0;
     l10.tov += g.turnovers || 0;
-    // Per-game FG_PCT for simple mean
     const gFga = g.fga || 0, gFgm = g.fgm || 0;
     l10FgPctArr.push(gFga > 0 ? gFgm / gFga : 0);
     const gTpa = g.tpa || 0, gTpm = g.tpm || 0;
@@ -659,17 +300,14 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   // ── Game Context ──
   const HOME_AWAY = prop.isHome ? 1 : 0;
 
-  // Compute rest/schedule from game log dates when available (spec default: 3)
   let DAYS_REST = 3;
   let GAMES_IN_LAST_7 = 3;
   const upcomingDate = new Date(gameDate);
   if (!isNaN(upcomingDate.getTime()) && gameLogs.length > 0) {
-    // Try to get date of most recent game for DAYS_REST
     const mostRecentDate = gameLogs[0]?.game?.date ? new Date(gameLogs[0].game.date) : null;
     if (mostRecentDate && !isNaN(mostRecentDate.getTime())) {
       DAYS_REST = Math.max(1, Math.round((upcomingDate - mostRecentDate) / (1000 * 60 * 60 * 24)));
     }
-    // Count games in last 7 days (exclusive of game day)
     const sevenDaysAgo = new Date(upcomingDate);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     let gamesIn7 = 0;
@@ -696,7 +334,7 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const CONSISTENCY_REB = L10_REB > 0 ? L10_REB_STD / L10_REB : 0;
   const CONSISTENCY_AST = L10_AST > 0 ? L10_AST_STD / L10_AST : 0;
   const ACCELERATION_PTS = DAYS_REST > 0 ? TREND_PTS / DAYS_REST : TREND_PTS;
-  const EFFICIENCY_STABLE = L3_PTS >= L10_PTS ? 1 : 0; // Hot streak flag per spec
+  const EFFICIENCY_STABLE = L3_PTS >= L10_PTS ? 1 : 0;
 
   // ── Interaction Features ──
   const L3_PTS_x_HOME = L3_PTS * HOME_AWAY;
@@ -720,12 +358,12 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const L3_vs_L10_PTS_RATIO = L10_PTS > 0 ? L3_PTS / L10_PTS : 1;
   const L3_vs_L10_REB_RATIO = L10_REB > 0 ? L3_REB / L10_REB : 1;
 
-  // ── Resolve model prop_type BEFORE betting features (needed for prop-dependent calcs) ──
+  // ── Resolve model prop_type ──
   const propTypeMap = {
     'points': 'points',
     'rebounds': 'rebounds',
     'assists': 'assists',
-    'threePointersMade': 'threes',   // Bug fix: was 'threePointersMade', model expects 'threes'
+    'threePointersMade': 'threes',
     'steals': 'steals',
     'blocks': 'blocks',
     'turnovers': 'turnovers',
@@ -744,7 +382,6 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const implied_prob_over = americanToImpliedProb(odds_over);
   const implied_prob_under = americanToImpliedProb(odds_under);
 
-  // Prop-type-dependent: LINE_VALUE uses stat sum (combos add up), market uses primary stat
   const rawFeats = { L3_PTS, L3_REB, L3_AST, L3_FG3M, L3_BLK, L3_STL, L3_TOV, L10_PTS, L10_REB, L10_AST, L10_FG3M, L10_BLK, L10_STL, L10_TOV };
   const l3Stat = getL3StatForProp(modelPropType, rawFeats);
   const LINE_VALUE = line !== 0 ? (l3Stat - line) / line : 0;
@@ -752,7 +389,6 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const ODDS_EDGE = implied_prob_over - implied_prob_under;
   const odds_spread = odds_over - odds_under;
   const market_confidence = Math.abs(implied_prob_over - 0.5);
-  // These ALWAYS compare specific stats vs line regardless of prop_type (cross-stat context)
   const L3_PTS_vs_LINE = L3_PTS - line;
   const L3_REB_vs_LINE = L3_REB - line;
   const L3_AST_vs_LINE = L3_AST - line;
@@ -761,7 +397,6 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const LINE_DIFFICULTY_AST = L10_AST !== 0 ? line / L10_AST : 1;
   const LINE_vs_AVG_PTS = line - L10_PTS;
   const LINE_vs_AVG_REB = line - L10_REB;
-  // Market features use PRIMARY stat per prop type (not combo sum)
   const l3MarketStat = getMarketStat(modelPropType, rawFeats, 'L3');
   const l10MarketStat = getMarketStat(modelPropType, rawFeats, 'L10');
   const L3_vs_market = (l3MarketStat - line) * implied_prob_over;
@@ -771,7 +406,7 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
   const date = new Date(gameDate);
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
-  const day_of_week = (date.getDay() + 6) % 7; // Python weekday convention: Mon=0, Sun=6
+  const day_of_week = (date.getDay() + 6) % 7;
 
   // ── Season ──
   const seasonYear = getCurrentNBASeason();
@@ -854,120 +489,328 @@ async function predictBatch(featuresArray) {
 }
 
 // ──────────────────────────────────────────────
-// SGO API
+// EDGEBOARD PIPELINE
 // ──────────────────────────────────────────────
 
-async function fetchSGOEvent(team1, team2) {
-  let response;
-  for (let attempt = 0; attempt < SGO_API_KEYS.length; attempt++) {
-    const url = `${SGO_BASE_URL}/events/?apiKey=${getSGOKey()}&leagueID=NBA&oddsAvailable=true&limit=50`;
+/**
+ * Core EdgeBoard pipeline — callable directly or via HTTP wrapper.
+ *
+ * @param {string} eventId - The Odds API event ID
+ * @param {object} options - { gameDate, debug }
+ * @returns {object} - { success, topProps, goblinLegs, ... }
+ */
+async function getEdgeBoardProps(eventId, options = {}) {
+  const { gameDate, debug } = options;
+
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('API_SPORTS_KEY not configured');
+
+  // 1. Fetch standard props from The Odds API (replaces SGO entirely)
+  console.log(`[EdgeBoard] Fetching standard props for event ${eventId}...`);
+  const { props: allProps, homeTeam, awayTeam, gameTime } = await fetchStandardProps(eventId);
+
+  if (!allProps || allProps.length === 0) {
+    return {
+      success: true, sport: 'NBA',
+      teams: { home: homeTeam, away: awayTeam },
+      gameTime, totalPropsAvailable: 0,
+      topProps: [], goblinLegs: [],
+      message: 'No player props available from The Odds API'
+    };
+  }
+  console.log(`[EdgeBoard] Found ${allProps.length} props from The Odds API`);
+
+  // 2. Team codes for ML features
+  const homeTeamCode = getTeamCode(homeTeam);
+  const awayTeamCode = getTeamCode(awayTeam);
+
+  // 3. Fetch opponent defensive stats (cached 24h)
+  const oppStatsData = await getOpponentDefensiveStats();
+
+  // 4. Resolve player IDs via API-Sports (batched, cached)
+  const uniquePlayers = [...new Set(allProps.map(p => p.playerName))];
+  console.log(`[EdgeBoard] Resolving IDs for ${uniquePlayers.length} unique players`);
+  const playerIdMap = await resolvePlayerIdsBatch(uniquePlayers);
+
+  const resolvedCount = Object.values(playerIdMap).filter(id => id !== null).length;
+  console.log(`[EdgeBoard] Resolved ${resolvedCount}/${uniquePlayers.length} player IDs`);
+
+  // 5. Fetch game logs (Firestore-cached)
+  const gameLogsMap = await getGameLogsBatch(playerIdMap);
+  const withLogs = Object.entries(gameLogsMap).filter(([, logs]) => logs.length > 0);
+  console.log(`[EdgeBoard] Got game logs for ${withLogs.length}/${resolvedCount} players`);
+
+  // 6. Determine player teams from game logs
+  const playerTeamInfo = {};
+  for (const [name, logs] of Object.entries(gameLogsMap)) {
+    playerTeamInfo[name] = resolvePlayerTeam(logs, homeTeam, awayTeam);
+  }
+
+  // 7. Enrich props with team + isHome, filter to those with game logs
+  const enrichedProps = allProps
+    .map(p => ({
+      ...p,
+      team: playerTeamInfo[p.playerName]?.team || homeTeam,
+      isHome: playerTeamInfo[p.playerName]?.isHome ?? false,
+    }))
+    .filter(p => gameLogsMap[p.playerName]?.length > 0);
+
+  console.log(`[EdgeBoard] Processing ${enrichedProps.length} props through ML`);
+
+  if (enrichedProps.length === 0) {
+    return {
+      success: true, sport: 'NBA',
+      teams: { home: homeTeam, away: awayTeam },
+      gameTime, totalPropsAvailable: allProps.length,
+      topProps: [], goblinLegs: [],
+      message: 'No player game logs available for feature engineering'
+    };
+  }
+
+  // 8. Build 88-feature vectors
+  const effectiveGameDate = gameDate || gameTime;
+  const featuresList = enrichedProps.map(prop =>
+    buildFeatures(gameLogsMap[prop.playerName], prop, homeTeamCode, awayTeamCode, effectiveGameDate)
+  );
+
+  // 9. Build per-player L10 stats lookup
+  const playerStatsMap = {};
+  enrichedProps.forEach((prop, idx) => {
+    if (!playerStatsMap[prop.playerName]) {
+      const f = featuresList[idx];
+      playerStatsMap[prop.playerName] = {
+        pointsPerGame: parseFloat(f.L10_PTS.toFixed(1)),
+        reboundsPerGame: parseFloat(f.L10_REB.toFixed(1)),
+        assistsPerGame: parseFloat(f.L10_AST.toFixed(1)),
+        stealsPerGame: parseFloat(f.L10_STL.toFixed(1)),
+        blocksPerGame: parseFloat(f.L10_BLK.toFixed(1)),
+        fgPct: parseFloat((f.L10_FG_PCT * 100).toFixed(1)),
+        fg3Pct: parseFloat((f.L10_FG3_PCT * 100).toFixed(1)),
+        minutesPerGame: parseFloat(f.L10_MIN.toFixed(1)),
+      };
+    }
+  });
+
+  // 10. Call Vertex AI in batches of 10
+  const allPredictions = [];
+  for (let i = 0; i < featuresList.length; i += 10) {
+    const batch = featuresList.slice(i, i + 10);
     try {
-      response = await axios.get(url, { headers: { 'Accept': 'application/json' }, timeout: 15000 });
-      break;
+      const preds = await predictBatch(batch);
+      allPredictions.push(...preds);
     } catch (err) {
-      if (err.response?.status === 429 && attempt < SGO_API_KEYS.length - 1) {
-        console.warn(`[v2] SGO key ${sgoKeyIndex + 1} rate-limited, rotating...`);
-        rotateSGOKey();
-        continue;
+      console.error(`[EdgeBoard] Vertex AI batch error:`, err.message);
+      allPredictions.push(...batch.map(() => null));
+    }
+  }
+
+  // 11. Combine props with predictions + sanity filter + green score
+  const results = [];
+  let filteredBySanity = 0;
+  enrichedProps.forEach((prop, idx) => {
+    const pred = allPredictions[idx];
+    if (!pred) return;
+
+    const confidence = pred.confidence;
+    const shouldBet = confidence > 0.10;
+    const bettingValue = confidence > 0.15 ? 'high' : confidence >= 0.10 ? 'medium' : 'low';
+
+    if (shouldBet) {
+      const hitRates = calculateHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
+      const pStats = playerStatsMap[prop.playerName];
+      const opponentTeam = prop.team === homeTeam ? awayTeam : homeTeam;
+      const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
+
+      // Sanity check
+      const l10Avg = getL10AvgForStat(pStats, prop.statType, featuresList[idx]);
+      const sanity = passesSanityCheck({
+        prediction: pred.prediction,
+        l10Avg,
+        line: prop.line,
+        hitRates,
+        opponentDefense,
+      });
+      if (!sanity.pass) {
+        filteredBySanity++;
+        console.log(`[EdgeBoard] FILTERED: ${prop.playerName} ${pred.prediction} ${prop.line} ${prop.statType} — ${sanity.reason}`);
+        return;
       }
-      throw err;
+
+      // Reasoning features
+      const reasoning = getReasoningFeatures(featuresList[idx], prop.statType);
+
+      // Temperature-scaled + capped probabilities
+      const calOver = calibrateProbability(pred.probability_over);
+      const calUnder = calibrateProbability(pred.probability_under);
+      const cappedOver = Math.min(calOver, PROB_CAP);
+      const cappedUnder = Math.min(calUnder, PROB_CAP);
+      const displayConfidence = Math.min(
+        pred.prediction === 'Over' ? calOver : calUnder,
+        PROB_CAP
+      );
+
+      // Green score
+      const isOver = pred.prediction === 'Over';
+      const relevantOdds = isOver ? prop.oddsOver : prop.oddsUnder;
+      const { score: greenScore, signals: greenSignals } = calculateGreenScore({
+        prediction: pred.prediction,
+        l10Avg,
+        line: prop.line,
+        hitRates,
+        opponentDefense,
+        relevantOdds,
+      });
+
+      // Trend
+      const trend = parseFloat(getTrendForStat(featuresList[idx], prop.statType).toFixed(1));
+
+      results.push({
+        playerName: prop.playerName,
+        playerId: playerIdMap[prop.playerName] || null,
+        team: prop.team,
+        statType: prop.statType,
+        line: prop.line,
+        prediction: pred.prediction,
+        isHome: prop.isHome,
+        l10Avg: l10Avg != null ? parseFloat(l10Avg.toFixed(1)) : null,
+        trend,
+        probabilityOver: parseFloat(cappedOver.toFixed(4)),
+        probabilityUnder: parseFloat(cappedUnder.toFixed(4)),
+        confidence,
+        confidencePercent: (confidence * 100).toFixed(1),
+        confidenceTier: bettingValue,
+        oddsOver: prop.oddsOver,
+        oddsUnder: prop.oddsUnder,
+        gamesUsed: gameLogsMap[prop.playerName].length,
+        playerStats: pStats || null,
+        rawProbabilityOver: pred.probability_over,
+        rawProbabilityUnder: pred.probability_under,
+        displayConfidence: parseFloat(displayConfidence.toFixed(4)),
+        displayConfidencePercent: (displayConfidence * 100).toFixed(1),
+        bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
+        bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
+        hitRates,
+        reasoning,
+        opponent: opponentTeam,
+        opponentDefense,
+        greenScore,
+        greenSignals,
+      });
+    }
+  });
+
+  // 12. Filter out goblin-tier odds, sort by display confidence, take top 10
+  const edgeResults = results.filter(r => {
+    const relevantOdds = r.prediction === 'Over' ? r.oddsOver : r.oddsUnder;
+    return relevantOdds == null || relevantOdds >= EDGEBOARD_ODDS_CEILING;
+  });
+  console.log(`[EdgeBoard] ${results.length} total → ${edgeResults.length} after odds ceiling (≥${EDGEBOARD_ODDS_CEILING}), ${results.length - edgeResults.length} goblin-tier excluded`);
+  edgeResults.sort((a, b) => b.displayConfidence - a.displayConfidence);
+  const topProps = edgeResults.slice(0, 10);
+
+  const highCount = topProps.filter(p => p.confidenceTier === 'high').length;
+  const mediumCount = topProps.filter(p => p.confidenceTier === 'medium').length;
+  const greenDist = [0,1,2,3,4,5].map(s => topProps.filter(p => p.greenScore === s).length);
+  console.log(`[EdgeBoard] ${results.length} props passed (${highCount} high, ${mediumCount} medium, ${filteredBySanity} filtered by sanity)`);
+  console.log(`[EdgeBoard] Green scores in top10: 5★=${greenDist[5]} 4★=${greenDist[4]} 3★=${greenDist[3]} 2★=${greenDist[2]} 1★=${greenDist[1]} 0★=${greenDist[0]}`);
+
+  // 13. Alt Lines: Fetch from The Odds API and enrich each prop
+  const altLinesMap = await fetchAltProps(eventId);
+  const goblinLegs = [];
+
+  for (const prop of topProps) {
+    const altKey = `${prop.playerName}|${prop.statType.toLowerCase()}`;
+    const altLines = altLinesMap.get(altKey) || [];
+
+    prop.altLines = altLines;
+
+    const goblin = findBestGoblinLine(altLines, prop.prediction, prop.l10Avg);
+    if (goblin) {
+      prop.goblinLine = goblin;
+
+      const goblinHitRates = calculateHitRates(
+        gameLogsMap[prop.playerName], prop.statType, goblin.line
+      );
+      prop.goblinHitRates = goblinHitRates;
+
+      goblinLegs.push({
+        playerName: prop.playerName,
+        team: prop.team,
+        statType: prop.statType,
+        prediction: prop.prediction,
+        standardLine: prop.line,
+        goblinLine: goblin.line,
+        goblinOdds: goblin.odds,
+        goblinBookmaker: goblin.bookmaker,
+        l10Avg: prop.l10Avg,
+        greenScore: prop.greenScore,
+        hitRates: prop.hitRates,
+        goblinHitRates,
+        opponent: prop.opponent,
+        opponentDefense: prop.opponentDefense,
+        isHome: prop.isHome,
+        bookmakerOver: prop.bookmakerOver,
+      });
     }
   }
 
-  if (!response?.data?.data) return null;
-
-  const normalize = (n) => n.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const t1 = normalize(team1);
-  const t2 = normalize(team2);
-
-  for (const event of response.data.data) {
-    const home = normalize(event.teams.home.names.long);
-    const away = normalize(event.teams.away.names.long);
-    if ((home.includes(t1) || t1.includes(home) || home.includes(t2) || t2.includes(home)) &&
-        (away.includes(t1) || t1.includes(away) || away.includes(t2) || t2.includes(away))) {
-      return event;
-    }
-  }
-  return null;
-}
-
-function extractProps(event) {
-  const props = [];
-  if (!event.odds || !event.players) return props;
-
-  const playerOddsMap = {};
-  for (const odd of Object.values(event.odds)) {
-    if (!odd.playerID || odd.betTypeID !== 'ou') continue;
-    const key = `${odd.playerID}-${odd.statID}`;
-    if (!playerOddsMap[key]) playerOddsMap[key] = {};
-    if (odd.sideID === 'over') playerOddsMap[key].over = odd;
-    else if (odd.sideID === 'under') playerOddsMap[key].under = odd;
+  goblinLegs.sort((a, b) => a.goblinOdds - b.goblinOdds);
+  if (goblinLegs.length > 0) {
+    console.log(`[EdgeBoard] Parlay legs found: ${goblinLegs.length} (safest: ${goblinLegs[0].playerName} ${goblinLegs[0].goblinLine} ${goblinLegs[0].statType} @ ${goblinLegs[0].goblinOdds})`);
   }
 
-  for (const odds of Object.values(playerOddsMap)) {
-    const { over, under } = odds;
-    if (!over || !under) continue;
+  const response = {
+    success: true,
+    sport: 'NBA',
+    eventId,
+    teams: { home: homeTeam, away: awayTeam },
+    gameTime,
+    totalPropsAvailable: allProps.length,
+    propsAnalyzed: enrichedProps.length,
+    filteredBySanityCheck: filteredBySanity,
+    highConfidenceCount: highCount,
+    mediumConfidenceCount: mediumCount,
+    topProps,
+    goblinLegs,
+    timestamp: new Date().toISOString()
+  };
 
-    const player = event.players?.[over.playerID];
-    if (!player) continue;
-
-    let playerName = player.name || '';
-    if (!playerName && player.firstName && player.lastName) {
-      playerName = `${player.firstName} ${player.lastName}`.trim();
-    }
-    if (!playerName) continue;
-
-    // Get consensus line and best odds
-    let lineSum = 0, lineCount = 0;
-    let bestOverOdds = -Infinity, bestUnderOdds = -Infinity;
-    let bestOverBook = '', bestUnderBook = '';
-
-    if (over.byBookmaker) {
-      for (const [bk, bo] of Object.entries(over.byBookmaker)) {
-        if (!bo.available || !bo.overUnder) continue;
-        const ub = under.byBookmaker?.[bk];
-        if (!ub?.available) continue;
-
-        const lv = parseFloat(bo.overUnder);
-        if (!isNaN(lv)) { lineSum += lv; lineCount++; }
-
-        const oo = parseInt(bo.odds, 10);
-        const uo = parseInt(ub.odds, 10);
-        if (oo > bestOverOdds) { bestOverOdds = oo; bestOverBook = bk; }
-        if (uo > bestUnderOdds) { bestUnderOdds = uo; bestUnderBook = bk; }
-      }
-    }
-
-    if (lineCount === 0) continue;
-
-    const playerTeamId = player.teamID || '';
-    const isHome = playerTeamId === event.teams.home.teamID;
-
-    props.push({
-      playerName,
-      team: isHome ? event.teams.home.names.long : event.teams.away.names.long,
-      isHome,
-      statType: over.statID,
-      line: Math.round((lineSum / lineCount) * 10) / 10,
-      oddsOver: bestOverOdds,
-      oddsUnder: bestUnderOdds,
-      bookmakerOver: bestOverBook,
-      bookmakerUnder: bestUnderBook
+  // Debug mode
+  if (debug) {
+    const propToFeatIdx = new Map();
+    enrichedProps.forEach((p, idx) => {
+      propToFeatIdx.set(`${p.playerName}|${p.statType}|${p.line}`, idx);
     });
+    response.debug = {
+      homeTeamCode,
+      awayTeamCode,
+      effectiveGameDate,
+      topPropsFeatures: topProps.map(tp => {
+        const key = `${tp.playerName}|${tp.statType}|${tp.line}`;
+        const fidx = propToFeatIdx.get(key);
+        return {
+          playerName: tp.playerName,
+          statType: tp.statType,
+          line: tp.line,
+          features: fidx !== undefined ? featuresList[fidx] : null,
+          vertexPrediction: fidx !== undefined ? allPredictions[fidx] : null
+        };
+      })
+    };
   }
 
-  return props;
+  return response;
 }
 
 // ──────────────────────────────────────────────
-// MAIN CLOUD FUNCTION
+// HTTP CLOUD FUNCTION (backward compatible)
 // ──────────────────────────────────────────────
 
 exports.getMLPlayerPropsV2 = functions.https.onRequest(
   { timeoutSeconds: 300, memory: '1GiB', cors: true },
   async (req, res) => {
     try {
-      const { team1, team2, sport, gameDate, debug } = req.body;
+      const { team1, team2, sport, gameDate, debug, oddsApiEventId } = req.body;
       if (!team1 || !team2 || !sport) {
         return res.status(400).json({ error: 'Missing required fields: team1, team2, sport' });
       }
@@ -975,252 +818,20 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
         return res.status(400).json({ error: 'Only NBA is supported' });
       }
 
-      const apiKey = getApiKey();
-      if (!apiKey) {
-        return res.status(500).json({ error: 'API_SPORTS_KEY not configured' });
-      }
-
       console.log(`[v2] Processing: ${team1} vs ${team2}`);
 
-      // 1. Fetch SGO event
-      const event = await fetchSGOEvent(team1, team2);
-      if (!event) {
-        return res.status(404).json({ error: 'No matching game found' });
-      }
-
-      // 2. Extract props
-      const allProps = extractProps(event);
-      if (allProps.length === 0) {
-        return res.status(404).json({ error: 'No player props available' });
-      }
-      console.log(`[v2] Found ${allProps.length} props from SGO`);
-
-      // 2.5: Fetch opponent defensive stats (ONE call, cached 24h)
-      const oppStatsData = await getOpponentDefensiveStats();
-
-      const homeTeamLong = event.teams.home.names.long;
-      const awayTeamLong = event.teams.away.names.long;
-
-      // 3. Get unique players and resolve their API-Sports IDs
-      const uniquePlayers = [...new Set(allProps.map(p => p.playerName))];
-      console.log(`[v2] Resolving IDs for ${uniquePlayers.length} unique players`);
-
-      // Resolve player IDs in parallel (batches of 5 to avoid rate limits)
-      const playerIdMap = {};
-      for (let i = 0; i < uniquePlayers.length; i += 5) {
-        const batch = uniquePlayers.slice(i, i + 5);
-        const results = await Promise.all(batch.map(name => findPlayerId(name, apiKey)));
-        batch.forEach((name, idx) => { playerIdMap[name] = results[idx]; });
-      }
-
-      const resolvedCount = Object.values(playerIdMap).filter(id => id !== null).length;
-      console.log(`[v2] Resolved ${resolvedCount}/${uniquePlayers.length} player IDs`);
-
-      // 4. Fetch game logs for resolved players (deduplicate)
-      const gameLogsMap = {};
-      const validPlayerIds = Object.entries(playerIdMap).filter(([, id]) => id !== null);
-
-      for (let i = 0; i < validPlayerIds.length; i += 4) {
-        const batch = validPlayerIds.slice(i, i + 4);
-        const results = await Promise.all(batch.map(([, id]) => getGameLogs(id, apiKey)));
-        batch.forEach(([name], idx) => { gameLogsMap[name] = results[idx]; });
-      }
-
-      const withLogs = Object.entries(gameLogsMap).filter(([, logs]) => logs.length > 0);
-      console.log(`[v2] Got game logs for ${withLogs.length}/${validPlayerIds.length} players`);
-
-      // 5. Build features and get predictions
-      const homeTeamCode = event.teams.home.names.short || event.teams.home.names.long.split(' ').pop().substring(0, 3).toUpperCase();
-      const awayTeamCode = event.teams.away.names.short || event.teams.away.names.long.split(' ').pop().substring(0, 3).toUpperCase();
-      const effectiveGameDate = gameDate || event.status.startsAt;
-
-      // Filter props to only those with game logs
-      const processableProps = allProps.filter(p => gameLogsMap[p.playerName]?.length > 0);
-      console.log(`[v2] Processing ${processableProps.length} props through ML`);
-
-      if (processableProps.length === 0) {
-        return res.status(200).json({
-          success: true, sport: 'NBA',
-          teams: { home: event.teams.home.names.long, away: event.teams.away.names.long },
-          gameTime: event.status.startsAt,
-          totalPropsAvailable: allProps.length,
-          topProps: [],
-          message: 'No player game logs available for feature engineering'
-        });
-      }
-
-      // Build features for all processable props
-      const featuresList = processableProps.map(prop =>
-        buildFeatures(gameLogsMap[prop.playerName], prop, homeTeamCode, awayTeamCode, effectiveGameDate)
-      );
-
-      // Build per-player L10 stats lookup (for UI display)
-      const playerStatsMap = {};
-      processableProps.forEach((prop, idx) => {
-        if (!playerStatsMap[prop.playerName]) {
-          const f = featuresList[idx];
-          playerStatsMap[prop.playerName] = {
-            pointsPerGame: parseFloat(f.L10_PTS.toFixed(1)),
-            reboundsPerGame: parseFloat(f.L10_REB.toFixed(1)),
-            assistsPerGame: parseFloat(f.L10_AST.toFixed(1)),
-            stealsPerGame: parseFloat(f.L10_STL.toFixed(1)),
-            blocksPerGame: parseFloat(f.L10_BLK.toFixed(1)),
-            fgPct: parseFloat((f.L10_FG_PCT * 100).toFixed(1)),
-            fg3Pct: parseFloat((f.L10_FG3_PCT * 100).toFixed(1)),
-            minutesPerGame: parseFloat(f.L10_MIN.toFixed(1)),
-          };
+      // Resolve event ID: use provided or look up from The Odds API
+      let eventId = oddsApiEventId;
+      if (!eventId) {
+        const event = await findEventByTeams(team1, team2);
+        if (!event) {
+          return res.status(404).json({ error: 'No matching game found on The Odds API' });
         }
-      });
-
-      // Call Vertex AI in batches of 10
-      const allPredictions = [];
-      for (let i = 0; i < featuresList.length; i += 10) {
-        const batch = featuresList.slice(i, i + 10);
-        try {
-          const preds = await predictBatch(batch);
-          allPredictions.push(...preds);
-        } catch (err) {
-          console.error(`[v2] Vertex AI batch error:`, err.message);
-          // Fill with nulls for failed batch
-          allPredictions.push(...batch.map(() => null));
-        }
+        eventId = event.id;
       }
 
-      // 6. Combine props with predictions + enhanced data
-      const results = [];
-      let filteredBySanity = 0;
-      processableProps.forEach((prop, idx) => {
-        const pred = allPredictions[idx];
-        if (!pred) return;
-
-        const confidence = pred.confidence;
-        const shouldBet = confidence > 0.10;
-        const bettingValue = confidence > 0.15 ? 'high' : confidence >= 0.10 ? 'medium' : 'low';
-
-        if (shouldBet) {
-          // Hit rates from raw game logs
-          const hitRates = calculateHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
-          const pStats = playerStatsMap[prop.playerName];
-
-          // Compute opponent defense BEFORE sanity check (needed for multi-signal filter)
-          const opponentTeam = prop.team === homeTeamLong ? awayTeamLong : homeTeamLong;
-          const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
-
-          // Multi-signal sanity check: filters props where 2+ data points contradict
-          const sanity = passesSanityCheck(pred.prediction, prop.statType, prop.line, pStats, hitRates, featuresList[idx], opponentDefense);
-          if (!sanity.pass) {
-            filteredBySanity++;
-            console.log(`[v2] FILTERED: ${prop.playerName} ${pred.prediction} ${prop.line} ${prop.statType} — ${sanity.reason}`);
-            return;
-          }
-
-          // Key reasoning features (model's "why")
-          const reasoning = getReasoningFeatures(featuresList[idx], prop.statType);
-
-          // Temperature-scaled probabilities for display (T=2.0)
-          const calOver = calibrateProbability(pred.probability_over);
-          const calUnder = calibrateProbability(pred.probability_under);
-
-          // Hard cap: model is ~65% accurate, never display probability > 85%
-          const PROB_CAP = 0.85;
-          const cappedOver = Math.min(calOver, PROB_CAP);
-          const cappedUnder = Math.min(calUnder, PROB_CAP);
-          const displayConfidence = Math.min(
-            pred.prediction === 'Over' ? calOver : calUnder,
-            PROB_CAP
-          );
-
-          results.push({
-            // Core fields — probabilities are CALIBRATED (T=2.0) and CAPPED at 85%
-            playerName: prop.playerName,
-            team: prop.team,
-            statType: prop.statType,
-            line: prop.line,
-            prediction: pred.prediction,
-            probabilityOver: parseFloat(cappedOver.toFixed(4)),
-            probabilityUnder: parseFloat(cappedUnder.toFixed(4)),
-            confidence,
-            confidencePercent: (confidence * 100).toFixed(1),
-            confidenceTier: bettingValue,
-            oddsOver: prop.oddsOver,
-            oddsUnder: prop.oddsUnder,
-            gamesUsed: gameLogsMap[prop.playerName].length,
-            playerStats: pStats || null,
-
-            // Raw model probabilities (before calibration, for debugging)
-            rawProbabilityOver: pred.probability_over,
-            rawProbabilityUnder: pred.probability_under,
-
-            // Convenience fields (also capped)
-            displayConfidence: parseFloat(displayConfidence.toFixed(4)),
-            displayConfidencePercent: (displayConfidence * 100).toFixed(1),
-
-            // Bookmaker names
-            bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
-            bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
-
-            // Hit rates
-            hitRates,
-
-            // Model reasoning
-            reasoning,
-
-            // Opponent defense
-            opponent: opponentTeam,
-            opponentDefense,
-          });
-        }
-      });
-
-      // Sort by calibrated display confidence (descending) and take top 10
-      results.sort((a, b) => b.displayConfidence - a.displayConfidence);
-      const topProps = results.slice(0, 10);
-
-      const highCount = topProps.filter(p => p.confidenceTier === 'high').length;
-      const mediumCount = topProps.filter(p => p.confidenceTier === 'medium').length;
-
-      console.log(`[v2] ${results.length} props passed (${highCount} high, ${mediumCount} medium, ${filteredBySanity} filtered by sanity check)`);
-
-      const response = {
-        success: true,
-        sport: 'NBA',
-        eventId: event.eventID,
-        teams: { home: event.teams.home.names.long, away: event.teams.away.names.long },
-        gameTime: event.status.startsAt,
-        totalPropsAvailable: allProps.length,
-        propsAnalyzed: processableProps.length,
-        filteredBySanityCheck: filteredBySanity,
-        highConfidenceCount: highCount,
-        mediumConfidenceCount: mediumCount,
-        topProps,
-        timestamp: new Date().toISOString()
-      };
-
-      // Debug mode: include raw features for top props (sorted by confidence)
-      if (debug) {
-        const propToFeatIdx = new Map();
-        processableProps.forEach((p, idx) => {
-          propToFeatIdx.set(`${p.playerName}|${p.statType}|${p.line}`, idx);
-        });
-        response.debug = {
-          homeTeamCode,
-          awayTeamCode,
-          effectiveGameDate,
-          topPropsFeatures: topProps.map(tp => {
-            const key = `${tp.playerName}|${tp.statType}|${tp.line}`;
-            const idx = propToFeatIdx.get(key);
-            return {
-              playerName: tp.playerName,
-              statType: tp.statType,
-              line: tp.line,
-              features: idx !== undefined ? featuresList[idx] : null,
-              vertexPrediction: idx !== undefined ? allPredictions[idx] : null
-            };
-          })
-        };
-      }
-
-      return res.status(200).json(response);
+      const result = await getEdgeBoardProps(eventId, { gameDate, debug });
+      return res.status(200).json(result);
 
     } catch (error) {
       console.error('[v2] Error:', error);
@@ -1228,3 +839,6 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
     }
   }
 );
+
+// Export for direct use by preCacheTopGames and Parlay Stack
+module.exports = { getEdgeBoardProps, getMLPlayerPropsV2: exports.getMLPlayerPropsV2 };

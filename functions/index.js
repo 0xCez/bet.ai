@@ -9,18 +9,24 @@ const path = require("path");
 require('dotenv').config();
 
 // Re-export preCacheTopGames functions from separate file
-const { preCacheTopGames, preCacheTopGamesScheduled, refreshMLPropsDaily } = require('./preCacheTopGames');
+const { preCacheTopGames, preCacheTopGamesScheduled, refreshMLPropsDaily, refreshProps, getCheatsheetData } = require('./preCacheTopGames');
 exports.preCacheTopGames = preCacheTopGames;
 exports.preCacheTopGamesScheduled = preCacheTopGamesScheduled;
 exports.refreshMLPropsDaily = refreshMLPropsDaily;
+exports.refreshProps = refreshProps;
+exports.getCheatsheetData = getCheatsheetData;
 
 // Re-export ML Player Props functions
 const { getMLPlayerPropsForGame } = require('./mlPlayerProps');
 exports.getMLPlayerPropsForGame = getMLPlayerPropsForGame;
 
-// v2 - Clean rewrite with dynamic player ID resolution
+// v2 - EdgeBoard pipeline (replaces SGO with The Odds API)
 const { getMLPlayerPropsV2 } = require('./mlPlayerPropsV2');
 exports.getMLPlayerPropsV2 = getMLPlayerPropsV2;
+
+// Parlay Stack pipeline (alt lines with signal validation)
+const { getParlayStackLegsHTTP } = require('./parlayStack');
+exports.getParlayStackLegs = getParlayStackLegsHTTP;
 
 // ML Feedback Loop - Track prediction results and export for retraining
 const { trackPredictionResults } = require('./trackPredictionResults');
@@ -41,6 +47,23 @@ const TENNIS_API_KEY = process.env.TENNIS_API_KEY || '2cf2f7d9e8e9d7ea2ab285677a
 admin.initializeApp();
 const db = admin.firestore();
 const CACHE_EXPIRY_TIME = 0; // DISABLED TEMPORARILY - fixing broken data issue
+
+// Retry wrapper for OpenAI API calls (handles 429 rate limits)
+async function callOpenAIWithRetry(config, headers, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await axios.post("https://api.openai.com/v1/chat/completions", config, { headers });
+    } catch (error) {
+      if (error.response?.status === 429 && attempt < maxRetries - 1) {
+        const retryAfter = parseInt(error.response.headers?.['retry-after']) || (2 ** attempt * 2);
+        console.log(`⏳ OpenAI 429 rate limit - retry ${attempt + 1}/${maxRetries} after ${retryAfter}s`);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
 
 // ====================================================================
 // TRANSLATION MAP FOR MARKET INTELLIGENCE OUTPUT
@@ -153,7 +176,7 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
 
       const visionprompt = "You are an expert in analyzing sports visuals—analyze the image to detect two team names or fighter names or tennis player names (from logos, text, jerseys, banners, scoreboards, etc.); if found, return exact JSON format: {\"sport\":\"sport_name_from_list\",\"team1\":\"team1_full_name\",\"team2\":\"team2_full_name\",\"team1_code\":\"3_letter_code1\",\"team2_code\":\"3_letter_code2\"} using english names for team names and fighter names and tennis player names, using the closest matching sport from this list (nba, mlb, nfl, ncaaf, soccer, mma, tennis); if mma and tennis then always return first name + last name of fighter/player. If fewer than two valid teams or more than 2 teams are found or unclear, return only this exact text in plain text: error_no_team. Normalize any detected team or fighter names to their most commonly known English versions. For example, convert local or native-language club names into their widely recognized English equivalents (e.g., \"Internazionale Milano\" → \"Inter Milan\"). Avoid local spellings or native-language variants. If the sport is soccer, also include one additional key in the JSON output: \"soccer_odds_type\": a value selected from the list below that best matches the teams detected or the competition likely represented in the image. Valid values for \"soccer_odds_type\" are: soccer_argentina_primera_division, soccer_australia_aleague, soccer_austria_bundesliga, soccer_belgium_first_div, soccer_brazil_campeonato, soccer_brazil_serie_b, soccer_china_superleague, soccer_conmebol_copa_libertadores, soccer_conmebol_copa_sudamericana, soccer_denmark_superliga, soccer_efl_champ, soccer_england_league1, soccer_england_league2, soccer_epl, soccer_fa_cup, soccer_fifa_world_cup_winner, soccer_finland_veikkausliiga, soccer_france_ligue_one, soccer_france_ligue_two, soccer_germany_bundesliga, soccer_germany_bundesliga2, soccer_germany_liga3, soccer_greece_super_league, soccer_italy_serie_a, soccer_italy_serie_b, soccer_japan_j_league, soccer_korea_kleague1, soccer_league_of_ireland, soccer_mexico_ligamx, soccer_netherlands_eredivisie, soccer_norway_eliteserien, soccer_poland_ekstraklasa, soccer_portugal_primeira_liga, soccer_spain_la_liga, soccer_spain_segunda_division, soccer_spl, soccer_sweden_allsvenskan, soccer_sweden_superettan, soccer_switzerland_superleague, soccer_turkey_super_league, soccer_uefa_champs_league, soccer_uefa_champs_league_women, soccer_uefa_europa_conference_league, soccer_uefa_europa_league, soccer_uefa_nations_league, soccer_usa_mls. Only include \"soccer_odds_type\" if the sport is soccer. For all other sports, do not include this field.";
 
-      const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+      const response = await callOpenAIWithRetry({
         model: "gpt-4o",
         messages: [
             {
@@ -167,10 +190,8 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
         max_tokens: 120,
         response_format: { type: "json_object" }
     }, {
-        headers: {
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json"
-        }
     });
 
 
@@ -552,7 +573,7 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
           // res.status(200).json({ status: "true", prompt: sanitizedPrompt });
           // return;
 
-          const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+          const response = await callOpenAIWithRetry({
             model: "gpt-4o",
             messages: [{
               role: "user",
@@ -562,11 +583,8 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
             max_tokens: 1000,
             response_format: { type: "json_object" }
           }, {
-            headers: {
               "Authorization": `Bearer ${apiKey}`,
               "Content-Type": "application/json"
-
-            }
           });
 
           const finalResponse = response.data.choices[0]?.message?.content;
@@ -680,7 +698,7 @@ Give a real read. Not "monitor," not "maybe." Say what sharp bettors might do. P
           });
       }
   } catch (error) {
-      console.error("Error analyzing image:", error);
+      console.error("Error analyzing image:", error.message, error.response?.status || '');
       res.status(200).json({
           status: "false",
           message: "Failed to analyze image"
@@ -719,7 +737,7 @@ exports.chatWithGPT = functions.https.onRequest(async (req, res) => {
 
       res.status(200).json({ message });
   } catch (error) {
-      console.error("Chat error:", error);
+      console.error("Chat error:", error.message, error.response?.status || '');
       res.status(500).json({ error: "Failed to process chat message" });
   }
 });
@@ -1285,11 +1303,10 @@ async function getLatest10Games(sport, teamId, team2Id = null) {
             let errorMessage = `Failed to fetch ${sport} data (Season ${seasonToFetch})`;
             if (error.response) {
                 console.error('Status:', error.response.status);
-                console.error('Headers:', error.response.headers);
                 console.error('Data:', error.response.data);
                 errorMessage = `API Request Failed (Season ${seasonToFetch}): Status ${error.response.status} - ${JSON.stringify(error.response.data)}`;
             } else if (error.request) {
-                console.error('Request Error:', error.request);
+                console.error('Request Error: No response received');
                 errorMessage = `API Request Error (Season ${seasonToFetch}): No response received.`;
             } else {
                 console.error('Error Message:', error.message);
@@ -1567,7 +1584,6 @@ async function getHeadToHeadGames(sport, team1Id, team2Id) {
         let errorMessage = `Failed to fetch ${sport} H2H data`;
         if (error.response) {
             console.error('Status:', error.response.status);
-            console.error('Headers:', error.response.headers);
             console.error('Data:', error.response.data);
             errorMessage = `API Request Failed (H2H): Status ${error.response.status} - ${JSON.stringify(error.response.data)}`;
              // Check for specific token error from the example response in the request
@@ -1575,7 +1591,7 @@ async function getHeadToHeadGames(sport, team1Id, team2Id) {
                 errorMessage = `API Error (H2H): Missing or invalid API key. Check configuration.`;
             }
         } else if (error.request) {
-            console.error('Request Error:', error.request);
+            console.error('Request Error: No response received');
             errorMessage = `API Request Error (H2H): No response received.`;
         } else {
             console.error('Error Message:', error.message);
@@ -1808,7 +1824,7 @@ async function soccerInjuries(teamId) {
                 console.error('Data:', error.response.data);
                 errorMessage = `API Request Failed (Season ${seasonToFetch}): Status ${error.response.status} - ${JSON.stringify(error.response.data)}`;
             } else if (error.request) {
-                console.error('Request Error:', error.request);
+                console.error('Request Error: No response received');
                 errorMessage = `API Request Error (Season ${seasonToFetch}): No response received.`;
             } else {
                 console.error('Error Message:', error.message);
@@ -1896,7 +1912,7 @@ async function nflInjuries(teamId) {
             console.error('Data:', error.response.data);
             errorMessage = `API Request Failed: Status ${error.response.status} - ${JSON.stringify(error.response.data)}`;
         } else if (error.request) {
-            console.error('Request Error:', error.request);
+            console.error('Request Error: No response received');
             errorMessage = 'API Request Error: No response received.';
         } else {
             console.error('Error Message:', error.message);
