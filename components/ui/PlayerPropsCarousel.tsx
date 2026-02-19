@@ -15,44 +15,45 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { PlayerPropCard, PlayerPropCardSkeleton, EnrichedPlayerProp, PlayerWithProps, PLAYER_CARD_WIDTH } from "./PlayerPropCard";
+import { ParlayLegCard, ParlayLegCardSkeleton, ParlayLeg, PARLAY_CARD_WIDTH } from "./ParlayLegCard";
 import { colors, spacing, typography, borderRadius } from "../../constants/designTokens";
 import { useCachedGames } from "../../app/hooks/useCachedGames";
 
 type TeamFilter = "all" | string;
+type PropsMode = "picks" | "parlays";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HORIZONTAL_PADDING = spacing[6];
 const SNAP_INTERVAL = PLAYER_CARD_WIDTH + HORIZONTAL_PADDING;
+const PARLAY_SNAP_INTERVAL = PARLAY_CARD_WIDTH + HORIZONTAL_PADDING;
 
 /**
- * Carousel showing player props extracted from all pre-cached games
- * Props are sorted by confidence (highest first)
- * Filterable by team
+ * Carousel showing player props extracted from all pre-cached games.
+ * Two modes: Picks (EdgeBoard ML predictions) and Parlays (Parlay Stack alt lines).
  */
 export const PlayerPropsCarousel: React.FC = () => {
-  const scrollViewRef = useRef<ScrollView>(null);
+  const picksScrollRef = useRef<ScrollView>(null);
+  const parlaysScrollRef = useRef<ScrollView>(null);
   const { games: allGames, loading, error } = useCachedGames();
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [picksIndex, setPicksIndex] = useState(0);
+  const [parlaysIndex, setParlaysIndex] = useState(0);
   const [teamFilter, setTeamFilter] = useState<TeamFilter>("all");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [mode, setMode] = useState<PropsMode>("picks");
 
-  // Extract all player props from all games and GROUP BY PLAYER
+  // ─── Extract EdgeBoard player props (grouped by player) ───
   const { playersByName, uniqueTeams } = useMemo(() => {
     const playerMap = new Map<string, PlayerWithProps>();
     const teamsSet = new Set<string>();
 
     allGames.forEach((game) => {
-      const mlProps = game.analysis?.mlPlayerProps?.topProps || [];
+      const mlProps = game.analysis?.mlPlayerProps;
+      const topProps = mlProps?.edgeBoard?.topProps || mlProps?.topProps || [];
       const gameTime = game.gameStartTime;
 
-      mlProps.forEach((prop: any) => {
-        // Skip props with missing essential data
-        if (!prop.playerName || !prop.statType) {
-          console.log("[PlayerPropsCarousel] Skipping prop with missing data:", prop);
-          return;
-        }
+      topProps.forEach((prop: any) => {
+        if (!prop.playerName || !prop.statType) return;
 
-        // Determine opponent based on player's team
         const isHomeTeam = prop.team === game.team1;
         const opponent = isHomeTeam ? game.team2 : game.team1;
 
@@ -64,20 +65,16 @@ export const PlayerPropsCarousel: React.FC = () => {
           gameStartTime: gameTime,
         };
 
-        // Create a unique key for player (name + team + gameId to handle same player name on different teams)
         const playerKey = `${prop.playerName}-${prop.team}-${game.id}`;
 
         if (playerMap.has(playerKey)) {
-          // Add prop to existing player
           playerMap.get(playerKey)!.props.push(enrichedProp);
-          // Update best confidence tier
           const currentBest = playerMap.get(playerKey)!.bestConfidenceTier;
           const propTier = prop.confidenceTier || prop.bettingValue || "medium";
           if (propTier === "high" || (propTier === "medium" && currentBest === "low")) {
             playerMap.get(playerKey)!.bestConfidenceTier = propTier as "high" | "medium" | "low";
           }
         } else {
-          // Create new player entry
           playerMap.set(playerKey, {
             playerName: prop.playerName,
             team: prop.team,
@@ -91,20 +88,15 @@ export const PlayerPropsCarousel: React.FC = () => {
           });
         }
 
-        if (prop.team) {
-          teamsSet.add(prop.team);
-        }
+        if (prop.team) teamsSet.add(prop.team);
       });
     });
 
-    // Convert map to array and sort by best confidence tier
     const players = Array.from(playerMap.values());
     players.sort((a, b) => {
       const tierOrder = { high: 0, medium: 1, low: 2 };
       const tierDiff = tierOrder[a.bestConfidenceTier] - tierOrder[b.bestConfidenceTier];
       if (tierDiff !== 0) return tierDiff;
-
-      // Secondary sort by number of props (more props = more interesting)
       return b.props.length - a.props.length;
     });
 
@@ -114,37 +106,68 @@ export const PlayerPropsCarousel: React.FC = () => {
     };
   }, [allGames]);
 
-  // Filter players by selected team
+  // ─── Extract Parlay Stack legs ───
+  const parlayLegs = useMemo(() => {
+    const legs: ParlayLeg[] = [];
+
+    allGames.forEach((game) => {
+      const stackLegs = game.analysis?.mlPlayerProps?.parlayStack?.legs || [];
+      const gameTime = game.gameStartTime;
+
+      stackLegs.forEach((leg: any) => {
+        if (!leg.playerName || !leg.statType) return;
+
+        const isHomeTeam = leg.team === game.team1;
+        const opponent = leg.opponent || (isHomeTeam ? game.team2 : game.team1);
+
+        legs.push({
+          ...leg,
+          gameId: game.id,
+          opponent,
+          gameStartTime: gameTime,
+        });
+      });
+    });
+
+    // Sort by parlayEdge descending (best value first)
+    legs.sort((a, b) => (b.parlayEdge || 0) - (a.parlayEdge || 0));
+    return legs;
+  }, [allGames]);
+
+  // Filter by team
   const filteredPlayers = useMemo(() => {
     if (teamFilter === "all") return playersByName;
     return playersByName.filter((player) => player.team === teamFilter);
   }, [playersByName, teamFilter]);
 
-  // Team options for dropdown
+  const filteredParlayLegs = useMemo(() => {
+    if (teamFilter === "all") return parlayLegs;
+    return parlayLegs.filter((leg) => leg.team === teamFilter);
+  }, [parlayLegs, teamFilter]);
+
+  // Team options
   const teamOptions = useMemo(() => {
     const options: { id: TeamFilter; label: string }[] = [{ id: "all", label: "All Teams" }];
     uniqueTeams.forEach((team) => {
-      // Get short team name for display
       const parts = team.split(" ");
-      const shortName = parts[parts.length - 1];
-      options.push({ id: team, label: shortName });
+      options.push({ id: team, label: parts[parts.length - 1] });
     });
     return options;
   }, [uniqueTeams]);
 
-  // Current filter label
   const currentTeamOption = teamOptions.find((opt) => opt.id === teamFilter) || teamOptions[0];
 
   const handleTeamSelect = (team: TeamFilter) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setTeamFilter(team);
     setShowDropdown(false);
-    setActiveIndex(0);
-    scrollViewRef.current?.scrollTo({ x: 0, animated: false });
+    setPicksIndex(0);
+    setParlaysIndex(0);
+    picksScrollRef.current?.scrollTo({ x: 0, animated: false });
+    parlaysScrollRef.current?.scrollTo({ x: 0, animated: false });
   };
 
   const handlePlayerPress = (player: PlayerWithProps) => {
-    // Navigate to game analysis
     const game = allGames.find((g) => g.id === player.gameId);
     if (game) {
       router.push({
@@ -163,33 +186,108 @@ export const PlayerPropsCarousel: React.FC = () => {
     }
   };
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / SNAP_INTERVAL);
-    if (index !== activeIndex && index >= 0 && index < filteredPlayers.length) {
-      setActiveIndex(index);
+  const handleParlayLegPress = (leg: ParlayLeg) => {
+    const game = allGames.find((g) => g.id === leg.gameId);
+    if (game) {
+      router.push({
+        pathname: "/analysis",
+        params: {
+          cachedGameId: game.id,
+          sport: game.sport,
+          team1: game.team1,
+          team2: game.team2,
+          team1Id: game.team1Id,
+          team2Id: game.team2Id,
+          fromCache: "true",
+          from: "props",
+        },
+      });
     }
   };
 
-  // Render header with team selector
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <Text style={styles.title}>Hot Player Props</Text>
+  const handlePicksScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / SNAP_INTERVAL);
+    if (index !== picksIndex && index >= 0 && index < filteredPlayers.length) {
+      setPicksIndex(index);
+    }
+  };
+
+  const handleParlaysScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / PARLAY_SNAP_INTERVAL);
+    if (index !== parlaysIndex && index >= 0 && index < filteredParlayLegs.length) {
+      setParlaysIndex(index);
+    }
+  };
+
+  const handleModeChange = (newMode: PropsMode) => {
+    if (newMode === mode) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMode(newMode);
+  };
+
+  // ─── Segmented Toggle ───
+  const renderSegmentedToggle = () => (
+    <View style={styles.segmentedContainer}>
       <Pressable
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setShowDropdown(true);
-        }}
-        style={({ pressed }) => [styles.teamSelector, pressed && styles.teamSelectorPressed]}
+        onPress={() => handleModeChange("picks")}
+        style={[styles.segmentedTab, mode === "picks" && styles.segmentedTabActive]}
       >
-        <Ionicons name="people" size={14} color={colors.primary} />
-        <Text style={styles.teamSelectorText}>{currentTeamOption.label}</Text>
-        <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+        <Ionicons
+          name="analytics"
+          size={14}
+          color={mode === "picks" ? colors.background : colors.mutedForeground}
+        />
+        <Text style={[styles.segmentedText, mode === "picks" && styles.segmentedTextActive]}>
+          Picks
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => handleModeChange("parlays")}
+        style={[styles.segmentedTab, mode === "parlays" && styles.segmentedTabActive]}
+      >
+        <Ionicons
+          name="layers"
+          size={14}
+          color={mode === "parlays" ? colors.background : colors.mutedForeground}
+        />
+        <Text style={[styles.segmentedText, mode === "parlays" && styles.segmentedTextActive]}>
+          Parlays
+        </Text>
+        {parlayLegs.length > 0 && (
+          <View style={styles.legCountBadge}>
+            <Text style={styles.legCountText}>{parlayLegs.length}</Text>
+          </View>
+        )}
       </Pressable>
     </View>
   );
 
-  // Render dropdown modal
+  // ─── Header ───
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <Text style={styles.title}>
+        {mode === "picks" ? "Player Props" : "Parlay Legs"}
+      </Text>
+      <View style={styles.headerControls}>
+        {renderSegmentedToggle()}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowDropdown(true);
+          }}
+          style={({ pressed }) => [styles.teamSelector, pressed && styles.teamSelectorPressed]}
+        >
+          <Ionicons name="people" size={13} color={colors.primary} />
+          <Text style={styles.teamSelectorText}>{currentTeamOption.label}</Text>
+          <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  // ─── Team Dropdown ───
   const renderDropdown = () => (
     <Modal visible={showDropdown} transparent animationType="fade" onRequestClose={() => setShowDropdown(false)}>
       <Pressable style={styles.dropdownOverlay} onPress={() => setShowDropdown(false)}>
@@ -228,7 +326,20 @@ export const PlayerPropsCarousel: React.FC = () => {
     </Modal>
   );
 
-  // Loading state
+  // ─── Dots ───
+  const renderDots = (count: number, activeIdx: number) => {
+    if (count <= 1) return null;
+    return (
+      <View style={styles.dotsContainer}>
+        {Array.from({ length: Math.min(count, 10) }).map((_, index) => (
+          <View key={index} style={[styles.dot, index === activeIdx && styles.dotActive]} />
+        ))}
+        {count > 10 && <Text style={styles.moreDotsText}>+{count - 10}</Text>}
+      </View>
+    );
+  };
+
+  // ─── Loading ───
   if (loading || (allGames.length === 0 && !error)) {
     return (
       <View style={styles.container}>
@@ -236,14 +347,14 @@ export const PlayerPropsCarousel: React.FC = () => {
         {renderDropdown()}
         <View style={styles.scrollContent}>
           <View style={styles.cardWrapper}>
-            <PlayerPropCardSkeleton />
+            {mode === "picks" ? <PlayerPropCardSkeleton /> : <ParlayLegCardSkeleton />}
           </View>
         </View>
       </View>
     );
   }
 
-  // Error state
+  // ─── Error ───
   if (error) {
     return (
       <View style={styles.container}>
@@ -256,18 +367,64 @@ export const PlayerPropsCarousel: React.FC = () => {
     );
   }
 
-  // Empty state (no players available)
-  if (filteredPlayers.length === 0) {
+  // ─── Picks Mode ───
+  if (mode === "picks") {
+    if (filteredPlayers.length === 0) {
+      return (
+        <View style={styles.container}>
+          {renderHeader()}
+          {renderDropdown()}
+          <View style={styles.emptyContainer}>
+            <Ionicons name="analytics-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
+            <Text style={styles.emptyText}>
+              {teamFilter === "all" ? "No player props available" : `No props for ${currentTeamOption.label}`}
+            </Text>
+            <Text style={styles.emptySubtext}>Check back closer to game time</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.container}>
+        {renderHeader()}
+        {renderDropdown()}
+        <ScrollView
+          ref={picksScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          snapToInterval={SNAP_INTERVAL}
+          decelerationRate="fast"
+          onScroll={handlePicksScroll}
+          scrollEventThrottle={16}
+        >
+          {filteredPlayers.map((player, index) => (
+            <View
+              key={`${player.gameId}-${player.playerName}-${index}`}
+              style={[styles.cardWrapper, index === filteredPlayers.length - 1 && styles.lastCardWrapper]}
+            >
+              <PlayerPropCard player={player} onPress={handlePlayerPress} />
+            </View>
+          ))}
+        </ScrollView>
+        {renderDots(filteredPlayers.length, picksIndex)}
+      </View>
+    );
+  }
+
+  // ─── Parlays Mode ───
+  if (filteredParlayLegs.length === 0) {
     return (
       <View style={styles.container}>
         {renderHeader()}
         {renderDropdown()}
         <View style={styles.emptyContainer}>
-          <Ionicons name="trending-up-outline" size={48} color={colors.mutedForeground} style={{ marginBottom: spacing[3] }} />
+          <Ionicons name="layers-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
           <Text style={styles.emptyText}>
-            {teamFilter === "all" ? "No player props available" : `No props for ${currentTeamOption.label}`}
+            {teamFilter === "all" ? "No parlay legs available" : `No parlay legs for ${currentTeamOption.label}`}
           </Text>
-          <Text style={styles.emptySubtext}>Check back later for ML predictions</Text>
+          <Text style={styles.emptySubtext}>Alt lines with validated signals</Text>
         </View>
       </View>
     );
@@ -277,37 +434,26 @@ export const PlayerPropsCarousel: React.FC = () => {
     <View style={styles.container}>
       {renderHeader()}
       {renderDropdown()}
-
-      {/* Player Cards Carousel */}
       <ScrollView
-        ref={scrollViewRef}
+        ref={parlaysScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        snapToInterval={SNAP_INTERVAL}
+        snapToInterval={PARLAY_SNAP_INTERVAL}
         decelerationRate="fast"
-        onScroll={handleScroll}
+        onScroll={handleParlaysScroll}
         scrollEventThrottle={16}
       >
-        {filteredPlayers.map((player, index) => (
+        {filteredParlayLegs.map((leg, index) => (
           <View
-            key={`${player.gameId}-${player.playerName}-${index}`}
-            style={[styles.cardWrapper, index === filteredPlayers.length - 1 && styles.lastCardWrapper]}
+            key={`${leg.gameId}-${leg.playerName}-${leg.statType}-${index}`}
+            style={[styles.cardWrapper, index === filteredParlayLegs.length - 1 && styles.lastCardWrapper]}
           >
-            <PlayerPropCard player={player} onPress={handlePlayerPress} />
+            <ParlayLegCard leg={leg} onPress={handleParlayLegPress} />
           </View>
         ))}
       </ScrollView>
-
-      {/* Page Indicator Dots */}
-      {filteredPlayers.length > 1 && (
-        <View style={styles.dotsContainer}>
-          {filteredPlayers.slice(0, Math.min(filteredPlayers.length, 10)).map((_, index) => (
-            <View key={index} style={[styles.dot, index === activeIndex && styles.dotActive]} />
-          ))}
-          {filteredPlayers.length > 10 && <Text style={styles.moreDotsText}>+{filteredPlayers.length - 10}</Text>}
-        </View>
-      )}
+      {renderDots(filteredParlayLegs.length, parlaysIndex)}
     </View>
   );
 };
@@ -316,7 +462,7 @@ const styles = StyleSheet.create({
   container: {},
   header: {
     paddingHorizontal: spacing[6],
-    marginBottom: spacing[4],
+    marginBottom: spacing[3],
   },
   title: {
     color: colors.foreground,
@@ -324,13 +470,58 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     marginBottom: spacing[2],
   },
+  headerControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[2],
+  },
+  // Segmented toggle
+  segmentedContainer: {
+    flexDirection: "row",
+    backgroundColor: colors.secondary,
+    borderRadius: borderRadius.full,
+    padding: 3,
+    flex: 1,
+  },
+  segmentedTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: spacing[1] + 2,
+    borderRadius: borderRadius.full,
+  },
+  segmentedTabActive: {
+    backgroundColor: colors.primary,
+  },
+  segmentedText: {
+    fontSize: 12,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+  },
+  segmentedTextActive: {
+    color: colors.background,
+  },
+  legCountBadge: {
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: borderRadius.full,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  legCountText: {
+    fontSize: 9,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+  },
+  // Team selector
   teamSelector: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
-    gap: spacing[2],
+    gap: spacing[1],
     paddingVertical: spacing[1],
-    paddingHorizontal: spacing[3],
+    paddingHorizontal: spacing[2] + 2,
     backgroundColor: colors.rgba.primary15,
     borderRadius: borderRadius.full,
     borderWidth: 1,
@@ -341,10 +532,10 @@ const styles = StyleSheet.create({
   },
   teamSelectorText: {
     color: colors.foreground,
-    fontSize: typography.sizes.sm,
+    fontSize: 12,
     fontFamily: typography.fontFamily.medium,
   },
-  // Dropdown styles
+  // Dropdown
   dropdownOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",

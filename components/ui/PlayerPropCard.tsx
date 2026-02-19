@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Dimensions, Image, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable, Dimensions, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
@@ -37,6 +37,9 @@ export interface PlayerProp {
   gamesUsed?: number;
   bookmakerOver?: string;
   bookmakerUnder?: string;
+  l10Avg?: number;
+  trend?: number;
+  greenScore?: number;
   hitRates?: {
     l10?: { over: number; total: number; pct: number };
     season?: { over: number; total: number; pct: number };
@@ -144,62 +147,26 @@ const getTeamAbbreviation = (teamName?: string): string => {
   return abbrevMap[teamName] || teamName.substring(0, 3).toUpperCase();
 };
 
-// Shorter stat names for card display
 const formatStatType = (statType: string): string => {
   const formatMap: { [key: string]: string } = {
-    points: "POINTS",
-    rebounds: "REBOUNDS",
-    assists: "ASSISTS",
-    steals: "STEALS",
-    blocks: "BLOCKS",
-    turnovers: "TURNOVERS",
-    three_pointers_made: "3PT MADE",
-    threepointersmade: "3PT MADE",
-    threes: "3PT MADE",
+    points: "PTS",
+    rebounds: "REB",
+    assists: "AST",
+    steals: "STL",
+    blocks: "BLK",
+    turnovers: "TO",
+    three_pointers_made: "3PT",
+    threepointersmade: "3PT",
+    threes: "3PT",
     "points+rebounds": "PTS+REB",
     "points+assists": "PTS+AST",
     "rebounds+assists": "REB+AST",
-    "points+rebounds+assists": "PTS+REB+AST",
+    "points+rebounds+assists": "PRA",
     "blocks+steals": "BLK+STL",
-    pts_rebs_asts: "PTS+REB+AST",
-    double_double: "DOUBLE-DOUBLE",
+    pts_rebs_asts: "PRA",
+    double_double: "DD",
   };
   return formatMap[statType.toLowerCase()] || statType.replace(/[_+]/g, "+").toUpperCase();
-};
-
-// Get numerical L10 average for a stat type
-const getAvgNumber = (
-  statType: string,
-  stats?: PlayerWithProps["playerStats"]
-): number | null => {
-  if (!stats) return null;
-  const st = statType.toLowerCase();
-  if (st === "points") return stats.pointsPerGame ?? null;
-  if (st === "rebounds") return stats.reboundsPerGame ?? null;
-  if (st === "assists") return stats.assistsPerGame ?? null;
-  if (st === "steals") return stats.stealsPerGame ?? null;
-  if (st === "blocks") return stats.blocksPerGame ?? null;
-  if (st === "points+rebounds") {
-    const sum = (stats.pointsPerGame || 0) + (stats.reboundsPerGame || 0);
-    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
-  }
-  if (st === "points+assists") {
-    const sum = (stats.pointsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
-  }
-  if (st === "rebounds+assists") {
-    const sum = (stats.reboundsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
-  }
-  if (st === "points+rebounds+assists" || st === "pts_rebs_asts") {
-    const sum = (stats.pointsPerGame || 0) + (stats.reboundsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
-  }
-  if (st === "blocks+steals") {
-    const sum = (stats.blocksPerGame || 0) + (stats.stealsPerGame || 0);
-    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
-  }
-  return null;
 };
 
 const formatGameTime = (isoString?: string): string | null => {
@@ -216,7 +183,7 @@ const formatGameTime = (isoString?: string): string | null => {
     hour12: true,
   });
   if (isToday) return `Today ${timeStr}`;
-  if (isTomorrow) return `Tomorrow ${timeStr}`;
+  if (isTomorrow) return `Tmrw ${timeStr}`;
   const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
   return `${dayStr} ${timeStr}`;
 };
@@ -247,7 +214,7 @@ const getPlayerInitials = (name?: string): string => {
 
 interface PropTag {
   text: string;
-  supports: boolean; // true = supports prediction, false = contradicts
+  supports: boolean;
 }
 
 const buildPropTags = (
@@ -256,25 +223,29 @@ const buildPropTags = (
 ): PropTag[] => {
   const tags: PropTag[] = [];
 
-  // Hit rate — show count in the PREDICTED direction
-  // e.g. "6/10 hit Under" or "7/10 hit Over"
+  // L10 hit rate — show count in predicted direction
   const hr = prop.hitRates?.l10;
   if (hr && hr.total > 0) {
     const hitCount = isOver ? hr.over : hr.total - hr.over;
     const supports = isOver ? hr.pct >= 50 : hr.pct < 50;
-    const dir = isOver ? "Over" : "Under";
-    tags.push({ text: `${hitCount}/${hr.total} hit ${dir}`, supports });
+    tags.push({ text: `${hitCount}/${hr.total} L10`, supports });
   }
 
-  // Opponent defense (rank 1-30: 1=best defense, 30=worst)
-  // Show in plain English: "WAS 29th DEF" with color = supports/contradicts
+  // Season hit rate
+  const sznHr = prop.hitRates?.season;
+  if (sznHr && sznHr.total > 0) {
+    const sznHitPct = isOver ? sznHr.pct : 100 - sznHr.pct;
+    const supports = sznHitPct >= 50;
+    tags.push({ text: `${Math.round(sznHitPct)}% SZN`, supports });
+  }
+
+  // Opponent defense rank (1-30: 1=best defense, 30=worst)
   if (prop.opponentDefense?.rank && prop.opponent) {
     const abbrev = getTeamAbbreviation(prop.opponent);
     const rank = prop.opponentDefense.rank;
-    // High rank = bad defense = allows more = favors Over
     const supports = isOver ? rank > 15 : rank <= 15;
     tags.push({
-      text: `${abbrev} ${rank}${getSuffix(rank)} DEF`,
+      text: `${abbrev} ${rank}${getSuffix(rank)}`,
       supports,
     });
   }
@@ -283,14 +254,32 @@ const buildPropTags = (
 };
 
 // ──────────────────────────────────────────────
+// GREEN SCORE DOTS
+// ──────────────────────────────────────────────
+
+const GreenScoreDots: React.FC<{ score: number; max?: number }> = ({ score, max = 5 }) => (
+  <View style={styles.greenDots}>
+    {Array.from({ length: max }).map((_, i) => (
+      <View
+        key={i}
+        style={[
+          styles.greenDot,
+          i < score ? styles.greenDotFilled : styles.greenDotEmpty,
+        ]}
+      />
+    ))}
+  </View>
+);
+
+// ──────────────────────────────────────────────
 // COMPONENT
 // ──────────────────────────────────────────────
 
 export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress }) => {
   const gameTime = formatGameTime(player.gameStartTime);
   const teamAbbrev = getTeamAbbreviation(player.team);
+  const opponentAbbrev = getTeamAbbreviation(player.opponent);
   const playerName = player.playerName || "Unknown Player";
-  const opponent = player.opponent || "TBD";
   const playerImage = getPlayerImage(playerName, teamAbbrev);
 
   const handlePress = () => {
@@ -303,26 +292,29 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
   const extraCount = player.props.length - MAX_PROPS_SHOWN;
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
       <BlurView intensity={glass.card.blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />
 
       <View style={styles.content}>
         {/* Header: Team Badge + Game Time */}
         <View style={styles.header}>
           <View style={styles.teamBadge}>
-            <Ionicons name="basketball" size={12} color="#FF6B35" />
+            <Ionicons name="basketball" size={11} color="#FF6B35" />
             <Text style={styles.teamAbbrev}>{teamAbbrev}</Text>
           </View>
           {gameTime && (
             <View style={styles.gameTimeBadge}>
-              <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
+              <Ionicons name="time-outline" size={11} color={colors.mutedForeground} />
               <Text style={styles.gameTimeText}>{gameTime}</Text>
             </View>
           )}
         </View>
 
-        {/* Player Hero Section */}
-        <View style={styles.playerHero}>
+        {/* Player Section — compact */}
+        <View style={styles.playerRow}>
           {playerImage ? (
             <Image source={playerImage} style={styles.playerAvatarImage} />
           ) : (
@@ -334,42 +326,44 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
             <Text style={styles.playerName} numberOfLines={1}>
               {playerName}
             </Text>
-            <Text style={styles.playerTeam}>
-              {player.team || "Team"} vs {opponent}
+            <Text style={styles.playerMatchup}>
+              {teamAbbrev} vs {opponentAbbrev}
             </Text>
             {stats && (stats.pointsPerGame || stats.reboundsPerGame || stats.assistsPerGame) && (
               <View style={styles.statChipsRow}>
                 {stats.pointsPerGame != null && (
-                  <View style={styles.statChip}>
+                  <Text style={styles.statChipText}>
                     <Text style={styles.statChipValue}>{stats.pointsPerGame}</Text>
                     <Text style={styles.statChipLabel}> PPG</Text>
-                  </View>
+                  </Text>
                 )}
                 {stats.reboundsPerGame != null && (
-                  <View style={styles.statChip}>
+                  <Text style={styles.statChipText}>
                     <Text style={styles.statChipValue}>{stats.reboundsPerGame}</Text>
                     <Text style={styles.statChipLabel}> RPG</Text>
-                  </View>
+                  </Text>
                 )}
                 {stats.assistsPerGame != null && (
-                  <View style={styles.statChip}>
+                  <Text style={styles.statChipText}>
                     <Text style={styles.statChipValue}>{stats.assistsPerGame}</Text>
                     <Text style={styles.statChipLabel}> APG</Text>
-                  </View>
+                  </Text>
                 )}
               </View>
             )}
           </View>
         </View>
 
-        {/* ML Props Section — Cheat Sheet */}
+        {/* Props Section */}
         <View style={styles.propsContainer}>
           <View style={styles.propsHeader}>
             <View style={styles.propsIconWrapper}>
-              <Ionicons name="trending-up" size={14} color={colors.success} />
+              <Ionicons name="analytics" size={12} color={colors.primary} />
             </View>
-            <Text style={styles.propsLabel}>ML PREDICTIONS</Text>
-            <Text style={styles.propsCount}>{player.props.length} pick{player.props.length !== 1 ? "s" : ""}</Text>
+            <Text style={styles.propsLabel}>AI PICKS</Text>
+            <Text style={styles.propsCount}>
+              {player.props.length} prop{player.props.length !== 1 ? "s" : ""}
+            </Text>
           </View>
 
           <View style={styles.propsList}>
@@ -377,7 +371,7 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
               const predictionLower = (prop.prediction || "").toLowerCase();
               const isOver = predictionLower === "over";
 
-              // Calibrated + capped probability from backend
+              // Calibrated + capped probability
               const calibratedProb = prop.displayConfidence;
               const rawProb = isOver
                 ? prop.probabilityOver || prop.probability_over
@@ -395,85 +389,71 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
               const pillBg = isStrong ? "rgba(34, 197, 94, 0.2)" : "rgba(255, 184, 0, 0.2)";
               const pillText = isStrong ? colors.success : "#FFB800";
 
-              // L10 avg — color green if supports direction, orange if contradicts
-              const avgNum = getAvgNumber(prop.statType, stats);
+              // L10 avg — use prop's own l10Avg first, fall back to playerStats
+              const avgNum = prop.l10Avg ?? null;
               const avgSupports = avgNum != null
                 ? (isOver ? avgNum >= prop.line : avgNum <= prop.line)
                 : true;
               const avgColor = avgSupports ? colors.primary : "#FFB800";
 
-              // Build color-coded tags
+              // Color-coded tags
               const tags = buildPropTags(prop, isOver);
 
-              // Bookmaker for the predicted direction
-              const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
+              // Green score
+              const greenScore = prop.greenScore ?? null;
 
               return (
-                <View key={index} style={styles.propCard}>
-                  {/* Row 1: Stat type + probability pill */}
-                  <View style={styles.propCardTop}>
-                    <View style={styles.propCardLeft}>
-                      <Text style={styles.propStatType}>{formatStatType(prop.statType)}</Text>
-                      <View style={styles.propDetailsRow}>
-                        <Text style={styles.propDirection}>
-                          {isOver ? "▲" : "▼"} {isOver ? "Over" : "Under"} {prop.line}
-                        </Text>
-                        {avgNum != null && (
+                <View key={index} style={styles.propRow}>
+                  {/* Line 1: Stat + Direction/Line + Avg ... Probability */}
+                  <View style={styles.propTopRow}>
+                    <View style={styles.propInfo}>
+                      <Text style={styles.propStat}>{formatStatType(prop.statType)}</Text>
+                      <Text style={styles.propDivider}> </Text>
+                      <Text style={[styles.propDirection, isOver ? styles.propOver : styles.propUnder]}>
+                        {isOver ? "O" : "U"} {prop.line}
+                      </Text>
+                      {avgNum != null && (
+                        <>
+                          <Text style={styles.propDivider}>  </Text>
                           <Text style={[styles.propAvg, { color: avgColor }]}>
                             Avg {avgNum}
                           </Text>
-                        )}
-                        {bookmaker && (
-                          <Text style={styles.propBookmaker}>· {bookmaker}</Text>
-                        )}
-                      </View>
+                        </>
+                      )}
                     </View>
                     <View style={[styles.propProbPill, { backgroundColor: pillBg }]}>
                       <Text style={[styles.propProbText, { color: pillText }]}>{probabilityPercent}</Text>
                     </View>
                   </View>
 
-                  {/* Row 2: Color-coded data point tags (hit rate + defense only) */}
-                  {tags.length > 0 && (
-                    <View style={styles.propTagsRow}>
-                      {tags.map((tag, ti) => (
-                        <Text
-                          key={ti}
-                          style={[
-                            styles.propTag,
-                            tag.supports ? styles.propTagSupports : styles.propTagContradicts,
-                          ]}
-                        >
-                          {tag.text}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
+                  {/* Line 2: Tags + Green Score */}
+                  <View style={styles.propBottomRow}>
+                    {tags.map((tag, ti) => (
+                      <Text
+                        key={ti}
+                        style={[
+                          styles.propTag,
+                          tag.supports ? styles.propTagSupports : styles.propTagContradicts,
+                        ]}
+                      >
+                        {tag.text}
+                      </Text>
+                    ))}
+                    {greenScore != null && <GreenScoreDots score={greenScore} />}
+                  </View>
                 </View>
               );
             })}
 
-            {/* "+X more" indicator */}
             {extraCount > 0 && (
               <View style={styles.morePropsRow}>
-                <Text style={styles.morePropsText}>+{extraCount} more prediction{extraCount !== 1 ? "s" : ""}</Text>
+                <Text style={styles.morePropsText}>+{extraCount} more</Text>
               </View>
             )}
           </View>
         </View>
-
-        {/* CTA Footer */}
-        <Pressable
-          onPress={handlePress}
-          style={({ pressed }) => [styles.ctaFooter, pressed && styles.ctaPressed]}
-        >
-          <Text style={styles.ctaText}>View Full Analysis</Text>
-          <View style={styles.ctaArrow}>
-            <Ionicons name="arrow-forward" size={16} color={colors.background} />
-          </View>
-        </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 };
 
@@ -484,24 +464,23 @@ export const PlayerPropCardSkeleton: React.FC = () => {
       <BlurView intensity={glass.card.blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />
       <View style={styles.content}>
         <View style={styles.header}>
-          <View style={[styles.skeleton, { width: 60, height: 24 }]} />
-          <View style={[styles.skeleton, { width: 100, height: 16 }]} />
+          <View style={[styles.skeleton, { width: 60, height: 22 }]} />
+          <View style={[styles.skeleton, { width: 90, height: 14 }]} />
         </View>
-        <View style={styles.playerHero}>
+        <View style={styles.playerRow}>
           <View style={[styles.skeleton, styles.skeletonAvatar]} />
           <View style={styles.playerMeta}>
-            <View style={[styles.skeleton, { width: 150, height: 20, marginBottom: 6 }]} />
-            <View style={[styles.skeleton, { width: 120, height: 14 }]} />
+            <View style={[styles.skeleton, { width: 140, height: 18, marginBottom: 4 }]} />
+            <View style={[styles.skeleton, { width: 100, height: 13 }]} />
           </View>
         </View>
-        <View style={[styles.skeleton, { width: "100%", height: 120, borderRadius: borderRadius.lg }]} />
-        <View style={[styles.skeleton, { width: "100%", height: 44, borderRadius: borderRadius.lg }]} />
+        <View style={[styles.skeleton, { width: "100%", height: 140, borderRadius: borderRadius.lg }]} />
       </View>
     </View>
   );
 };
 
-const AVATAR_SIZE = 80;
+const AVATAR_SIZE = 56;
 
 const styles = StyleSheet.create({
   card: {
@@ -517,11 +496,15 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
+  cardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
+  },
   content: {
     paddingTop: spacing[3],
-    paddingHorizontal: spacing[4],
-    paddingBottom: spacing[4],
-    gap: spacing[3],
+    paddingHorizontal: spacing[3],
+    paddingBottom: spacing[3],
+    gap: spacing[2] + 2,
   },
   // Header
   header: {
@@ -532,35 +515,35 @@ const styles = StyleSheet.create({
   teamBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[1],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
+    gap: 4,
+    paddingHorizontal: spacing[2] + 2,
+    paddingVertical: 3,
     borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: "rgba(255, 107, 53, 0.4)",
-    backgroundColor: "rgba(255, 107, 53, 0.1)",
+    borderColor: "rgba(255, 107, 53, 0.35)",
+    backgroundColor: "rgba(255, 107, 53, 0.08)",
   },
   teamAbbrev: {
-    fontSize: typography.sizes.xs,
+    fontSize: 11,
     fontFamily: typography.fontFamily.bold,
     color: "#FF6B35",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   gameTimeBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[1],
+    gap: 3,
   },
   gameTimeText: {
-    fontSize: typography.sizes.xs,
+    fontSize: 11,
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
   },
-  // Player Hero
-  playerHero: {
+  // Player Section
+  playerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[3],
+    gap: spacing[2] + 2,
   },
   playerAvatar: {
     width: AVATAR_SIZE,
@@ -569,86 +552,79 @@ const styles = StyleSheet.create({
     backgroundColor: colors.secondary,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.rgba.primary30,
   },
   playerAvatarImage: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.rgba.primary30,
     backgroundColor: colors.secondary,
   },
   playerInitials: {
-    fontSize: 28,
+    fontSize: 20,
     fontFamily: typography.fontFamily.bold,
     color: colors.primary,
   },
   playerMeta: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   playerName: {
-    fontSize: typography.sizes.lg,
+    fontSize: typography.sizes.base,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
-  playerTeam: {
-    fontSize: typography.sizes.sm,
+  playerMatchup: {
+    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.regular,
     color: colors.mutedForeground,
   },
   statChipsRow: {
     flexDirection: "row",
     gap: spacing[2],
-    marginTop: 6,
+    marginTop: 4,
   },
-  statChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.secondary,
-    paddingHorizontal: spacing[2],
-    paddingVertical: 3,
-    borderRadius: borderRadius.full,
+  statChipText: {
+    fontSize: 11,
   },
   statChipValue: {
-    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
   statChipLabel: {
-    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.regular,
     color: colors.mutedForeground,
   },
-  // Props Container (Cheat Sheet)
+  // Props Container
   propsContainer: {
-    backgroundColor: "rgba(34, 197, 94, 0.06)",
+    backgroundColor: "rgba(0, 215, 215, 0.04)",
     borderRadius: borderRadius.lg,
-    padding: spacing[3],
+    padding: spacing[2] + 2,
     borderWidth: 1,
-    borderColor: "rgba(34, 197, 94, 0.15)",
+    borderColor: "rgba(0, 215, 215, 0.1)",
     gap: spacing[2],
   },
   propsHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[2],
+    gap: spacing[1] + 2,
   },
   propsIconWrapper: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(0, 215, 215, 0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   propsLabel: {
     fontSize: 10,
     fontFamily: typography.fontFamily.bold,
-    letterSpacing: 1,
-    color: colors.success,
+    letterSpacing: 1.2,
+    color: colors.primary,
     flex: 1,
   },
   propsCount: {
@@ -659,73 +635,70 @@ const styles = StyleSheet.create({
   propsList: {
     gap: spacing[1] + 2,
   },
-  // Individual prop card
-  propCard: {
+  // Individual prop row — compact 2-line layout
+  propRow: {
     backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[2] + 2,
-    gap: 4,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing[1] + 3,
+    paddingHorizontal: spacing[2],
+    gap: 5,
   },
-  propCardTop: {
+  propTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: spacing[2],
   },
-  propCardLeft: {
+  propInfo: {
+    flexDirection: "row",
+    alignItems: "baseline",
     flex: 1,
   },
-  propStatType: {
-    fontSize: typography.sizes.sm,
+  propStat: {
+    fontSize: 13,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
-    marginBottom: 2,
   },
-  propDetailsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
+  propDivider: {
+    color: colors.mutedForeground,
+    fontSize: 11,
   },
   propDirection: {
-    color: colors.mutedForeground,
-    fontSize: typography.sizes.xs,
+    fontSize: 12,
     fontFamily: typography.fontFamily.medium,
+  },
+  propOver: {
+    color: colors.success,
+  },
+  propUnder: {
+    color: "#FF6B6B",
   },
   propAvg: {
-    fontSize: typography.sizes.xs,
+    fontSize: 11,
     fontFamily: typography.fontFamily.medium,
-    opacity: 0.9,
-  },
-  propBookmaker: {
-    fontSize: typography.sizes.xs,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.mutedForeground,
-    opacity: 0.6,
   },
   propProbPill: {
-    paddingHorizontal: spacing[2] + 4,
-    paddingVertical: spacing[1] + 2,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 3,
     borderRadius: borderRadius.full,
+    marginLeft: spacing[1],
   },
   propProbText: {
-    fontSize: typography.sizes.sm,
+    fontSize: 12,
     fontFamily: typography.fontFamily.bold,
   },
-  // Tags row with support/contradict coloring
-  propTagsRow: {
+  // Tags + Green dots row
+  propBottomRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 4,
-    marginTop: 2,
     alignItems: "center",
   },
   propTag: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: typography.fontFamily.bold,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: borderRadius.sm,
+    borderRadius: 4,
     overflow: "hidden",
   },
   propTagSupports: {
@@ -736,43 +709,34 @@ const styles = StyleSheet.create({
     color: "#FFB800",
     backgroundColor: "rgba(255, 184, 0, 0.12)",
   },
-  // More props indicator
+  // Green score dots
+  greenDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginLeft: 2,
+  },
+  greenDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  greenDotFilled: {
+    backgroundColor: colors.primary,
+  },
+  greenDotEmpty: {
+    backgroundColor: "rgba(122, 139, 163, 0.25)",
+  },
+  // More props
   morePropsRow: {
     alignItems: "center",
-    paddingVertical: spacing[1],
+    paddingVertical: 2,
   },
   morePropsText: {
     fontSize: 10,
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
     opacity: 0.7,
-  },
-  // CTA Footer
-  ctaFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing[2],
-    backgroundColor: colors.primary,
-    paddingVertical: spacing[2] + 2,
-    borderRadius: borderRadius.lg,
-  },
-  ctaPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  ctaText: {
-    color: colors.background,
-    fontSize: typography.sizes.sm,
-    fontFamily: typography.fontFamily.bold,
-  },
-  ctaArrow: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   // Skeleton
   skeleton: {

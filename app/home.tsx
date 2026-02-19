@@ -33,6 +33,7 @@ import { FloatingParticles } from "../components/ui/FloatingParticles";
 import { PageIndicator } from "../components/ui/PageIndicator";
 import { HeroGamesCarousel } from "../components/ui/HeroGamesCarousel";
 import { PlayerPropsCarousel } from "../components/ui/PlayerPropsCarousel";
+import { ParlayBuilder } from "../components/ui/ParlayBuilder";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "../i18n";
 
@@ -94,6 +95,7 @@ export default function HomeScreen() {
   });
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const [isParlayBuilderVisible, setIsParlayBuilderVisible] = useState(false);
   const { linkUserToFirebase } = useRevenueCatUser();
   const posthog = usePostHog();
 
@@ -404,6 +406,38 @@ export default function HomeScreen() {
                 </View>
               </Pressable>
               </Animated.View>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Build a Parlay button */}
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  if (!isSubscribed) {
+                    router.push("/paywall");
+                    return;
+                  }
+                  setIsParlayBuilderVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.parlayButton,
+                  pressed && styles.parlayButtonPressed,
+                ]}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="layers" size={20} color={colors.primary} />
+                  <View>
+                    <Text style={styles.parlayButtonText}>Build a Parlay</Text>
+                    <Text style={styles.parlayButtonSub}>Pick legs, set risk, get your slip</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
             </View>
           </View>
 
@@ -423,6 +457,11 @@ export default function HomeScreen() {
         <SettingsBottomSheet
           isVisible={isSettingsVisible}
           onClose={() => setIsSettingsVisible(false)}
+        />
+
+        <ParlayBuilder
+          visible={isParlayBuilderVisible}
+          onClose={() => setIsParlayBuilderVisible(false)}
         />
       </View>
     </ScreenBackground>
@@ -535,6 +574,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    marginVertical: -spacing[1],
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(122, 139, 163, 0.15)",
+  },
+  dividerText: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.mutedForeground,
+    opacity: 0.6,
+  },
+  parlayButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 64,
+    borderRadius: borderRadius.xl,
+    backgroundColor: "rgba(0, 215, 215, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    paddingHorizontal: spacing[4],
+    gap: spacing[3],
+  },
+  parlayButtonPressed: {
+    backgroundColor: "rgba(0, 215, 215, 0.12)",
+    transform: [{ scale: 0.98 }],
+  },
+  parlayButtonText: {
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.bold,
+    marginLeft: spacing[2],
+  },
+  parlayButtonSub: {
+    color: colors.mutedForeground,
+    fontSize: 11,
+    fontFamily: typography.fontFamily.regular,
+    marginLeft: spacing[2],
   },
   loadingContainer: {
     flex: 1,
