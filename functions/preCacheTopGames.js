@@ -278,7 +278,7 @@ exports.preCacheTopGames = onRequest({
           }
 
           console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
+          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time, game.id);
           results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
@@ -361,7 +361,7 @@ exports.preCacheTopGames = onRequest({
  *
  * @param {string} gameStartTime - ISO 8601 commence_time from The Odds API
  */
-async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStartTime) {
+async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStartTime, oddsApiEventId = null) {
   const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
     ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
     : 'https://us-central1-betai-f9176.cloudfunctions.net';
@@ -389,32 +389,70 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStart
     throw new Error('Could not determine team IDs from response');
   }
 
-  // Step 1.5: Fetch ML Player Props for NBA games
+  // Step 1.5: Fetch ML Player Props for NBA games (EdgeBoard + Parlay Stack)
   let mlPlayerProps = null;
   if (sport.toLowerCase() === 'nba') {
-    try {
-      console.log(`🤖 Fetching ML Player Props for ${team1} vs ${team2}...`);
-      const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
-        team1,
-        team2,
-        sport: 'nba',
-        gameDate: gameStartTime
-      }, {
-        timeout: 300000  // 5 min - v2 resolves player IDs dynamically
-      });
+    // Run both pipelines in parallel
+    const [edgeBoardResult, parlayStackResult] = await Promise.allSettled([
+      // EdgeBoard: ML-powered regular line picks
+      (async () => {
+        console.log(`🤖 Fetching EdgeBoard props for ${team1} vs ${team2}...`);
+        const resp = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
+          team1, team2, sport: 'nba',
+          gameDate: gameStartTime, oddsApiEventId,
+        }, { timeout: 300000 });
+        return resp.data;
+      })(),
+      // Parlay Stack: validated alt line legs (no ML needed)
+      (async () => {
+        if (!oddsApiEventId) return null;
+        console.log(`🤖 Fetching Parlay Stack legs for ${team1} vs ${team2}...`);
+        const resp = await axios.post(`${baseUrl}/getParlayStackLegs`, {
+          eventId: oddsApiEventId, team1, team2,
+        }, { timeout: 120000 });
+        return resp.data;
+      })(),
+    ]);
 
-      if (mlPropsResponse.data.success) {
-        mlPlayerProps = {
-          topProps: mlPropsResponse.data.topProps || [],
-          totalPropsAvailable: mlPropsResponse.data.totalPropsAvailable || 0,
-          highConfidenceCount: mlPropsResponse.data.highConfidenceCount || 0,
-          gameTime: mlPropsResponse.data.gameTime || null
-        };
-        console.log(`✅ ML Props cached: ${mlPlayerProps.topProps.length} high-confidence props`);
-      }
-    } catch (error) {
-      console.error(`⚠️ ML Props fetch failed (non-blocking): ${error.message}`);
-      // Don't throw - ML props are optional enhancement
+    // Process EdgeBoard results
+    const edgeBoard = edgeBoardResult.status === 'fulfilled' && edgeBoardResult.value?.success
+      ? {
+          topProps: edgeBoardResult.value.topProps || [],
+          goblinLegs: edgeBoardResult.value.goblinLegs || [],
+          totalPropsAvailable: edgeBoardResult.value.totalPropsAvailable || 0,
+          highConfidenceCount: edgeBoardResult.value.highConfidenceCount || 0,
+          gameTime: edgeBoardResult.value.gameTime || null,
+        }
+      : null;
+    if (edgeBoardResult.status === 'rejected') {
+      console.error(`⚠️ EdgeBoard failed (non-blocking): ${edgeBoardResult.reason?.message}`);
+    } else if (edgeBoard) {
+      console.log(`✅ EdgeBoard: ${edgeBoard.topProps.length} props, ${edgeBoard.goblinLegs.length} goblin legs`);
+    }
+
+    // Process Parlay Stack results
+    const parlayStack = parlayStackResult.status === 'fulfilled' && parlayStackResult.value?.success
+      ? { legs: parlayStackResult.value.legs || [] }
+      : null;
+    if (parlayStackResult.status === 'rejected') {
+      console.error(`⚠️ Parlay Stack failed (non-blocking): ${parlayStackResult.reason?.message}`);
+    } else if (parlayStack) {
+      console.log(`✅ Parlay Stack: ${parlayStack.legs.length} validated legs`);
+    }
+
+    // Combine into mlPlayerProps (backward compatible + new fields)
+    if (edgeBoard || parlayStack) {
+      mlPlayerProps = {
+        // Backward compatible: existing app reads topProps/goblinLegs
+        topProps: edgeBoard?.topProps || [],
+        goblinLegs: edgeBoard?.goblinLegs || [],
+        totalPropsAvailable: edgeBoard?.totalPropsAvailable || 0,
+        highConfidenceCount: edgeBoard?.highConfidenceCount || 0,
+        gameTime: edgeBoard?.gameTime || null,
+        // New: separate pipeline outputs for cheatsheet + scan-to-props
+        edgeBoard: edgeBoard || null,
+        parlayStack: parlayStack || null,
+      };
     }
   }
 
@@ -474,7 +512,8 @@ async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStart
     language: 'en',
     preCached: true,
     gameStartTime: gameStartTime, // When the game actually starts
-    expiresAt: expiresAt // 4 hours after game start
+    expiresAt: expiresAt, // 4 hours after game start
+    ...(oddsApiEventId && { oddsApiEventId }), // For alt lines on refresh
   });
 
   console.log(`✅ Pre-cached FULL analysis: ${sport} ${team1} vs ${team2}`);
@@ -683,7 +722,7 @@ exports.preCacheTopGamesScheduled = onSchedule({
           }
 
           console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time);
+          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time, game.id);
           results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
         } catch (error) {
           console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
@@ -742,12 +781,11 @@ exports.preCacheTopGamesScheduled = onSchedule({
   });
 
 /**
- * Daily ML Props Refresh Job
- * Runs daily at 6 PM UTC to update mlPlayerProps for existing cached NBA games
- * This ensures props are available when SGO releases them (typically 1 day before game)
+ * ML Props Refresh — runs 2x daily (10 AM + 4 PM ET = 3 PM + 9 PM UTC)
+ * Keeps cheatsheet data fresh without manual intervention.
  */
 exports.refreshMLPropsDaily = onSchedule({
-  schedule: '0 18 * * *', // Daily at 6 PM UTC
+  schedule: '0 15,21 * * *', // 3 PM + 9 PM UTC = 10 AM + 4 PM ET
   timeZone: 'UTC',
   timeoutSeconds: 300,
   memory: '256MiB'
@@ -796,35 +834,51 @@ exports.refreshMLPropsDaily = onSchedule({
           ? 'http://localhost:5001/betai-f9176/us-central1'
           : 'https://us-central1-betai-f9176.cloudfunctions.net';
 
-        const mlPropsResponse = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
-          team1,
-          team2,
-          sport: 'nba',
-          gameDate: gameStartTime
-        }, {
-          timeout: 300000  // 5 min - v2 resolves player IDs dynamically
-        });
+        // Try to get The Odds API event ID from the cached data for alt lines
+        const cachedEventId = data.oddsApiEventId || null;
 
-        if (mlPropsResponse.data.success && mlPropsResponse.data.topProps?.length > 0) {
-          // Update ONLY the mlPlayerProps field in the nested analysis object
+        // Run both pipelines in parallel
+        const [edgeBoardResult, parlayStackResult] = await Promise.allSettled([
+          axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
+            team1, team2, sport: 'nba',
+            gameDate: gameStartTime, oddsApiEventId: cachedEventId,
+          }, { timeout: 300000 }),
+          cachedEventId ? axios.post(`${baseUrl}/getParlayStackLegs`, {
+            eventId: cachedEventId, team1, team2,
+          }, { timeout: 120000 }) : Promise.resolve(null),
+        ]);
+
+        const edgeData = edgeBoardResult.status === 'fulfilled' ? edgeBoardResult.value?.data : null;
+        const parlayData = parlayStackResult.status === 'fulfilled' ? parlayStackResult.value?.data : null;
+        if (edgeBoardResult.status === 'rejected') {
+          console.error(`    ⚠️ EdgeBoard failed: ${edgeBoardResult.reason?.message}`);
+        }
+        if (parlayStackResult.status === 'rejected') {
+          console.error(`    ⚠️ Parlay Stack failed: ${parlayStackResult.reason?.message}`);
+        }
+
+        if ((edgeData?.success && edgeData.topProps?.length > 0) || parlayData?.success) {
           const propsData = {
-            topProps: mlPropsResponse.data.topProps,
-            totalPropsAvailable: mlPropsResponse.data.totalPropsAvailable || 0,
-            highConfidenceCount: mlPropsResponse.data.highConfidenceCount || 0,
-            mediumConfidenceCount: mlPropsResponse.data.mediumConfidenceCount || 0,
-            gameTime: mlPropsResponse.data.gameTime || null
+            topProps: edgeData?.topProps || [],
+            goblinLegs: edgeData?.goblinLegs || [],
+            totalPropsAvailable: edgeData?.totalPropsAvailable || 0,
+            highConfidenceCount: edgeData?.highConfidenceCount || 0,
+            mediumConfidenceCount: edgeData?.mediumConfidenceCount || 0,
+            gameTime: edgeData?.gameTime || null,
+            edgeBoard: edgeData?.success ? {
+              topProps: edgeData.topProps || [],
+              goblinLegs: edgeData.goblinLegs || [],
+            } : null,
+            parlayStack: parlayData?.success ? {
+              legs: parlayData.legs || [],
+            } : null,
           };
 
-          console.log(`    📝 Writing props to Firestore (${propsData.topProps.length} props)...`);
+          console.log(`    📝 Writing props to Firestore (${propsData.topProps.length} EdgeBoard + ${propsData.parlayStack?.legs?.length || 0} Parlay Stack)...`);
           await doc.ref.update({
             'analysis.mlPlayerProps': propsData
           });
           console.log(`    ✅ Firestore update completed for doc ${doc.id}`);
-
-          // Verify the update worked
-          const verifyDoc = await doc.ref.get();
-          const hasProps = !!verifyDoc.data().analysis?.mlPlayerProps;
-          console.log(`    🔍 Verification: mlPlayerProps exists = ${hasProps}`);
 
           updated++;
         } else {
@@ -845,5 +899,451 @@ exports.refreshMLPropsDaily = onSchedule({
   } catch (error) {
     console.error('❌ ML Props refresh fatal error:', error);
     throw error;
+  }
+});
+
+/**
+ * refreshProps — Lightweight HTTP endpoint for cheatsheet tool.
+ *
+ * Only refreshes mlPlayerProps for existing cached NBA games.
+ * Skips market intelligence + GPT-4 (those are expensive and only needed for full cache).
+ *
+ * Body params:
+ *   pipeline: 'edge' | 'stack' | 'both' (default: 'both')
+ */
+exports.refreshProps = onRequest({
+  timeoutSeconds: 300,
+  memory: '512MiB',
+  cors: true,
+}, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+
+  const pipeline = req.body?.pipeline || 'both'; // 'edge' | 'stack' | 'both'
+  const runEdge = pipeline === 'edge' || pipeline === 'both';
+  const runStack = pipeline === 'stack' || pipeline === 'both';
+
+  console.log(`[refreshProps] Starting (pipeline: ${pipeline})...`);
+  const startTime = Date.now();
+
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    // Find all pre-cached NBA games that haven't expired
+    const snapshot = await db.collection('matchAnalysisCache')
+      .where('sport', '==', 'nba')
+      .where('preCached', '==', true)
+      .get();
+
+    const games = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      return data.gameStartTime && data.gameStartTime > now;
+    });
+
+    console.log(`[refreshProps] Found ${games.length} upcoming NBA games`);
+
+    const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
+      ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
+      : 'https://us-central1-betai-f9176.cloudfunctions.net';
+
+    let updated = 0, failed = 0;
+    const gameResults = [];
+
+    for (const doc of games) {
+      const data = doc.data();
+      const team1 = data.analysis?.teams?.home;
+      const team2 = data.analysis?.teams?.away;
+      const eventId = data.oddsApiEventId || null;
+      if (!team1 || !team2) continue;
+
+      try {
+        const existing = data.analysis?.mlPlayerProps || {};
+        const promises = [];
+
+        // EdgeBoard
+        if (runEdge) {
+          promises.push(
+            axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
+              team1, team2, sport: 'nba',
+              gameDate: data.gameStartTime, oddsApiEventId: eventId,
+            }, { timeout: 300000 }).then(r => ({ type: 'edge', data: r.data }))
+          );
+        }
+
+        // Parlay Stack
+        if (runStack && eventId) {
+          promises.push(
+            axios.post(`${baseUrl}/getParlayStackLegs`, {
+              eventId, team1, team2,
+            }, { timeout: 120000 }).then(r => ({ type: 'stack', data: r.data }))
+          );
+        }
+
+        const results = await Promise.allSettled(promises);
+
+        // Build update — merge with existing data for the pipeline we're NOT refreshing
+        const update = { ...existing };
+        for (const r of results) {
+          if (r.status !== 'fulfilled') continue;
+          const { type, data: d } = r.value;
+          if (type === 'edge' && d?.success) {
+            update.topProps = d.topProps || [];
+            update.goblinLegs = d.goblinLegs || [];
+            update.totalPropsAvailable = d.totalPropsAvailable || 0;
+            update.highConfidenceCount = d.highConfidenceCount || 0;
+            update.gameTime = d.gameTime || null;
+            update.edgeBoard = { topProps: d.topProps || [], goblinLegs: d.goblinLegs || [] };
+          }
+          if (type === 'stack' && d?.success) {
+            update.parlayStack = { legs: d.legs || [] };
+          }
+        }
+
+        await doc.ref.update({ 'analysis.mlPlayerProps': update });
+        const edgeCount = update.topProps?.length || 0;
+        const stackCount = update.parlayStack?.legs?.length || 0;
+        console.log(`[refreshProps] ${team1} vs ${team2}: EB=${edgeCount}, PS=${stackCount}`);
+        gameResults.push({ teams: `${team2} @ ${team1}`, edge: edgeCount, stack: stackCount });
+        updated++;
+      } catch (err) {
+        console.error(`[refreshProps] ${team1} vs ${team2}: ${err.message}`);
+        failed++;
+      }
+    }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[refreshProps] Done in ${duration}s — ${updated} updated, ${failed} failed`);
+
+    res.status(200).json({ success: true, pipeline, duration: `${duration}s`, updated, failed, games: gameResults });
+  } catch (err) {
+    console.error('[refreshProps] Fatal:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────
+// getCheatsheetData — Serves pre-cached props in cheatsheet format.
+// Reads from Firestore cache (no pipeline execution), returns instantly.
+// ──────────────────────────────────────────────────────────────
+
+// Pipeline statType → cheatsheet display stat
+const STAT_DISPLAY = {
+  'points': 'POINTS', 'rebounds': 'REBOUNDS', 'assists': 'ASSISTS',
+  'threePointersMade': '3PT MADE', 'blocks': 'BLOCKS', 'steals': 'STEALS',
+  'turnovers': 'TURNOVERS',
+  'points+rebounds+assists': 'PTS+REB+AST', 'points+rebounds': 'PTS+REB',
+  'points+assists': 'PTS+AST', 'rebounds+assists': 'REB+AST',
+};
+
+// Pipeline statType → defStat abbreviation (for alt props)
+const STAT_TO_DEF_STAT = {
+  'points': 'PTS', 'rebounds': 'REB', 'assists': 'AST',
+  'threePointersMade': '3PM', 'blocks': 'BLK', 'steals': 'STL',
+  'turnovers': 'TOV',
+  'points+rebounds+assists': 'PTS', 'points+rebounds': 'PTS',
+  'points+assists': 'PTS', 'rebounds+assists': 'REB',
+};
+
+// Full bookmaker name → short code
+const BOOK_SHORT = {
+  'DraftKings': 'DK', 'FanDuel': 'FD', 'BetMGM': 'MGM',
+  'Caesars': 'CAESARS', 'ESPNBet': 'ESPN', 'Bet365': 'BET365',
+  'Bovada': 'BOV', 'BetRivers': 'BR', 'Unibet': 'UNI',
+  'Hard Rock': 'HR', 'Fanatics': 'FAN', 'BallyBet': 'BALLY',
+};
+
+function shortBook(name) { return BOOK_SHORT[name] || name; }
+
+// Team full name → 3-letter code (for accent colors)
+const TEAM_CODE = {
+  'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN',
+  'Charlotte Hornets': 'CHA', 'Chicago Bulls': 'CHI', 'Cleveland Cavaliers': 'CLE',
+  'Dallas Mavericks': 'DAL', 'Denver Nuggets': 'DEN', 'Detroit Pistons': 'DET',
+  'Golden State Warriors': 'GSW', 'Houston Rockets': 'HOU', 'Indiana Pacers': 'IND',
+  'Los Angeles Clippers': 'LAC', 'Los Angeles Lakers': 'LAL', 'Memphis Grizzlies': 'MEM',
+  'Miami Heat': 'MIA', 'Milwaukee Bucks': 'MIL', 'Minnesota Timberwolves': 'MIN',
+  'New Orleans Pelicans': 'NOP', 'New York Knicks': 'NYK', 'Oklahoma City Thunder': 'OKC',
+  'Orlando Magic': 'ORL', 'Philadelphia 76ers': 'PHI', 'Phoenix Suns': 'PHX',
+  'Portland Trail Blazers': 'POR', 'Sacramento Kings': 'SAC', 'San Antonio Spurs': 'SAS',
+  'Toronto Raptors': 'TOR', 'Utah Jazz': 'UTA', 'Washington Wizards': 'WAS',
+};
+function teamCode(name) { return TEAM_CODE[name] || name?.split(' ').pop()?.substring(0,3)?.toUpperCase() || '???'; }
+
+// ── ESPN Headshot Resolution (cached permanently in Firestore) ──
+const espnHeadshotCache = {}; // in-memory warm cache
+
+async function resolveEspnHeadshot(playerName) {
+  const key = playerName.toLowerCase().trim();
+  if (espnHeadshotCache[key]) return espnHeadshotCache[key];
+
+  // Firestore cache (permanent — ESPN IDs don't change)
+  const docId = `espn_hs_${key.replace(/[^a-z0-9]/g, '_')}`;
+  try {
+    const doc = await getDb().collection('ml_cache').doc(docId).get();
+    if (doc.exists && doc.data().headshotUrl) {
+      espnHeadshotCache[key] = doc.data().headshotUrl;
+      return espnHeadshotCache[key];
+    }
+  } catch (e) { /* cache miss */ }
+
+  // ESPN public search API
+  try {
+    const resp = await axios.get(
+      `https://site.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(playerName)}&type=player&sport=basketball&league=nba&limit=1`,
+      { timeout: 5000 }
+    );
+    const item = resp.data?.items?.[0];
+    if (item?.headshot?.href) {
+      const url = item.headshot.href;
+      espnHeadshotCache[key] = url;
+      try {
+        await getDb().collection('ml_cache').doc(docId).set({
+          playerName, espnId: item.id, headshotUrl: url, fetchedAt: Date.now(),
+        });
+      } catch (e) { /* silent */ }
+      return url;
+    }
+  } catch (e) {
+    console.warn(`[espn] Headshot lookup failed for ${playerName}:`, e.message);
+  }
+
+  return null;
+}
+
+async function resolveHeadshotsBatch(playerNames, batchSize = 5) {
+  const map = {};
+  for (let i = 0; i < playerNames.length; i += batchSize) {
+    const batch = playerNames.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(n => resolveEspnHeadshot(n)));
+    batch.forEach((name, idx) => { map[name] = results[idx]; });
+  }
+  return map;
+}
+
+function mapEdgeProp(p) {
+  const isOver = p.prediction === 'Over';
+  return {
+    name: p.playerName,
+    playerId: p.playerId || null,
+    teamCode: teamCode(p.team),
+    stat: STAT_DISPLAY[p.statType] || p.statType,
+    dir: p.prediction?.toLowerCase() || 'over',
+    line: p.line,
+    avg: p.l10Avg,
+    odds: isOver ? p.oddsOver : p.oddsUnder,
+    bk: shortBook(isOver ? p.bookmakerOver : p.bookmakerUnder),
+    l10: p.hitRates?.l10?.pct ?? null,
+    szn: p.hitRates?.season?.pct ?? null,
+    trend: p.trend,
+    defRank: p.opponentDefense?.rank ?? null,
+    defTeam: teamCode(p.opponent),
+    isHome: p.isHome,
+    green: p.greenScore,
+  };
+}
+
+// ── Parlay Slip Builder ──
+// Builds 3 pre-made parlay slips from the cross-game leg pool.
+// Each slip has 5+ legs, no duplicate players within a slip.
+
+function oddsToImplied(odds) {
+  if (odds <= -100) return Math.abs(odds) / (Math.abs(odds) + 100);
+  return 100 / (odds + 100);
+}
+
+function combinedAmericanOdds(legs) {
+  let prob = 1;
+  for (const l of legs) prob *= oddsToImplied(l.odds);
+  if (prob >= 0.5) return Math.round(-100 * prob / (1 - prob));
+  return '+' + Math.round(100 * (1 - prob) / prob);
+}
+
+/** Directional hit rate: for Over=l10 as-is, for Under=100-l10 */
+function dirHitRate(leg) {
+  if (leg.l10 == null) return 0;
+  return leg.dir === 'under' ? (100 - leg.l10) : leg.l10;
+}
+
+/**
+ * Greedy leg picker: takes from pool, skips duplicate players.
+ * If preferDiversity=true, also tries to spread across games first.
+ */
+function pickLegs(pool, count, preferDiversity) {
+  const picked = [];
+  const usedPlayers = new Set();
+  const usedGames = new Set();
+  const deferred = []; // legs skipped for game diversity
+
+  for (const leg of pool) {
+    if (usedPlayers.has(leg.name)) continue;
+    const gameKey = [leg.teamCode, leg.defTeam].sort().join('-');
+
+    if (preferDiversity && usedGames.has(gameKey)) {
+      deferred.push(leg);
+      continue;
+    }
+
+    usedPlayers.add(leg.name);
+    usedGames.add(gameKey);
+    picked.push(leg);
+    if (picked.length >= count) return picked;
+  }
+
+  // Fill from deferred (same game, different player)
+  for (const leg of deferred) {
+    if (usedPlayers.has(leg.name)) continue;
+    usedPlayers.add(leg.name);
+    picked.push(leg);
+    if (picked.length >= count) return picked;
+  }
+
+  return picked;
+}
+
+function buildParlaySlips(legs) {
+  if (legs.length < 5) return [];
+  const slips = [];
+
+  // Slip 1: LOCK — Top 5 by edge, max game diversity
+  const lockLegs = pickLegs(legs, 5, true);
+  if (lockLegs.length >= 5) {
+    slips.push({
+      name: 'LOCK',
+      subtitle: 'Highest edge across games',
+      legs: lockLegs,
+      combinedOdds: combinedAmericanOdds(lockLegs),
+    });
+  }
+
+  // Slip 2: SAFE — Only legs with 80%+ directional hit rate
+  const safePool = legs.filter(l => dirHitRate(l) >= 80);
+  if (safePool.length >= 5) {
+    const safeLegs = pickLegs(safePool, 5, true);
+    if (safeLegs.length >= 5) {
+      slips.push({
+        name: 'SAFE',
+        subtitle: '80%+ hit rate, maximum safety',
+        legs: safeLegs,
+        combinedOdds: combinedAmericanOdds(safeLegs),
+      });
+    }
+  }
+
+  // Slip 3: VALUE — Lightest juice legs with positive edge (best parlay payout)
+  const valuePool = legs
+    .filter(l => (l.edge ?? 0) > 0)
+    .sort((a, b) => Math.abs(a.odds) - Math.abs(b.odds)); // lightest juice first
+  if (valuePool.length >= 5) {
+    const valueLegs = pickLegs(valuePool, 5, true);
+    if (valueLegs.length >= 5) {
+      slips.push({
+        name: 'VALUE',
+        subtitle: 'Best payout-to-safety ratio',
+        legs: valueLegs,
+        combinedOdds: combinedAmericanOdds(valueLegs),
+      });
+    }
+  }
+
+  return slips;
+}
+
+function mapStackLeg(p) {
+  return {
+    name: p.playerName,
+    playerId: p.playerId || null,
+    teamCode: teamCode(p.team),
+    stat: STAT_DISPLAY[p.statType] || p.statType,
+    dir: p.prediction?.toLowerCase() || 'over',
+    line: p.altLine,
+    avg: p.l10Avg,
+    trend: p.trend,
+    odds: p.altOdds,
+    bk: shortBook(p.bookmaker),
+    l10: p.hitRates?.l10?.pct ?? null,
+    szn: p.hitRates?.season?.pct ?? null,
+    defRank: p.opponentDefense?.rank ?? null,
+    defTeam: teamCode(p.opponent),
+    defStat: STAT_TO_DEF_STAT[p.statType] || null,
+    isHome: p.isHome,
+    green: p.greenScore,
+    edge: p.parlayEdge ?? null,
+  };
+}
+
+exports.getCheatsheetData = onRequest({
+  timeoutSeconds: 60,
+  memory: '256MiB',
+  cors: true,
+}, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST');
+  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(204).send('');
+
+  try {
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    const snapshot = await db.collection('matchAnalysisCache')
+      .where('sport', '==', 'nba')
+      .where('preCached', '==', true)
+      .get();
+
+    const games = snapshot.docs.filter(doc => {
+      const data = doc.data();
+      return data.gameStartTime && data.gameStartTime > now;
+    });
+
+    const edgeProps = [];
+    const stackLegs = [];
+    const gamesList = [];
+
+    for (const doc of games) {
+      const data = doc.data();
+      const ml = data.analysis?.mlPlayerProps || {};
+      const home = data.analysis?.teams?.home;
+      const away = data.analysis?.teams?.away;
+      gamesList.push({ home, away, time: data.gameStartTime });
+
+      // EdgeBoard
+      const topProps = ml.edgeBoard?.topProps || ml.topProps || [];
+      for (const p of topProps) edgeProps.push(mapEdgeProp(p));
+
+      // Parlay Stack
+      const legs = ml.parlayStack?.legs || [];
+      for (const p of legs) stackLegs.push(mapStackLeg(p));
+    }
+
+    // Sort edge by green score desc, stack by parlay edge desc (best value first)
+    edgeProps.sort((a, b) => b.green - a.green);
+    stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+    // Build pre-made parlay slips from cross-game leg pool
+    const parlaySlips = buildParlaySlips(stackLegs);
+
+    // Resolve ESPN headshots for all unique players (cached permanently)
+    const uniqueNames = [...new Set([...edgeProps.map(p => p.name), ...stackLegs.map(p => p.name)])];
+    const headshotMap = await resolveHeadshotsBatch(uniqueNames);
+    for (const p of edgeProps) p.headshotUrl = headshotMap[p.name] || null;
+    for (const p of stackLegs) p.headshotUrl = headshotMap[p.name] || null;
+    for (const slip of parlaySlips) {
+      for (const l of slip.legs) l.headshotUrl = headshotMap[l.name] || null;
+    }
+
+    res.status(200).json({
+      success: true,
+      timestamp: now,
+      games: gamesList,
+      edge: edgeProps,
+      stack: stackLegs,
+      parlaySlips,
+    });
+  } catch (err) {
+    console.error('[getCheatsheetData] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });

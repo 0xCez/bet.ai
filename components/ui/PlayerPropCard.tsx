@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Dimensions, Image } from "react-native";
+import { View, Text, StyleSheet, Pressable, Dimensions, Image, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
@@ -9,6 +9,9 @@ import { getPlayerImage } from "../../utils/playerImages";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HORIZONTAL_PADDING = spacing[6];
 export const PLAYER_CARD_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2;
+
+// Max props to show on card (prevents overflow)
+const MAX_PROPS_SHOWN = 3;
 
 // Player prop data structure from ML predictions
 export interface PlayerProp {
@@ -27,9 +30,30 @@ export interface PlayerProp {
   confidencePercent?: string;
   confidenceTier?: "high" | "medium" | "low";
   bettingValue?: "high" | "medium" | "low";
+  displayConfidence?: number;
+  displayConfidencePercent?: string;
   oddsOver?: number;
   oddsUnder?: number;
   gamesUsed?: number;
+  bookmakerOver?: string;
+  bookmakerUnder?: string;
+  hitRates?: {
+    l10?: { over: number; total: number; pct: number };
+    season?: { over: number; total: number; pct: number };
+  };
+  reasoning?: {
+    trend?: number;
+    consistency?: number;
+    lineDifficulty?: number;
+    l3vsL10Ratio?: number;
+    minutesTrend?: number;
+  };
+  opponent?: string;
+  opponentDefense?: {
+    allowed?: number;
+    rank?: number;
+    stat?: string;
+  } | null;
   playerStats?: {
     pointsPerGame?: number;
     reboundsPerGame?: number;
@@ -77,7 +101,10 @@ interface PlayerPropCardProps {
   onPress: (player: PlayerWithProps) => void;
 }
 
-// Get team abbreviation (e.g., "Los Angeles Lakers" -> "LAL")
+// ──────────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────────
+
 const getTeamAbbreviation = (teamName?: string): string => {
   if (!teamName) return "TBD";
   const abbrevMap: { [key: string]: string } = {
@@ -117,7 +144,7 @@ const getTeamAbbreviation = (teamName?: string): string => {
   return abbrevMap[teamName] || teamName.substring(0, 3).toUpperCase();
 };
 
-// Format stat type for display
+// Shorter stat names for card display
 const formatStatType = (statType: string): string => {
   const formatMap: { [key: string]: string } = {
     points: "POINTS",
@@ -127,75 +154,83 @@ const formatStatType = (statType: string): string => {
     blocks: "BLOCKS",
     turnovers: "TURNOVERS",
     three_pointers_made: "3PT MADE",
+    threepointersmade: "3PT MADE",
     threes: "3PT MADE",
+    "points+rebounds": "PTS+REB",
+    "points+assists": "PTS+AST",
+    "rebounds+assists": "REB+AST",
+    "points+rebounds+assists": "PTS+REB+AST",
+    "blocks+steals": "BLK+STL",
     pts_rebs_asts: "PTS+REB+AST",
     double_double: "DOUBLE-DOUBLE",
   };
-  return formatMap[statType.toLowerCase()] || statType.replace(/_/g, " ").toUpperCase();
+  return formatMap[statType.toLowerCase()] || statType.replace(/[_+]/g, "+").toUpperCase();
 };
 
-// Get the relevant L10 average for a given stat type
-const getRelevantAvg = (
+// Get numerical L10 average for a stat type
+const getAvgNumber = (
   statType: string,
   stats?: PlayerWithProps["playerStats"]
-): string | null => {
+): number | null => {
   if (!stats) return null;
   const st = statType.toLowerCase();
-  if (st === "points" && stats.pointsPerGame != null) return `Avg ${stats.pointsPerGame}`;
-  if (st === "rebounds" && stats.reboundsPerGame != null) return `Avg ${stats.reboundsPerGame}`;
-  if (st === "assists" && stats.assistsPerGame != null) return `Avg ${stats.assistsPerGame}`;
-  if (st === "steals" && stats.stealsPerGame != null) return `Avg ${stats.stealsPerGame}`;
-  if (st === "blocks" && stats.blocksPerGame != null) return `Avg ${stats.blocksPerGame}`;
-  if (st === "three_pointers_made" || st === "threes") {
-    // No direct 3PM avg in stats, skip
-    return null;
-  }
-  // Combo props: show the summed averages
-  if (st === "pts_rebs_asts" || st === "points+rebounds+assists") {
-    const sum = (stats.pointsPerGame || 0) + (stats.reboundsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? `Avg ${sum.toFixed(1)}` : null;
-  }
+  if (st === "points") return stats.pointsPerGame ?? null;
+  if (st === "rebounds") return stats.reboundsPerGame ?? null;
+  if (st === "assists") return stats.assistsPerGame ?? null;
+  if (st === "steals") return stats.stealsPerGame ?? null;
+  if (st === "blocks") return stats.blocksPerGame ?? null;
   if (st === "points+rebounds") {
     const sum = (stats.pointsPerGame || 0) + (stats.reboundsPerGame || 0);
-    return sum > 0 ? `Avg ${sum.toFixed(1)}` : null;
+    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
   }
   if (st === "points+assists") {
     const sum = (stats.pointsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? `Avg ${sum.toFixed(1)}` : null;
+    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
   }
   if (st === "rebounds+assists") {
     const sum = (stats.reboundsPerGame || 0) + (stats.assistsPerGame || 0);
-    return sum > 0 ? `Avg ${sum.toFixed(1)}` : null;
+    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
+  }
+  if (st === "points+rebounds+assists" || st === "pts_rebs_asts") {
+    const sum = (stats.pointsPerGame || 0) + (stats.reboundsPerGame || 0) + (stats.assistsPerGame || 0);
+    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
+  }
+  if (st === "blocks+steals") {
+    const sum = (stats.blocksPerGame || 0) + (stats.stealsPerGame || 0);
+    return sum > 0 ? parseFloat(sum.toFixed(1)) : null;
   }
   return null;
 };
 
-// Format game time
 const formatGameTime = (isoString?: string): string | null => {
   if (!isoString) return null;
-
   const gameDate = new Date(isoString);
   const now = new Date();
-
   const isToday = gameDate.toDateString() === now.toDateString();
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const isTomorrow = gameDate.toDateString() === tomorrow.toDateString();
-
   const timeStr = gameDate.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
-
   if (isToday) return `Today ${timeStr}`;
   if (isTomorrow) return `Tomorrow ${timeStr}`;
-
   const dayStr = gameDate.toLocaleDateString("en-US", { weekday: "short" });
   return `${dayStr} ${timeStr}`;
 };
 
-// Get player initials
+const getSuffix = (n: number): string => {
+  if (n >= 11 && n <= 13) return "th";
+  switch (n % 10) {
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
+  }
+};
+
 const getPlayerInitials = (name?: string): string => {
   if (!name) return "??";
   return name
@@ -205,6 +240,51 @@ const getPlayerInitials = (name?: string): string => {
     .slice(0, 2)
     .toUpperCase();
 };
+
+// ──────────────────────────────────────────────
+// TAG BUILDER — color-coded support/contradict
+// ──────────────────────────────────────────────
+
+interface PropTag {
+  text: string;
+  supports: boolean; // true = supports prediction, false = contradicts
+}
+
+const buildPropTags = (
+  prop: EnrichedPlayerProp,
+  isOver: boolean
+): PropTag[] => {
+  const tags: PropTag[] = [];
+
+  // Hit rate — show count in the PREDICTED direction
+  // e.g. "6/10 hit Under" or "7/10 hit Over"
+  const hr = prop.hitRates?.l10;
+  if (hr && hr.total > 0) {
+    const hitCount = isOver ? hr.over : hr.total - hr.over;
+    const supports = isOver ? hr.pct >= 50 : hr.pct < 50;
+    const dir = isOver ? "Over" : "Under";
+    tags.push({ text: `${hitCount}/${hr.total} hit ${dir}`, supports });
+  }
+
+  // Opponent defense (rank 1-30: 1=best defense, 30=worst)
+  // Show in plain English: "WAS 29th DEF" with color = supports/contradicts
+  if (prop.opponentDefense?.rank && prop.opponent) {
+    const abbrev = getTeamAbbreviation(prop.opponent);
+    const rank = prop.opponentDefense.rank;
+    // High rank = bad defense = allows more = favors Over
+    const supports = isOver ? rank > 15 : rank <= 15;
+    tags.push({
+      text: `${abbrev} ${rank}${getSuffix(rank)} DEF`,
+      supports,
+    });
+  }
+
+  return tags;
+};
+
+// ──────────────────────────────────────────────
+// COMPONENT
+// ──────────────────────────────────────────────
 
 export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress }) => {
   const gameTime = formatGameTime(player.gameStartTime);
@@ -218,8 +298,9 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
     onPress(player);
   };
 
-  // Extract player stats (from player-level or first prop)
   const stats = player.playerStats || player.props[0]?.playerStats;
+  const visibleProps = player.props.slice(0, MAX_PROPS_SHOWN);
+  const extraCount = player.props.length - MAX_PROPS_SHOWN;
 
   return (
     <View style={styles.card}>
@@ -240,7 +321,7 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
           )}
         </View>
 
-        {/* Player Hero Section - bigger image + name + stats row */}
+        {/* Player Hero Section */}
         <View style={styles.playerHero}>
           {playerImage ? (
             <Image source={playerImage} style={styles.playerAvatarImage} />
@@ -256,7 +337,6 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
             <Text style={styles.playerTeam}>
               {player.team || "Team"} vs {opponent}
             </Text>
-            {/* Inline stat chips under the name */}
             {stats && (stats.pointsPerGame || stats.reboundsPerGame || stats.assistsPerGame) && (
               <View style={styles.statChipsRow}>
                 {stats.pointsPerGame != null && (
@@ -282,56 +362,103 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
           </View>
         </View>
 
-        {/* ML Props Section */}
+        {/* ML Props Section — Cheat Sheet */}
         <View style={styles.propsContainer}>
           <View style={styles.propsHeader}>
             <View style={styles.propsIconWrapper}>
               <Ionicons name="trending-up" size={14} color={colors.success} />
             </View>
             <Text style={styles.propsLabel}>ML PREDICTIONS</Text>
+            <Text style={styles.propsCount}>{player.props.length} pick{player.props.length !== 1 ? "s" : ""}</Text>
           </View>
 
           <View style={styles.propsList}>
-            {player.props.map((prop, index) => {
+            {visibleProps.map((prop, index) => {
               const predictionLower = (prop.prediction || "").toLowerCase();
               const isOver = predictionLower === "over";
 
-              const probability = isOver
+              // Calibrated + capped probability from backend
+              const calibratedProb = prop.displayConfidence;
+              const rawProb = isOver
                 ? prop.probabilityOver || prop.probability_over
                 : prop.probabilityUnder || prop.probability_under;
+              const displayProb = calibratedProb ?? rawProb;
 
-              const probabilityPercent =
-                typeof probability === "number"
-                  ? `${(probability * 100).toFixed(0)}%`
-                  : prop.probabilityOverPercent || prop.probabilityUnderPercent || "0%";
+              const probabilityPercent = prop.displayConfidencePercent
+                ? `${prop.displayConfidencePercent}%`
+                : typeof displayProb === "number"
+                  ? `${(displayProb * 100).toFixed(0)}%`
+                  : "—";
 
-              const probValue = typeof probability === "number" ? probability : 0;
+              const probValue = typeof displayProb === "number" ? displayProb : 0;
               const isStrong = probValue >= 0.65;
               const pillBg = isStrong ? "rgba(34, 197, 94, 0.2)" : "rgba(255, 184, 0, 0.2)";
               const pillText = isStrong ? colors.success : "#FFB800";
 
-              // Relevant L10 average for context
-              const relevantAvg = getRelevantAvg(prop.statType, stats);
+              // L10 avg — color green if supports direction, orange if contradicts
+              const avgNum = getAvgNumber(prop.statType, stats);
+              const avgSupports = avgNum != null
+                ? (isOver ? avgNum >= prop.line : avgNum <= prop.line)
+                : true;
+              const avgColor = avgSupports ? colors.primary : "#FFB800";
+
+              // Build color-coded tags
+              const tags = buildPropTags(prop, isOver);
+
+              // Bookmaker for the predicted direction
+              const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
 
               return (
                 <View key={index} style={styles.propCard}>
-                  <View style={styles.propCardLeft}>
-                    <Text style={styles.propStatType}>{formatStatType(prop.statType)}</Text>
-                    <View style={styles.propDetailsRow}>
-                      <Text style={styles.propDirection}>
-                        {isOver ? "▲" : "▼"} {isOver ? "Over" : "Under"} {prop.line}
-                      </Text>
-                      {relevantAvg && (
-                        <Text style={styles.propAvg}>{relevantAvg}</Text>
-                      )}
+                  {/* Row 1: Stat type + probability pill */}
+                  <View style={styles.propCardTop}>
+                    <View style={styles.propCardLeft}>
+                      <Text style={styles.propStatType}>{formatStatType(prop.statType)}</Text>
+                      <View style={styles.propDetailsRow}>
+                        <Text style={styles.propDirection}>
+                          {isOver ? "▲" : "▼"} {isOver ? "Over" : "Under"} {prop.line}
+                        </Text>
+                        {avgNum != null && (
+                          <Text style={[styles.propAvg, { color: avgColor }]}>
+                            Avg {avgNum}
+                          </Text>
+                        )}
+                        {bookmaker && (
+                          <Text style={styles.propBookmaker}>· {bookmaker}</Text>
+                        )}
+                      </View>
+                    </View>
+                    <View style={[styles.propProbPill, { backgroundColor: pillBg }]}>
+                      <Text style={[styles.propProbText, { color: pillText }]}>{probabilityPercent}</Text>
                     </View>
                   </View>
-                  <View style={[styles.propProbPill, { backgroundColor: pillBg }]}>
-                    <Text style={[styles.propProbText, { color: pillText }]}>{probabilityPercent}</Text>
-                  </View>
+
+                  {/* Row 2: Color-coded data point tags (hit rate + defense only) */}
+                  {tags.length > 0 && (
+                    <View style={styles.propTagsRow}>
+                      {tags.map((tag, ti) => (
+                        <Text
+                          key={ti}
+                          style={[
+                            styles.propTag,
+                            tag.supports ? styles.propTagSupports : styles.propTagContradicts,
+                          ]}
+                        >
+                          {tag.text}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
                 </View>
               );
             })}
+
+            {/* "+X more" indicator */}
+            {extraCount > 0 && (
+              <View style={styles.morePropsRow}>
+                <Text style={styles.morePropsText}>+{extraCount} more prediction{extraCount !== 1 ? "s" : ""}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -340,7 +467,7 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
           onPress={handlePress}
           style={({ pressed }) => [styles.ctaFooter, pressed && styles.ctaPressed]}
         >
-          <Text style={styles.ctaText}>View Game Analysis</Text>
+          <Text style={styles.ctaText}>View Full Analysis</Text>
           <View style={styles.ctaArrow}>
             <Ionicons name="arrow-forward" size={16} color={colors.background} />
           </View>
@@ -472,7 +599,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     color: colors.mutedForeground,
   },
-  // Stat chips (PPG / RPG / APG) under player name
   statChipsRow: {
     flexDirection: "row",
     gap: spacing[2],
@@ -496,7 +622,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     color: colors.mutedForeground,
   },
-  // Props Container
+  // Props Container (Cheat Sheet)
   propsContainer: {
     backgroundColor: "rgba(34, 197, 94, 0.06)",
     borderRadius: borderRadius.lg,
@@ -523,18 +649,28 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     letterSpacing: 1,
     color: colors.success,
+    flex: 1,
+  },
+  propsCount: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
   },
   propsList: {
     gap: spacing[1] + 2,
   },
+  // Individual prop card
   propCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     backgroundColor: "rgba(255, 255, 255, 0.03)",
     borderRadius: borderRadius.md,
     paddingVertical: spacing[2],
     paddingHorizontal: spacing[2] + 2,
+    gap: 4,
+  },
+  propCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing[2],
   },
   propCardLeft: {
@@ -559,8 +695,13 @@ const styles = StyleSheet.create({
   propAvg: {
     fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.medium,
-    color: colors.primary,
-    opacity: 0.8,
+    opacity: 0.9,
+  },
+  propBookmaker: {
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.mutedForeground,
+    opacity: 0.6,
   },
   propProbPill: {
     paddingHorizontal: spacing[2] + 4,
@@ -570,6 +711,41 @@ const styles = StyleSheet.create({
   propProbText: {
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
+  },
+  // Tags row with support/contradict coloring
+  propTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 2,
+    alignItems: "center",
+  },
+  propTag: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.bold,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    overflow: "hidden",
+  },
+  propTagSupports: {
+    color: colors.success,
+    backgroundColor: "rgba(34, 197, 94, 0.12)",
+  },
+  propTagContradicts: {
+    color: "#FFB800",
+    backgroundColor: "rgba(255, 184, 0, 0.12)",
+  },
+  // More props indicator
+  morePropsRow: {
+    alignItems: "center",
+    paddingVertical: spacing[1],
+  },
+  morePropsText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+    opacity: 0.7,
   },
   // CTA Footer
   ctaFooter: {
