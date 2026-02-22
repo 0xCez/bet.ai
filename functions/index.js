@@ -9,10 +9,22 @@ const path = require("path");
 require('dotenv').config();
 
 // Re-export preCacheTopGames functions from separate file
-const { preCacheTopGames, preCacheTopGamesScheduled, refreshMLPropsDaily, refreshProps, getCheatsheetData } = require('./preCacheTopGames');
+const {
+  preCacheTopGames,
+  discoverGamesDaily,
+  enrichAIDaily,
+  refreshPropsScheduled, refreshPropsScheduled2, refreshPropsScheduled3,
+  archiveExpiredGamesScheduled,
+  refreshProps,
+  getCheatsheetData,
+} = require('./preCacheTopGames');
 exports.preCacheTopGames = preCacheTopGames;
-exports.preCacheTopGamesScheduled = preCacheTopGamesScheduled;
-exports.refreshMLPropsDaily = refreshMLPropsDaily;
+exports.discoverGamesDaily = discoverGamesDaily;
+exports.enrichAIDaily = enrichAIDaily;
+exports.refreshPropsScheduled = refreshPropsScheduled;
+exports.refreshPropsScheduled2 = refreshPropsScheduled2;
+exports.refreshPropsScheduled3 = refreshPropsScheduled3;
+exports.archiveExpiredGamesScheduled = archiveExpiredGamesScheduled;
 exports.refreshProps = refreshProps;
 exports.getCheatsheetData = getCheatsheetData;
 
@@ -27,6 +39,10 @@ exports.getMLPlayerPropsV2 = getMLPlayerPropsV2;
 // Parlay Stack pipeline (alt lines with signal validation)
 const { getParlayStackLegsHTTP } = require('./parlayStack');
 exports.getParlayStackLegs = getParlayStackLegsHTTP;
+
+// Player Prop Chart — per-player detail for PropsEdge-style visual
+const { getPlayerPropChart } = require('./playerPropChart');
+exports.getPlayerPropChart = getPlayerPropChart;
 
 // ML Feedback Loop - Track prediction results and export for retraining
 const { trackPredictionResults } = require('./trackPredictionResults');

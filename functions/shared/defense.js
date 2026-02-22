@@ -9,11 +9,13 @@
 
 const axios = require('axios');
 const admin = require('firebase-admin');
+const { withRetry } = require('./retry');
 
 let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
 
 const OPP_STATS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_STALE_DEFENSE = 72 * 60 * 60 * 1000; // 72 hours — stale fallback window
 
 function getCurrentNBASeason() {
   const now = new Date();
@@ -25,9 +27,10 @@ function getCurrentNBASeason() {
 function getApiKey() {
   try {
     const functions = require('firebase-functions/v2');
-    return functions.config().apisports?.key || process.env.API_SPORTS_KEY;
+    const key = functions.config().apisports?.key || process.env.API_SPORTS_KEY;
+    return key?.trim() || null;
   } catch (e) {
-    return process.env.API_SPORTS_KEY;
+    return process.env.API_SPORTS_KEY?.trim() || null;
   }
 }
 
@@ -50,14 +53,15 @@ async function getOpponentDefensiveStats() {
   const season = `${seasonYear}-${String(seasonYear + 1).slice(-2)}`;
   const cacheKey = `nba_opp_stats_${season}`;
 
-  // Check Firestore cache
+  // Check Firestore cache — keep reference for stale fallback
+  let cachedData = null;
   try {
     const doc = await getDb().collection('ml_cache').doc(cacheKey).get();
     if (doc.exists) {
-      const data = doc.data();
-      if (Date.now() - data.fetchedAt < OPP_STATS_CACHE_TTL) {
+      cachedData = doc.data();
+      if (Date.now() - cachedData.fetchedAt < OPP_STATS_CACHE_TTL) {
         console.log('[defense] Opponent stats cache HIT');
-        return data;
+        return cachedData;
       }
     }
   } catch (e) {
@@ -69,13 +73,21 @@ async function getOpponentDefensiveStats() {
   const apiKey = getApiKey();
   if (!apiKey) {
     console.error('[defense] API_SPORTS_KEY not configured');
+    // Stale fallback if key missing but cache exists
+    if (cachedData?.teams && (Date.now() - cachedData.fetchedAt) < MAX_STALE_DEFENSE) {
+      console.warn('[defense] Using stale cache (no API key)');
+      return cachedData;
+    }
     return null;
   }
 
   try {
-    const resp = await axios.get(
-      `https://v2.nba.api-sports.io/games?season=${seasonYear}&league=standard`,
-      { headers: { 'x-apisports-key': apiKey }, timeout: 20000 }
+    const resp = await withRetry(
+      () => axios.get(
+        `https://v2.nba.api-sports.io/games?season=${seasonYear}&league=standard`,
+        { headers: { 'x-apisports-key': apiKey }, timeout: 20000 }
+      ),
+      { maxRetries: 2, label: 'defense-games' }
     );
 
     const games = resp.data?.response || [];
@@ -84,6 +96,11 @@ async function getOpponentDefensiveStats() {
 
     if (finished.length < 100) {
       console.warn('[defense] Not enough finished games for reliable rankings');
+      // Stale fallback — previous rankings still useful
+      if (cachedData?.teams && (Date.now() - cachedData.fetchedAt) < MAX_STALE_DEFENSE) {
+        console.warn('[defense] Using stale cache (insufficient games)');
+        return cachedData;
+      }
       return null;
     }
 
@@ -117,13 +134,19 @@ async function getOpponentDefensiveStats() {
       ranks[teamKey] = { oppPtsRank: i + 1 };
     });
 
-    const cacheData = { season, fetchedAt: Date.now(), teams, ranks };
-    try { await getDb().collection('ml_cache').doc(cacheKey).set(cacheData); } catch (e) { /* silent */ }
+    const freshData = { season, fetchedAt: Date.now(), teams, ranks };
+    try { await getDb().collection('ml_cache').doc(cacheKey).set(freshData); } catch (e) { /* silent */ }
 
     console.log(`[defense] Defensive rankings computed for ${Object.keys(teams).length} teams`);
-    return cacheData;
+    return freshData;
   } catch (err) {
-    console.error('[defense] API-Sports game fetch failed:', err.message);
+    // STALE FALLBACK: use expired cache if within 72h
+    if (cachedData?.teams && (Date.now() - cachedData.fetchedAt) < MAX_STALE_DEFENSE) {
+      const ageHours = Math.round((Date.now() - cachedData.fetchedAt) / 3600000);
+      console.warn(`[defense] API failed, using stale cache (${ageHours}h old): ${err.message}`);
+      return cachedData;
+    }
+    console.error('[defense] API-Sports game fetch failed (no stale cache):', err.message);
     return null;
   }
 }

@@ -493,21 +493,17 @@ async function predictBatch(featuresArray) {
 // ──────────────────────────────────────────────
 
 /**
- * Core EdgeBoard pipeline — callable directly or via HTTP wrapper.
+ * Core EdgeBoard processing — accepts pre-fetched data (no API calls except Vertex AI).
+ * Used by the orchestrator (refreshGameProps.js) for shared data fetching.
  *
  * @param {string} eventId - The Odds API event ID
+ * @param {object} sharedData - { standardProps, altPropsMap, playerIdMap, gameLogsMap, oppStatsData, homeTeam, awayTeam, gameTime }
  * @param {object} options - { gameDate, debug }
  * @returns {object} - { success, topProps, goblinLegs, ... }
  */
-async function getEdgeBoardProps(eventId, options = {}) {
+async function processEdgeBoard(eventId, sharedData, options = {}) {
   const { gameDate, debug } = options;
-
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('API_SPORTS_KEY not configured');
-
-  // 1. Fetch standard props from The Odds API (replaces SGO entirely)
-  console.log(`[EdgeBoard] Fetching standard props for event ${eventId}...`);
-  const { props: allProps, homeTeam, awayTeam, gameTime } = await fetchStandardProps(eventId);
+  const { standardProps: allProps, altPropsMap: altLinesMap, playerIdMap, gameLogsMap, oppStatsData, homeTeam, awayTeam, gameTime } = sharedData;
 
   if (!allProps || allProps.length === 0) {
     return {
@@ -518,27 +514,11 @@ async function getEdgeBoardProps(eventId, options = {}) {
       message: 'No player props available from The Odds API'
     };
   }
-  console.log(`[EdgeBoard] Found ${allProps.length} props from The Odds API`);
+  console.log(`[EdgeBoard] Processing ${allProps.length} props`);
 
-  // 2. Team codes for ML features
+  // Team codes for ML features
   const homeTeamCode = getTeamCode(homeTeam);
   const awayTeamCode = getTeamCode(awayTeam);
-
-  // 3. Fetch opponent defensive stats (cached 24h)
-  const oppStatsData = await getOpponentDefensiveStats();
-
-  // 4. Resolve player IDs via API-Sports (batched, cached)
-  const uniquePlayers = [...new Set(allProps.map(p => p.playerName))];
-  console.log(`[EdgeBoard] Resolving IDs for ${uniquePlayers.length} unique players`);
-  const playerIdMap = await resolvePlayerIdsBatch(uniquePlayers);
-
-  const resolvedCount = Object.values(playerIdMap).filter(id => id !== null).length;
-  console.log(`[EdgeBoard] Resolved ${resolvedCount}/${uniquePlayers.length} player IDs`);
-
-  // 5. Fetch game logs (Firestore-cached)
-  const gameLogsMap = await getGameLogsBatch(playerIdMap);
-  const withLogs = Object.entries(gameLogsMap).filter(([, logs]) => logs.length > 0);
-  console.log(`[EdgeBoard] Got game logs for ${withLogs.length}/${resolvedCount} players`);
 
   // 6. Determine player teams from game logs
   const playerTeamInfo = {};
@@ -714,8 +694,7 @@ async function getEdgeBoardProps(eventId, options = {}) {
   console.log(`[EdgeBoard] ${results.length} props passed (${highCount} high, ${mediumCount} medium, ${filteredBySanity} filtered by sanity)`);
   console.log(`[EdgeBoard] Green scores in top10: 5★=${greenDist[5]} 4★=${greenDist[4]} 3★=${greenDist[3]} 2★=${greenDist[2]} 1★=${greenDist[1]} 0★=${greenDist[0]}`);
 
-  // 13. Alt Lines: Fetch from The Odds API and enrich each prop
-  const altLinesMap = await fetchAltProps(eventId);
+  // 13. Alt Lines: Use pre-fetched alt props to enrich each prop
   const goblinLegs = [];
 
   for (const prop of topProps) {
@@ -803,6 +782,48 @@ async function getEdgeBoardProps(eventId, options = {}) {
 }
 
 // ──────────────────────────────────────────────
+// STANDALONE WRAPPER (fetches own data, for HTTP & backward compat)
+// ──────────────────────────────────────────────
+
+/**
+ * Standalone EdgeBoard — fetches data internally then delegates to processEdgeBoard.
+ * Used by the HTTP endpoint and legacy callers.
+ */
+async function getEdgeBoardProps(eventId, options = {}) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('API_SPORTS_KEY not configured');
+
+  // Fetch all data
+  console.log(`[EdgeBoard] Fetching standard props for event ${eventId}...`);
+  const { props: standardProps, homeTeam, awayTeam, gameTime } = await fetchStandardProps(eventId);
+
+  if (!standardProps || standardProps.length === 0) {
+    return {
+      success: true, sport: 'NBA',
+      teams: { home: homeTeam, away: awayTeam },
+      gameTime, totalPropsAvailable: 0,
+      topProps: [], goblinLegs: [],
+      message: 'No player props available from The Odds API'
+    };
+  }
+
+  const oppStatsData = await getOpponentDefensiveStats();
+
+  const uniquePlayers = [...new Set(standardProps.map(p => p.playerName))];
+  console.log(`[EdgeBoard] Resolving IDs for ${uniquePlayers.length} unique players`);
+  const playerIdMap = await resolvePlayerIdsBatch(uniquePlayers);
+  const gameLogsMap = await getGameLogsBatch(playerIdMap);
+
+  const altPropsMap = await fetchAltProps(eventId);
+
+  // Delegate to core processing
+  return processEdgeBoard(eventId, {
+    standardProps, altPropsMap, playerIdMap, gameLogsMap, oppStatsData,
+    homeTeam, awayTeam, gameTime,
+  }, options);
+}
+
+// ──────────────────────────────────────────────
 // HTTP CLOUD FUNCTION (backward compatible)
 // ──────────────────────────────────────────────
 
@@ -840,5 +861,5 @@ exports.getMLPlayerPropsV2 = functions.https.onRequest(
   }
 );
 
-// Export for direct use by preCacheTopGames and Parlay Stack
-module.exports = { getEdgeBoardProps, getMLPlayerPropsV2: exports.getMLPlayerPropsV2 };
+// Export for direct use by orchestrator (processEdgeBoard) and legacy callers (getEdgeBoardProps)
+module.exports = { getEdgeBoardProps, processEdgeBoard, getMLPlayerPropsV2: exports.getMLPlayerPropsV2 };

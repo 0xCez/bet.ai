@@ -61,6 +61,15 @@ export default function StackLayout() {
           gestureEnabled: true,
         }}
       />
+      <Stack.Screen
+        name="player-prop-chart"
+        options={{
+          freezeOnBlur: true,
+          animation: "slide_from_right",
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
+        }}
+      />
     </Stack>
   );
 }

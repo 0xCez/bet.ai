@@ -1,12 +1,24 @@
 /**
- * preCacheTopGames.js
+ * preCacheTopGames.js — 5-Layer Data Architecture
  *
- * Runs every 2 days to pre-cache FULL AI analysis for top upcoming NBA and Soccer games.
- * This ensures users have complete analysis (including AI breakdown, xFactors, etc.)
- * available instantly when they tap on a game from the carousel.
+ * Layer 0: Game Discovery     — discoverGames() creates shell docs daily
+ * Layer 1: Shared Data Fetch  — refreshGameProps.js fetches all data once per game
+ * Layer 2: Pipeline Processing — refreshAllCachedGames() runs EdgeBoard + Parlay Stack
+ * Layer 3: AI Enrichment      — enrichWithAIAnalysis() adds GPT-4 analysis independently
+ * Layer 4: Archive on Expiry  — archiveExpiredGames() → propsHistory collection
  *
- * Run: firebase deploy --only functions:preCacheTopGames
- * Test: curl -X POST https://us-central1-betai-f9176.cloudfunctions.net/preCacheTopGames -H "x-api-key: YOUR_KEY"
+ * Schedulers:
+ *   discoverGamesDaily       — 6 AM ET: discover + archive + props
+ *   enrichAIDaily             — 7 AM ET: GPT-4 analysis (separate to avoid timeout)
+ *   refreshPropsScheduled    — 12 PM ET: fresh odds for content creators
+ *   refreshPropsScheduled2   — 5 PM ET: pre-tipoff refresh
+ *   refreshPropsScheduled3   — 8 PM ET: late-breaking west coast lines
+ *   archiveExpiredGames      — every 2h: move expired → propsHistory
+ *
+ * HTTP endpoints:
+ *   preCacheTopGames  — manual trigger (all layers)
+ *   refreshProps      — REFRESH button (Layer 2 only)
+ *   getCheatsheetData — read-only (Firestore → JSON)
  */
 
 const { onRequest } = require("firebase-functions/v2/https");
@@ -15,21 +27,17 @@ const admin = require("firebase-admin");
 const axios = require("axios");
 require('dotenv').config();
 
+// Orchestrator: shared data fetch + both pipelines as library calls (no HTTP round-trips)
+const { refreshGameProps } = require('./refreshGameProps');
+
 // Don't initialize Firebase here - it's initialized in index.js which imports this file
 // We get the db reference lazily when needed
 const getDb = () => admin.firestore();
 
+const { withRetry } = require('./shared/retry');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
-
-// Big market teams that get more views/content creation
-const BIG_MARKET_NBA_TEAMS = [
-  'Los Angeles Lakers', 'Golden State Warriors', 'Boston Celtics', 'Miami Heat',
-  'New York Knicks', 'Brooklyn Nets', 'Chicago Bulls', 'Philadelphia 76ers',
-  'Dallas Mavericks', 'Phoenix Suns', 'Denver Nuggets', 'Milwaukee Bucks',
-  'LA Clippers', 'Cleveland Cavaliers', 'Memphis Grizzlies', 'Minnesota Timberwolves'
-];
 
 const BIG_MARKET_SOCCER_TEAMS = [
   // Premier League
@@ -60,54 +68,51 @@ const SOCCER_LEAGUES = [
 const POST_GAME_BUFFER_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 /**
- * Generate cache key for a game based on team IDs
- * This matches the key format used in preCacheGameAnalysis
- */
-function getCacheKey(sport, team1Id, team2Id) {
-  const teams = [String(team1Id), String(team2Id)].sort().join('-');
-  return `${sport.toLowerCase()}_${teams}_en`;
-}
-
-/**
  * Check if a game is already cached and still valid
  * Returns true if we should skip caching this game
  */
-async function isGameAlreadyCached(cacheRef, sport, team1, team2) {
+async function isGameAlreadyCached(cacheRef, sport, team1, team2, oddsApiEventId = null) {
   try {
-    // We need to get team IDs first - call a lightweight endpoint or check by team names
-    // For now, we'll check by querying existing docs that match the teams
+    const now = new Date().toISOString();
+
+    // Fast path: check by event ID doc key (new format)
+    if (oddsApiEventId) {
+      const docKey = `${sport.toLowerCase()}_${oddsApiEventId}`;
+      const doc = await cacheRef.doc(docKey).get();
+      if (doc.exists) {
+        const data = doc.data();
+        const isExpired = data.expiresAt && data.expiresAt < now;
+        const gameStarted = data.gameStartTime && data.gameStartTime < now;
+        if (!isExpired && !gameStarted) return true;
+      }
+    }
+
+    // Fallback: query by team names (for legacy docs without event ID keys)
     const snapshot = await cacheRef
       .where('preCached', '==', true)
       .where('sport', '==', sport.toLowerCase())
       .get();
-
-    const now = new Date().toISOString();
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
       const analysis = data.analysis || {};
       const teams = analysis.teams || {};
 
-      // Check if this doc matches our teams (either order)
       const isMatch =
         (teams.home === team1 && teams.away === team2) ||
         (teams.home === team2 && teams.away === team1);
 
       if (isMatch) {
-        // Check if still valid (not expired and game hasn't started)
         const isExpired = data.expiresAt && data.expiresAt < now;
         const gameStarted = data.gameStartTime && data.gameStartTime < now;
-
-        if (!isExpired && !gameStarted) {
-          return true; // Game is cached and valid
-        }
+        if (!isExpired && !gameStarted) return true;
       }
     }
 
-    return false; // Not cached or expired
+    return false;
   } catch (error) {
     console.error(`Error checking cache for ${team1} vs ${team2}:`, error.message);
-    return false; // On error, proceed with caching
+    return false;
   }
 }
 
@@ -139,9 +144,12 @@ function sanitizeForFirestore(obj) {
 async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeamFilter = false) {
   try {
     const url = `https://api.the-odds-api.com/v4/sports/${sport}/events?apiKey=${ODDS_API_KEY}`;
-    console.log(`Fetching events from: ${url}`);
+    console.log(`[discovery] Fetching events for ${sport}...`);
 
-    const response = await axios.get(url);
+    const response = await withRetry(
+      () => axios.get(url, { timeout: 15000 }),
+      { maxRetries: 2, label: `discover-${sport}` }
+    );
     const events = response.data || [];
 
     console.log(`Found ${events.length} total upcoming events for ${sport}`);
@@ -186,338 +194,511 @@ async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeam
   }
 }
 
+// ──────────────────────────────────────────────────────────────
+// LAYER 0: Game Discovery
+// Creates shell docs in matchAnalysisCache for upcoming games.
+// Does NOT run pipelines or GPT-4 — just discovers games and
+// creates lightweight Firestore docs so other layers can populate.
+// ──────────────────────────────────────────────────────────────
+
 /**
- * preCacheTopGames - HTTP endpoint to pre-cache analysis for top upcoming games
+ * Discover upcoming NBA + Soccer games and create shell docs in Firestore.
+ * Uses { merge: true } so existing props/analysis are preserved if re-discovering.
  *
- * Called weekly by Cloud Scheduler to ensure creators have market data
- * available even when making content on game replays.
+ * @returns {{ nba: number, soccer: number, skipped: number }}
+ */
+async function discoverGames() {
+  const cacheRef = getDb().collection('matchAnalysisCache');
+  const results = { nba: 0, soccer: 0, skipped: 0 };
+
+  // ── NBA: all upcoming games (no team filter) ──
+  console.log('[discoverGames] Fetching NBA games...');
+  const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 15, true);
+  console.log(`[discoverGames] Found ${nbaGames.length} NBA games`);
+
+  for (const game of nbaGames) {
+    const cacheKey = `nba_${game.id}`;
+    const gameStart = new Date(game.commence_time);
+    const expiresAt = new Date(gameStart.getTime() + POST_GAME_BUFFER_MS).toISOString();
+
+    // Check if already cached and valid
+    const existing = await cacheRef.doc(cacheKey).get();
+    if (existing.exists) {
+      const data = existing.data();
+      if (data.gameStartTime && data.gameStartTime > new Date().toISOString()) {
+        results.skipped++;
+        continue;
+      }
+    }
+
+    // Create shell doc (merge preserves existing data if re-discovering)
+    await cacheRef.doc(cacheKey).set({
+      analysis: {
+        sport: 'nba',
+        teams: { home: game.home_team, away: game.away_team },
+        preCached: true,
+        preCachedAt: new Date().toISOString(),
+        gameStartTime: game.commence_time,
+      },
+      timestamp: new Date().toISOString(),
+      sport: 'nba',
+      language: 'en',
+      preCached: true,
+      gameStartTime: game.commence_time,
+      expiresAt,
+      oddsApiEventId: game.id,
+    }, { merge: true });
+
+    console.log(`[discoverGames] NBA shell: ${game.home_team} vs ${game.away_team} (${cacheKey})`);
+    results.nba++;
+  }
+
+  // ── Soccer: big market teams across leagues ──
+  console.log('[discoverGames] Fetching Soccer games...');
+  const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
+    fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
+      .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
+  );
+  const soccerGames = (await Promise.all(soccerLeaguePromises)).flat();
+  console.log(`[discoverGames] Found ${soccerGames.length} Soccer games`);
+
+  for (const game of soccerGames) {
+    // Soccer doesn't have a stable event ID for alt lines, use team-based key
+    const alreadyCached = await isGameAlreadyCached(cacheRef, 'soccer', game.home_team, game.away_team, game.id);
+    if (alreadyCached) {
+      results.skipped++;
+      continue;
+    }
+
+    const cacheKey = game.id
+      ? `soccer_${game.id}`
+      : `soccer_${[game.home_team, game.away_team].sort().join('_').replace(/\s+/g, '_').toLowerCase()}`;
+    const gameStart = new Date(game.commence_time);
+    const expiresAt = new Date(gameStart.getTime() + POST_GAME_BUFFER_MS).toISOString();
+
+    await cacheRef.doc(cacheKey).set({
+      analysis: {
+        sport: 'soccer',
+        teams: { home: game.home_team, away: game.away_team },
+        preCached: true,
+        preCachedAt: new Date().toISOString(),
+        gameStartTime: game.commence_time,
+      },
+      timestamp: new Date().toISOString(),
+      sport: 'soccer',
+      oddsApiSport: game.leagueKey, // e.g. 'soccer_spain_la_liga' — used by AI enrichment
+      language: 'en',
+      preCached: true,
+      gameStartTime: game.commence_time,
+      expiresAt,
+      ...(game.id && { oddsApiEventId: game.id }),
+    }, { merge: true });
+
+    console.log(`[discoverGames] Soccer shell: ${game.home_team} vs ${game.away_team} [${game.league}]`);
+    results.soccer++;
+  }
+
+  console.log(`[discoverGames] Done — NBA: ${results.nba}, Soccer: ${results.soccer}, Skipped: ${results.skipped}`);
+  return results;
+}
+
+// ──────────────────────────────────────────────────────────────
+// LAYER 2: Refresh All Cached Games (props only)
+// Queries all upcoming NBA games in cache and runs both pipelines
+// via the orchestrator (shared data, zero duplicate API calls).
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Refresh mlPlayerProps for all upcoming cached NBA games.
+ * @param {object} options - { pipeline: 'edge'|'stack'|'both' }
+ * @returns {{ updated: number, failed: number, games: Array }}
+ */
+async function refreshAllCachedGames(options = {}) {
+  const { pipeline = 'both' } = options;
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const snapshot = await db.collection('matchAnalysisCache')
+    .where('sport', '==', 'nba')
+    .where('preCached', '==', true)
+    .get();
+
+  const upcoming = snapshot.docs.filter(doc => {
+    const data = doc.data();
+    return data.gameStartTime && data.gameStartTime > now;
+  });
+
+  console.log(`[refreshAllCachedGames] ${upcoming.length} upcoming NBA games (pipeline: ${pipeline})`);
+
+  let updated = 0, failed = 0;
+  const gameResults = [];
+  let consecutiveCritical = 0;
+  const CIRCUIT_THRESHOLD = 3;
+  let circuitBroken = false;
+  let circuitReason = null;
+
+  for (const doc of upcoming) {
+    const data = doc.data();
+    const team1 = data.analysis?.teams?.home;
+    const team2 = data.analysis?.teams?.away;
+    const eventId = data.oddsApiEventId || null;
+    if (!team1 || !team2 || !eventId) continue;
+
+    // Skip remaining games if circuit broken
+    if (circuitBroken) {
+      console.warn(`[CIRCUIT OPEN] Skipping ${team1} vs ${team2}: ${circuitReason}`);
+      const existing = data.analysis?.mlPlayerProps || {};
+      const edgeCount = existing.topProps?.length || existing.edgeBoard?.topProps?.length || 0;
+      const stackCount = existing.parlayStack?.legs?.length || 0;
+      gameResults.push({ teams: `${team2} @ ${team1}`, edge: edgeCount, stack: stackCount, status: 'skipped', eventId });
+      continue;
+    }
+
+    try {
+      const { mlPlayerProps, health } = await refreshGameProps(eventId, {
+        pipeline,
+        gameDate: data.gameStartTime,
+      });
+
+      const existing = data.analysis?.mlPlayerProps || {};
+      const merged = { ...existing };
+
+      // Only overwrite edge data if new data has content (don't wipe good data with empty results)
+      const newEdgeCount = mlPlayerProps.topProps?.length || mlPlayerProps.edgeBoard?.topProps?.length || 0;
+      if (newEdgeCount > 0) {
+        merged.topProps = mlPlayerProps.topProps;
+        merged.edgeBoard = mlPlayerProps.edgeBoard;
+        merged.goblinLegs = mlPlayerProps.goblinLegs;
+        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable;
+        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount;
+        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount;
+        merged.gameTime = mlPlayerProps.gameTime;
+      }
+
+      // Only overwrite stack data if new data has content
+      const newStackCount = mlPlayerProps.parlayStack?.legs?.length || 0;
+      if (newStackCount > 0) {
+        merged.parlayStack = mlPlayerProps.parlayStack;
+      }
+
+      const edgeCount = merged.topProps?.length || merged.edgeBoard?.topProps?.length || 0;
+      const stackCount = merged.parlayStack?.legs?.length || 0;
+      const edgeSource = newEdgeCount > 0 ? 'fresh' : 'preserved';
+      const stackSource = newStackCount > 0 ? 'fresh' : 'preserved';
+
+      // Firestore update with diagnostic stamp
+      await doc.ref.update({
+        'analysis.mlPlayerProps': merged,
+        'analysis.lastRefresh': {
+          at: new Date().toISOString(),
+          health: health?.overall || 'unknown',
+          edgeCount,
+          stackCount,
+          edgeSource,
+          stackSource,
+        },
+      });
+
+      console.log(`[refreshAllCachedGames] ${team1} vs ${team2}: EB=${edgeCount}(${edgeSource}), PS=${stackCount}(${stackSource}), health=${health?.overall || 'unknown'}`);
+      gameResults.push({ teams: `${team2} @ ${team1}`, edge: edgeCount, stack: stackCount, eventId });
+      updated++;
+
+      // Circuit breaker: track consecutive critical health with empty results
+      if (health?.overall === 'critical' && newEdgeCount === 0 && newStackCount === 0) {
+        consecutiveCritical++;
+        if (consecutiveCritical >= CIRCUIT_THRESHOLD) {
+          circuitBroken = true;
+          circuitReason = `${consecutiveCritical} consecutive critical failures`;
+          console.error(`[CIRCUIT BREAKER] ${circuitReason} — skipping remaining games`);
+        }
+      } else {
+        consecutiveCritical = 0;
+      }
+    } catch (err) {
+      console.error(`[refreshAllCachedGames] ${team1} vs ${team2}: ${err.message}`);
+      gameResults.push({ teams: `${team2} @ ${team1}`, edge: 0, stack: 0, status: 'error', eventId });
+      failed++;
+      consecutiveCritical++;
+      if (consecutiveCritical >= CIRCUIT_THRESHOLD) {
+        circuitBroken = true;
+        circuitReason = `${consecutiveCritical} consecutive exceptions`;
+        console.error(`[CIRCUIT BREAKER] ${circuitReason} — skipping remaining games`);
+      }
+    }
+  }
+
+  return { updated, failed, games: gameResults, circuitBroken, circuitReason };
+}
+
+/**
+ * Self-heal: retry games that ended up empty after a refresh.
+ * Runs with remaining timeout budget after the main refresh.
  *
- * Caches 20 NBA games + 10 Soccer games with 10-day TTL.
+ * @param {object} refreshResult - Output from refreshAllCachedGames
+ * @param {object} options - { pipeline, timeoutBudgetMs }
+ * @returns {{ healed: number, stillEmpty: number }}
+ */
+async function selfHeal(refreshResult, options = {}) {
+  const { pipeline = 'both', timeoutBudgetMs = 120000 } = options;
+
+  const emptyGames = refreshResult.games.filter(g =>
+    (g.edge === 0 && g.stack === 0) || g.status === 'skipped' || g.status === 'error'
+  );
+
+  if (emptyGames.length === 0) return { healed: 0, stillEmpty: 0 };
+
+  console.log(`[selfHeal] ${emptyGames.length} games need healing (budget: ${Math.round(timeoutBudgetMs / 1000)}s)`);
+
+  // If circuit broke, wait 30s for transient issues to clear, then probe
+  if (refreshResult.circuitBroken) {
+    console.log('[selfHeal] Circuit was broken — waiting 30s before probe...');
+    await new Promise(r => setTimeout(r, 30000));
+  }
+
+  const db = getDb();
+  let healed = 0, stillEmpty = 0;
+  const startTime = Date.now();
+
+  for (const game of emptyGames) {
+    if (Date.now() - startTime > timeoutBudgetMs) {
+      console.warn(`[selfHeal] Time budget exhausted — ${emptyGames.length - healed - stillEmpty} games left unhealed`);
+      break;
+    }
+
+    if (!game.eventId) { stillEmpty++; continue; }
+
+    try {
+      const { mlPlayerProps, health } = await refreshGameProps(game.eventId, { pipeline });
+      const newEdgeCount = mlPlayerProps.topProps?.length || mlPlayerProps.edgeBoard?.topProps?.length || 0;
+      const newStackCount = mlPlayerProps.parlayStack?.legs?.length || 0;
+
+      if (newEdgeCount === 0 && newStackCount === 0) {
+        console.warn(`[selfHeal] ${game.teams}: still empty (health: ${health?.overall})`);
+        stillEmpty++;
+        // If first probe after circuit break still fails, API is still down — stop
+        if (refreshResult.circuitBroken && healed === 0 && stillEmpty === 1) {
+          console.warn('[selfHeal] Probe failed after circuit break — API still down, stopping');
+          stillEmpty += emptyGames.length - 1;
+          break;
+        }
+        continue;
+      }
+
+      // Merge into Firestore (same logic as refreshAllCachedGames)
+      const cacheKey = `nba_${game.eventId}`;
+      const docRef = db.collection('matchAnalysisCache').doc(cacheKey);
+      const doc = await docRef.get();
+      if (!doc.exists) { stillEmpty++; continue; }
+
+      const existing = doc.data().analysis?.mlPlayerProps || {};
+      const merged = { ...existing };
+
+      if (newEdgeCount > 0) {
+        merged.topProps = mlPlayerProps.topProps;
+        merged.edgeBoard = mlPlayerProps.edgeBoard;
+        merged.goblinLegs = mlPlayerProps.goblinLegs;
+        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable;
+        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount;
+        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount;
+        merged.gameTime = mlPlayerProps.gameTime;
+      }
+      if (newStackCount > 0) {
+        merged.parlayStack = mlPlayerProps.parlayStack;
+      }
+
+      await docRef.update({
+        'analysis.mlPlayerProps': merged,
+        'analysis.lastRefresh': {
+          at: new Date().toISOString(),
+          health: health?.overall || 'unknown',
+          edgeCount: newEdgeCount,
+          stackCount: newStackCount,
+          edgeSource: 'healed',
+          stackSource: 'healed',
+        },
+      });
+
+      console.log(`[selfHeal] HEALED ${game.teams}: EB=${newEdgeCount}, PS=${newStackCount}`);
+      healed++;
+    } catch (err) {
+      console.error(`[selfHeal] ${game.teams}: ${err.message}`);
+      stillEmpty++;
+    }
+  }
+
+  console.log(`[selfHeal] Done — healed: ${healed}, stillEmpty: ${stillEmpty}`);
+  return { healed, stillEmpty };
+}
+
+/**
+ * ensureGamesExist — Safety net for refresh schedulers.
+ * If no upcoming NBA games exist in cache, run discovery first.
+ * Prevents the scenario where discoverGamesDaily fails and all
+ * subsequent schedulers find 0 games to refresh.
+ */
+async function ensureGamesExist() {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const snapshot = await db.collection('matchAnalysisCache')
+    .where('sport', '==', 'nba')
+    .where('preCached', '==', true)
+    .get();
+
+  const upcoming = snapshot.docs.filter(doc => {
+    const data = doc.data();
+    return data.gameStartTime && data.gameStartTime > now;
+  });
+
+  if (upcoming.length === 0) {
+    console.warn('[ensureGamesExist] 0 upcoming NBA games in cache — running emergency discovery');
+    const discovered = await discoverGames();
+    console.log(`[ensureGamesExist] Discovered: NBA=${discovered.nba}, Soccer=${discovered.soccer}`);
+    return discovered;
+  }
+
+  console.log(`[ensureGamesExist] ${upcoming.length} upcoming games already in cache — skipping discovery`);
+  return null;
+}
+
+/**
+ * healWithBudget — Multi-pass self-heal within remaining Cloud Function timeout.
+ * Pass 1: retry all empty/failed games.
+ * Pass 2: if still empties and time remains, retry AGAIN.
+ * Pass 3: if STILL empties and time remains, one more shot.
  *
- * Note: Using simple functions.https.onRequest for compatibility.
- * Timeout defaults to 60s for HTTP functions. For longer runs,
- * consider using Cloud Tasks or breaking into smaller batches.
+ * @param {object} refreshResult - Output from refreshAllCachedGames
+ * @param {number} startTime - Date.now() when the scheduler started
+ * @param {string} pipeline - 'edge' | 'stack' | 'both'
+ * @returns {object|null} - { totalHealed, totalStillEmpty, passes } or null if no healing needed
+ */
+async function healWithBudget(refreshResult, startTime, pipeline = 'both') {
+  const MAX_PASSES = 3;
+  const FUNCTION_TIMEOUT_MS = 540 * 1000;
+  const SAFETY_MARGIN_MS = 15000;
+
+  const needsHealing = refreshResult.circuitBroken ||
+    refreshResult.games.some(g => g.edge === 0 && g.stack === 0);
+
+  if (!needsHealing) return null;
+
+  let totalHealed = 0;
+  let totalStillEmpty = 0;
+  let currentResult = refreshResult;
+
+  for (let pass = 1; pass <= MAX_PASSES; pass++) {
+    const elapsed = Date.now() - startTime;
+    const remaining = FUNCTION_TIMEOUT_MS - elapsed - SAFETY_MARGIN_MS;
+
+    if (remaining < 30000) {
+      console.warn(`[healWithBudget] Pass ${pass}: only ${Math.round(remaining / 1000)}s left — stopping`);
+      break;
+    }
+
+    console.log(`[healWithBudget] Pass ${pass}/${MAX_PASSES} — budget: ${Math.round(remaining / 1000)}s`);
+    const healResult = await selfHeal(currentResult, { pipeline, timeoutBudgetMs: remaining });
+    totalHealed += healResult.healed;
+    totalStillEmpty = healResult.stillEmpty;
+
+    if (healResult.stillEmpty === 0) {
+      console.log(`[healWithBudget] All games healed after pass ${pass}`);
+      break;
+    }
+
+    // Build a synthetic refreshResult for the next pass using only the still-empty games
+    // Preserve circuit state so selfHeal's probe logic works on subsequent passes
+    currentResult = {
+      circuitBroken: refreshResult.circuitBroken,
+      circuitReason: refreshResult.circuitReason,
+      games: currentResult.games.filter(g =>
+        (g.edge === 0 && g.stack === 0) || g.status === 'skipped' || g.status === 'error'
+      ),
+    };
+  }
+
+  console.log(`[healWithBudget] Final — totalHealed: ${totalHealed}, totalStillEmpty: ${totalStillEmpty}`);
+  return { totalHealed, totalStillEmpty };
+}
+
+/**
+ * preCacheTopGames - HTTP endpoint (manual trigger)
+ *
+ * Uses the new layered architecture:
+ *   Layer 4: Archive expired games → propsHistory
+ *   Layer 0: Discover upcoming games (create shell docs)
+ *   Layer 2: Refresh props for all cached NBA games
+ *   Layer 3: Enrich unenriched games with AI analysis
  */
 exports.preCacheTopGames = onRequest({
   timeoutSeconds: 540,
   memory: '512MiB',
-  cors: true
+  cors: true,
+  secrets: ['API_SPORTS_KEY'],
 }, async (req, res) => {
-
-    // CORS headers
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST');
     res.set('Access-Control-Allow-Headers', 'Content-Type, x-api-key, authorization');
+    if (req.method === 'OPTIONS') return res.status(204).send('');
 
-    if (req.method === 'OPTIONS') {
-      return res.status(204).send('');
-    }
-
-    // Auth temporarily disabled for testing
-
-    console.log('🚀 Starting preCacheTopGames job...');
+    console.log('[preCacheTopGames] Starting...');
     const startTime = Date.now();
-    const results = { nba: [], soccer: [], errors: [], cleaned: 0, skipped: 0 };
-
-    // Check for force refresh parameter
     const forceRefresh = req.body?.forceRefresh === true;
-    if (forceRefresh) {
-      console.log('🔄 FORCE REFRESH MODE ENABLED - Will re-cache all games');
-    }
 
     try {
-      // Step 0: Clean up only EXPIRED pre-cached games (smart cleanup)
-      // If forceRefresh is true, also delete all NBA games to force complete refresh
-      console.log('🧹 Cleaning up expired pre-cached games...');
-      const cacheRef = getDb().collection('matchAnalysisCache');
-      const now = new Date().toISOString();
-
-      // Query for all pre-cached games, filter expired ones in code (avoids composite index)
-      const allPreCachedSnapshot = await cacheRef
-        .where('preCached', '==', true)
-        .get();
-
-      if (!allPreCachedSnapshot.empty) {
-        const batch = getDb().batch();
-        allPreCachedSnapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          // Delete if expired OR if forceRefresh and NBA game
-          const shouldDelete = (data.expiresAt && data.expiresAt < now) ||
-                               (forceRefresh && data.sport === 'nba');
-          if (shouldDelete) {
-            batch.delete(doc.ref);
-            results.cleaned++;
-          }
-        });
-        if (results.cleaned > 0) {
+      // Force refresh: delete all NBA docs so discovery re-creates them
+      if (forceRefresh) {
+        console.log('[preCacheTopGames] FORCE REFRESH — deleting all NBA cache docs');
+        const cacheRef = getDb().collection('matchAnalysisCache');
+        const snapshot = await cacheRef.where('sport', '==', 'nba').where('preCached', '==', true).get();
+        if (!snapshot.empty) {
+          const batch = getDb().batch();
+          snapshot.docs.forEach(doc => batch.delete(doc.ref));
           await batch.commit();
-          console.log(`🗑️ Deleted ${results.cleaned} ${forceRefresh ? 'NBA' : 'expired'} pre-cached games`);
-        } else {
-          console.log('📭 No pre-cached games to clean');
-        }
-      } else {
-        console.log('📭 No pre-cached games found');
-      }
-
-      // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
-      console.log('\n🏀 ========== FETCHING NBA GAMES ==========');
-      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
-      console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
-
-      // Process NBA games sequentially (skip already cached unless forceRefresh)
-      for (const game of nbaGames) {
-        try {
-          // Check if game is already cached and valid (skip check if forceRefresh)
-          if (!forceRefresh) {
-            const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
-            if (alreadyCached) {
-              console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
-              results.skipped++;
-              continue;
-            }
-          }
-
-          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time, game.id);
-          results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
-        } catch (error) {
-          console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
-          results.errors.push({ sport: 'nba', game: `${game.home_team} vs ${game.away_team}`, error: error.message });
+          console.log(`[preCacheTopGames] Deleted ${snapshot.size} NBA docs`);
         }
       }
 
-      // Log NBA results
-      console.log('\n🏀 ========== NBA RESULTS ==========');
-      console.log(`🏀 NBA: ${results.nba.length} cached, ${results.errors.filter(e => e.sport === 'nba').length} errors`);
-      results.nba.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} (${g.gameStartTime})`));
+      // Layer 4: Archive expired games
+      const archived = await archiveExpiredGames();
 
-      // ===== STEP 2: SOCCER GAMES (10 games from multiple leagues) =====
-      console.log('\n⚽ ========== FETCHING SOCCER GAMES ==========');
-      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
-        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
-          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
-      );
-      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
-      const soccerGames = soccerGamesByLeague.flat();
-      console.log(`⚽ Found ${soccerGames.length} Soccer games from API`);
+      // Layer 0: Discover games (create shell docs)
+      const discovered = await discoverGames();
 
-      // Process Soccer games from all leagues (skip already cached)
-      for (const game of soccerGames) {
-        try {
-          // Check if game is already cached and valid
-          const alreadyCached = await isGameAlreadyCached(cacheRef, 'soccer', game.home_team, game.away_team);
-          if (alreadyCached) {
-            console.log(`⏭️ Skipping already cached Soccer: ${game.home_team} vs ${game.away_team}`);
-            results.skipped++;
-            continue;
-          }
+      // Layer 2: Refresh props for all upcoming NBA games
+      const refreshed = await refreshAllCachedGames({ pipeline: 'both' });
 
-          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
-          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
-        } catch (error) {
-          console.error(`❌ Failed to cache Soccer game (${game.league}): ${game.home_team} vs ${game.away_team}`, error.message);
-          results.errors.push({ sport: 'soccer', league: game.league, game: `${game.home_team} vs ${game.away_team}`, error: error.message });
-        }
+      // Multi-pass self-heal with remaining time budget
+      const healing = await healWithBudget(refreshed, startTime, 'both');
+
+      // Layer 3: AI enrichment — runs by default for complete data
+      // Skip with { skipAI: true } if you only want props
+      let enriched = { enriched: 0, failed: 0 };
+      if (req.body?.skipAI !== true) {
+        enriched = await enrichAllUnenrichedGames();
       }
-
-      // Log Soccer results
-      console.log('\n⚽ ========== SOCCER RESULTS ==========');
-      console.log(`⚽ Soccer: ${results.soccer.length} cached, ${results.errors.filter(e => e.sport === 'soccer').length} errors`);
-      results.soccer.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} [${g.league}] (${g.gameStartTime})`));
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`✅ preCacheTopGames completed in ${duration}s`);
-      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Skipped: ${results.skipped}, Errors: ${results.errors.length}`);
+      console.log(`[preCacheTopGames] Done in ${duration}s`);
+      if (healing) console.log(`[preCacheTopGames] Healed: ${healing.totalHealed}, stillEmpty: ${healing.totalStillEmpty}`);
 
       res.status(200).json({
         success: true,
         duration: `${duration}s`,
         summary: {
-          cleaned: results.cleaned,
-          skipped: results.skipped,
-          nba: results.nba.length,
-          soccer: results.soccer.length,
-          errors: results.errors.length
+          archived: archived.archived,
+          discovered: { nba: discovered.nba, soccer: discovered.soccer, skipped: discovered.skipped },
+          props: { updated: refreshed.updated, failed: refreshed.failed },
+          aiEnriched: enriched.enriched,
         },
-        results
+        games: refreshed.games,
+        healing,
       });
 
     } catch (error) {
-      console.error('❌ preCacheTopGames fatal error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        results
-      });
+      console.error('[preCacheTopGames] Fatal:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
-
-/**
- * Run the FULL analysis pipeline for a game and save to cache
- *
- * This calls marketIntelligence to get data, then generates AI analysis via GPT-4
- * to create the complete analysis matching what analyzeImage produces.
- *
- * @param {string} gameStartTime - ISO 8601 commence_time from The Odds API
- */
-async function preCacheGameAnalysis(sport, team1, team2, oddsApiSport, gameStartTime, oddsApiEventId = null) {
-  const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
-    ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
-    : 'https://us-central1-betai-f9176.cloudfunctions.net';
-
-  // Step 1: Get market intelligence data
-  console.log(`📊 Fetching market data for ${team1} vs ${team2}...`);
-  const response = await axios.post(`${baseUrl}/marketIntelligence`, {
-    sport: oddsApiSport,
-    team1,
-    team2,
-    locale: 'en'
-  }, {
-    timeout: 60000
-  });
-
-  if (response.data.marketIntelligence?.error) {
-    throw new Error(response.data.marketIntelligence.error);
-  }
-
-  const data = response.data;
-  const team1Id = data.teamIds?.team1Id;
-  const team2Id = data.teamIds?.team2Id;
-
-  if (!team1Id || !team2Id) {
-    throw new Error('Could not determine team IDs from response');
-  }
-
-  // Step 1.5: Fetch ML Player Props for NBA games (EdgeBoard + Parlay Stack)
-  let mlPlayerProps = null;
-  if (sport.toLowerCase() === 'nba') {
-    // Run both pipelines in parallel
-    const [edgeBoardResult, parlayStackResult] = await Promise.allSettled([
-      // EdgeBoard: ML-powered regular line picks
-      (async () => {
-        console.log(`🤖 Fetching EdgeBoard props for ${team1} vs ${team2}...`);
-        const resp = await axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
-          team1, team2, sport: 'nba',
-          gameDate: gameStartTime, oddsApiEventId,
-        }, { timeout: 300000 });
-        return resp.data;
-      })(),
-      // Parlay Stack: validated alt line legs (no ML needed)
-      (async () => {
-        if (!oddsApiEventId) return null;
-        console.log(`🤖 Fetching Parlay Stack legs for ${team1} vs ${team2}...`);
-        const resp = await axios.post(`${baseUrl}/getParlayStackLegs`, {
-          eventId: oddsApiEventId, team1, team2,
-        }, { timeout: 120000 });
-        return resp.data;
-      })(),
-    ]);
-
-    // Process EdgeBoard results
-    const edgeBoard = edgeBoardResult.status === 'fulfilled' && edgeBoardResult.value?.success
-      ? {
-          topProps: edgeBoardResult.value.topProps || [],
-          goblinLegs: edgeBoardResult.value.goblinLegs || [],
-          totalPropsAvailable: edgeBoardResult.value.totalPropsAvailable || 0,
-          highConfidenceCount: edgeBoardResult.value.highConfidenceCount || 0,
-          gameTime: edgeBoardResult.value.gameTime || null,
-        }
-      : null;
-    if (edgeBoardResult.status === 'rejected') {
-      console.error(`⚠️ EdgeBoard failed (non-blocking): ${edgeBoardResult.reason?.message}`);
-    } else if (edgeBoard) {
-      console.log(`✅ EdgeBoard: ${edgeBoard.topProps.length} props, ${edgeBoard.goblinLegs.length} goblin legs`);
-    }
-
-    // Process Parlay Stack results
-    const parlayStack = parlayStackResult.status === 'fulfilled' && parlayStackResult.value?.success
-      ? { legs: parlayStackResult.value.legs || [] }
-      : null;
-    if (parlayStackResult.status === 'rejected') {
-      console.error(`⚠️ Parlay Stack failed (non-blocking): ${parlayStackResult.reason?.message}`);
-    } else if (parlayStack) {
-      console.log(`✅ Parlay Stack: ${parlayStack.legs.length} validated legs`);
-    }
-
-    // Combine into mlPlayerProps (backward compatible + new fields)
-    if (edgeBoard || parlayStack) {
-      mlPlayerProps = {
-        // Backward compatible: existing app reads topProps/goblinLegs
-        topProps: edgeBoard?.topProps || [],
-        goblinLegs: edgeBoard?.goblinLegs || [],
-        totalPropsAvailable: edgeBoard?.totalPropsAvailable || 0,
-        highConfidenceCount: edgeBoard?.highConfidenceCount || 0,
-        gameTime: edgeBoard?.gameTime || null,
-        // New: separate pipeline outputs for cheatsheet + scan-to-props
-        edgeBoard: edgeBoard || null,
-        parlayStack: parlayStack || null,
-      };
-    }
-  }
-
-  // Step 2: Generate AI analysis using GPT-4 (same as analyzeImage)
-  console.log(`🤖 Generating AI analysis for ${team1} vs ${team2}...`);
-  const aiAnalysis = await generateAIAnalysis(
-    sport,
-    team1,
-    team2,
-    data.marketIntelligence,
-    data.teamStats,
-    data.keyInsightsNew,
-    data.gameData
-  );
-
-  // Step 3: Build the full analysis object matching analyzeImage structure
-  const teams = [String(team1Id), String(team2Id)].sort().join('-');
-  const cacheKey = `${sport.toLowerCase()}_${teams}_en`;
-
-  // Calculate expiration: 4 hours after game starts (not from cache time)
-  const gameStart = new Date(gameStartTime);
-  const expiresAt = new Date(gameStart.getTime() + POST_GAME_BUFFER_MS).toISOString();
-
-  const fullAnalysis = sanitizeForFirestore({
-    sport,
-    teams: {
-      home: team1,
-      away: team2,
-      logos: data.teams?.logos || {}
-    },
-    // AI-generated fields (from GPT-4)
-    keyInsights: aiAnalysis.keyInsights,
-    matchSnapshot: aiAnalysis.matchSnapshot,
-    xFactors: aiAnalysis.xFactors,
-    aiAnalysis: aiAnalysis.aiAnalysis,
-    // Data fields
-    marketIntelligence: data.marketIntelligence,
-    teamStats: data.teamStats,
-    keyInsightsNew: data.keyInsightsNew,
-    // ML Player Props (NBA only)
-    ...(mlPlayerProps && { mlPlayerProps }),
-    // Pre-cache metadata
-    preCached: true,
-    preCachedAt: new Date().toISOString(),
-    gameStartTime: gameStartTime, // When the game actually starts
-    expiresAt: expiresAt // 4 hours after game start
-  });
-
-  console.log(`💾 Saving pre-cached analysis: ${cacheKey} (game: ${gameStartTime}, expires: ${expiresAt})`);
-
-  await getDb().collection('matchAnalysisCache').doc(cacheKey).set({
-    analysis: fullAnalysis,
-    timestamp: new Date().toISOString(),
-    sport: sport.toLowerCase(),
-    team1Id: String(team1Id),
-    team2Id: String(team2Id),
-    language: 'en',
-    preCached: true,
-    gameStartTime: gameStartTime, // When the game actually starts
-    expiresAt: expiresAt, // 4 hours after game start
-    ...(oddsApiEventId && { oddsApiEventId }), // For alt lines on refresh
-  });
-
-  console.log(`✅ Pre-cached FULL analysis: ${sport} ${team1} vs ${team2}`);
-}
 
 /**
  * Generate AI analysis using GPT-4 (simplified version of analyzeImage prompt)
@@ -661,243 +842,368 @@ function generateFallbackAnalysis(team1, team2, keyInsightsNew, teamStats, gameD
   };
 }
 
+// ──────────────────────────────────────────────────────────────
+// LAYER 3: Independent AI Analysis Enrichment
+// Enriches existing cache docs with GPT-4 analysis + market data.
+// Runs AFTER discovery + props — never blocks props.
+// ──────────────────────────────────────────────────────────────
+
 /**
- * Scheduled version - runs every 2 days at 6 AM UTC
- * This automatically creates a Cloud Scheduler job on deploy
+ * Enrich a single cache doc with AI analysis (GPT-4 + marketIntelligence).
+ * Skips if aiAnalysis already exists.
+ *
+ * @param {string} docId - Firestore doc ID in matchAnalysisCache
  */
-exports.preCacheTopGamesScheduled = onSchedule({
-  schedule: '0 6 */2 * *',
+async function enrichWithAIAnalysis(docId) {
+  const db = getDb();
+  const docRef = db.collection('matchAnalysisCache').doc(docId);
+  const doc = await docRef.get();
+  if (!doc.exists) {
+    console.log(`[enrichAI] Doc ${docId} not found, skipping`);
+    return;
+  }
+
+  const data = doc.data();
+  const analysis = data.analysis || {};
+
+  // Skip if already enriched
+  if (analysis.aiAnalysis) {
+    console.log(`[enrichAI] ${docId} already has AI analysis, skipping`);
+    return;
+  }
+
+  const team1 = analysis.teams?.home;
+  const team2 = analysis.teams?.away;
+  const sport = data.sport || 'nba';
+  if (!team1 || !team2) {
+    console.log(`[enrichAI] ${docId} missing teams, skipping`);
+    return;
+  }
+
+  const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
+    ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
+    : 'https://us-central1-betai-f9176.cloudfunctions.net';
+
+  // Determine the Odds API sport key for marketIntelligence
+  // NBA is always 'basketball_nba'. Soccer uses the stored league key (e.g. 'soccer_spain_la_liga')
+  const oddsApiSport = sport === 'nba'
+    ? 'basketball_nba'
+    : data.oddsApiSport || 'soccer_epl';
+
+  console.log(`[enrichAI] Enriching ${team1} vs ${team2} (${docId})...`);
+
+  try {
+    // Fetch market intelligence data (separate Cloud Function)
+    const miResponse = await axios.post(`${baseUrl}/marketIntelligence`, {
+      sport: oddsApiSport,
+      team1,
+      team2,
+      locale: 'en'
+    }, { timeout: 60000 });
+
+    if (miResponse.data.marketIntelligence?.error) {
+      console.error(`[enrichAI] Market intelligence error: ${miResponse.data.marketIntelligence.error}`);
+      return;
+    }
+
+    const miData = miResponse.data;
+
+    // Generate AI analysis via GPT-4
+    const aiResult = await generateAIAnalysis(
+      sport, team1, team2,
+      miData.marketIntelligence,
+      miData.teamStats,
+      miData.keyInsightsNew,
+      miData.gameData
+    );
+
+    // Merge AI fields into existing doc (doesn't touch mlPlayerProps)
+    const enrichment = sanitizeForFirestore({
+      'analysis.keyInsights': aiResult.keyInsights,
+      'analysis.matchSnapshot': aiResult.matchSnapshot,
+      'analysis.xFactors': aiResult.xFactors,
+      'analysis.aiAnalysis': aiResult.aiAnalysis,
+      'analysis.marketIntelligence': miData.marketIntelligence,
+      'analysis.teamStats': miData.teamStats,
+      'analysis.keyInsightsNew': miData.keyInsightsNew,
+      'analysis.teams.logos': miData.teams?.logos || {},
+    });
+
+    await docRef.update(enrichment);
+    console.log(`[enrichAI] ${team1} vs ${team2} enriched successfully`);
+
+  } catch (err) {
+    console.error(`[enrichAI] Failed for ${docId}: ${err.message}`);
+  }
+}
+
+/**
+ * Enrich all unenriched cache docs with AI analysis.
+ * Queries for NBA docs missing aiAnalysis field.
+ */
+async function enrichAllUnenrichedGames() {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const snapshot = await db.collection('matchAnalysisCache')
+    .where('preCached', '==', true)
+    .get();
+
+  const unenriched = snapshot.docs.filter(doc => {
+    const data = doc.data();
+    // Only upcoming games without AI analysis
+    return data.gameStartTime && data.gameStartTime > now && !data.analysis?.aiAnalysis;
+  });
+
+  console.log(`[enrichAI] ${unenriched.length} games need AI enrichment`);
+
+  let enriched = 0, failed = 0;
+  for (const doc of unenriched) {
+    try {
+      await enrichWithAIAnalysis(doc.id);
+      enriched++;
+    } catch (err) {
+      console.error(`[enrichAI] Error enriching ${doc.id}: ${err.message}`);
+      failed++;
+    }
+  }
+
+  console.log(`[enrichAI] Done — enriched: ${enriched}, failed: ${failed}`);
+  return { enriched, failed };
+}
+
+// ──────────────────────────────────────────────────────────────
+// LAYER 4: Archive on Expiry
+// Copies expired game data to propsHistory for tracking, then
+// deletes from matchAnalysisCache.
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Archive expired games to propsHistory, then delete from cache.
+ * @returns {{ archived: number, deleted: number }}
+ */
+async function archiveExpiredGames() {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  const snapshot = await db.collection('matchAnalysisCache')
+    .where('preCached', '==', true)
+    .get();
+
+  const expired = snapshot.docs.filter(doc => {
+    const data = doc.data();
+    return data.expiresAt && data.expiresAt < now;
+  });
+
+  if (expired.length === 0) {
+    console.log('[archiveExpiredGames] No expired games to archive');
+    return { archived: 0, deleted: 0 };
+  }
+
+  console.log(`[archiveExpiredGames] ${expired.length} expired games to archive`);
+
+  let archived = 0, deleted = 0;
+  const batch = db.batch();
+
+  for (const doc of expired) {
+    const data = doc.data();
+    const analysis = data.analysis || {};
+
+    // Archive: copy key fields to propsHistory
+    const archiveDoc = {
+      sport: data.sport,
+      teams: analysis.teams || {},
+      gameStartTime: data.gameStartTime,
+      oddsApiEventId: data.oddsApiEventId || null,
+      mlPlayerProps: analysis.mlPlayerProps || null,
+      archivedAt: new Date().toISOString(),
+    };
+
+    const historyRef = db.collection('propsHistory').doc(doc.id);
+    batch.set(historyRef, archiveDoc);
+    archived++;
+
+    // Delete from cache
+    batch.delete(doc.ref);
+    deleted++;
+  }
+
+  await batch.commit();
+  console.log(`[archiveExpiredGames] Done — archived: ${archived}, deleted: ${deleted}`);
+  return { archived, deleted };
+}
+
+// ──────────────────────────────────────────────────────────────
+// NEW SCHEDULERS
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * discoverGamesDaily — 6 AM ET (11 AM UTC)
+ * Layer 0 + 4 + 2: Discover games, archive expired, refresh props.
+ * AI enrichment runs separately (enrichAIDaily) to avoid timeout.
+ */
+exports.discoverGamesDaily = onSchedule({
+  schedule: '0 11 * * *', // 11 AM UTC = 6 AM ET
+  timeZone: 'UTC',
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
+}, async () => {
+  console.log('[discoverGamesDaily] Starting...');
+  const startTime = Date.now();
+  try {
+    // Layer 4: archive expired games first (fast, ~3s)
+    const archived = await archiveExpiredGames();
+
+    // Layer 0: discover games — create shell docs (fast, ~15s)
+    const discovered = await discoverGames();
+
+    // Safety net: if discovery returned 0, ensure cache isn't empty
+    if (discovered.nba === 0) {
+      console.warn('[discoverGamesDaily] Discovery returned 0 NBA games — running ensureGamesExist fallback');
+      await ensureGamesExist();
+    }
+
+    // Layer 2: refresh props for all upcoming NBA games (~20-30s per game)
+    const refreshed = await refreshAllCachedGames({ pipeline: 'both' });
+
+    // Self-heal with remaining time budget (multi-pass)
+    const healResult = await healWithBudget(refreshed, startTime, 'both');
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[discoverGamesDaily] Done in ${duration}s`);
+    console.log(`  Archived: ${archived.archived}`);
+    console.log(`  Discovered: NBA=${discovered.nba}, Soccer=${discovered.soccer}`);
+    console.log(`  Props: ${refreshed.updated} updated, ${refreshed.failed} failed`);
+    if (healResult) console.log(`  Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
+  } catch (error) {
+    console.error('[discoverGamesDaily] Fatal:', error);
+    throw error;
+  }
+});
+
+/**
+ * enrichAIDaily — 7 AM ET (12 PM UTC)
+ * Layer 3: Enrich unenriched games with GPT-4 analysis.
+ * Runs 1 hour after discoverGamesDaily so shell docs + props exist.
+ * Separate scheduler because marketIntelligence + GPT-4 is slow (~20-30s per game).
+ */
+exports.enrichAIDaily = onSchedule({
+  schedule: '0 12 * * *', // 12 PM UTC = 7 AM ET
   timeZone: 'UTC',
   timeoutSeconds: 540,
   memory: '512MiB'
 }, async () => {
-    console.log('🚀 Starting scheduled preCacheTopGames job...');
-    const startTime = Date.now();
-    const results = { nba: [], soccer: [], errors: [], cleaned: 0, skipped: 0 };
-
-    try {
-      // Step 0: Clean up only EXPIRED pre-cached games (smart cleanup)
-      console.log('🧹 Cleaning up expired pre-cached games...');
-      const cacheRef = getDb().collection('matchAnalysisCache');
-      const now = new Date().toISOString();
-
-      // Query for all pre-cached games, filter expired ones in code (avoids composite index)
-      const allPreCachedSnapshot = await cacheRef
-        .where('preCached', '==', true)
-        .get();
-
-      if (!allPreCachedSnapshot.empty) {
-        const batch = getDb().batch();
-        allPreCachedSnapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          // Only delete if expired
-          if (data.expiresAt && data.expiresAt < now) {
-            batch.delete(doc.ref);
-            results.cleaned++;
-          }
-        });
-        if (results.cleaned > 0) {
-          await batch.commit();
-          console.log(`🗑️ Deleted ${results.cleaned} expired pre-cached games`);
-        } else {
-          console.log('📭 No expired pre-cached games to clean');
-        }
-      } else {
-        console.log('📭 No pre-cached games found');
-      }
-
-      // ===== STEP 1: NBA GAMES (10 games, no team filter) =====
-      console.log('\n🏀 ========== FETCHING NBA GAMES ==========');
-      const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true); // skipTeamFilter = true
-      console.log(`🏀 Found ${nbaGames.length} NBA games from API`);
-
-      for (const game of nbaGames) {
-        try {
-          // Check if game is already cached and valid
-          const alreadyCached = await isGameAlreadyCached(cacheRef, 'nba', game.home_team, game.away_team);
-          if (alreadyCached) {
-            console.log(`⏭️ Skipping already cached NBA: ${game.home_team} vs ${game.away_team}`);
-            results.skipped++;
-            continue;
-          }
-
-          console.log(`🏀 Caching NBA: ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('nba', game.home_team, game.away_team, 'basketball_nba', game.commence_time, game.id);
-          results.nba.push({ home: game.home_team, away: game.away_team, gameStartTime: game.commence_time, status: 'success' });
-        } catch (error) {
-          console.error(`❌ Failed to cache NBA game: ${game.home_team} vs ${game.away_team}`, error.message);
-          results.errors.push({ sport: 'nba', game: `${game.home_team} vs ${game.away_team}`, error: error.message });
-        }
-      }
-
-      // Log NBA results
-      console.log('\n🏀 ========== NBA RESULTS ==========');
-      console.log(`🏀 NBA: ${results.nba.length} cached, ${results.errors.filter(e => e.sport === 'nba').length} errors`);
-      results.nba.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} (${g.gameStartTime})`));
-
-      // ===== STEP 2: SOCCER GAMES (10 games from multiple leagues) =====
-      console.log('\n⚽ ========== FETCHING SOCCER GAMES ==========');
-      const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
-        fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
-          .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
-      );
-      const soccerGamesByLeague = await Promise.all(soccerLeaguePromises);
-      const soccerGames = soccerGamesByLeague.flat();
-      console.log(`⚽ Found ${soccerGames.length} Soccer games from API`);
-
-      for (const game of soccerGames) {
-        try {
-          // Check if game is already cached and valid
-          const alreadyCached = await isGameAlreadyCached(cacheRef, 'soccer', game.home_team, game.away_team);
-          if (alreadyCached) {
-            console.log(`⏭️ Skipping already cached Soccer: ${game.home_team} vs ${game.away_team}`);
-            results.skipped++;
-            continue;
-          }
-
-          console.log(`⚽ Caching Soccer (${game.league}): ${game.home_team} vs ${game.away_team} (${game.commence_time})`);
-          await preCacheGameAnalysis('soccer', game.home_team, game.away_team, game.leagueKey, game.commence_time);
-          results.soccer.push({ home: game.home_team, away: game.away_team, league: game.league, gameStartTime: game.commence_time, status: 'success' });
-        } catch (error) {
-          console.error(`❌ Failed to cache Soccer game (${game.league}): ${game.home_team} vs ${game.away_team}`, error.message);
-          results.errors.push({ sport: 'soccer', league: game.league, game: `${game.home_team} vs ${game.away_team}`, error: error.message });
-        }
-      }
-
-      // Log Soccer results
-      console.log('\n⚽ ========== SOCCER RESULTS ==========');
-      console.log(`⚽ Soccer: ${results.soccer.length} cached, ${results.errors.filter(e => e.sport === 'soccer').length} errors`);
-      results.soccer.forEach((g, i) => console.log(`   ${i + 1}. ${g.home} vs ${g.away} [${g.league}] (${g.gameStartTime})`));
-
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`✅ Scheduled preCacheTopGames completed in ${duration}s`);
-      console.log(`   NBA: ${results.nba.length} cached, Soccer: ${results.soccer.length} cached, Skipped: ${results.skipped}, Errors: ${results.errors.length}`);
-
-      return null;
-    } catch (error) {
-      console.error('❌ Scheduled preCacheTopGames fatal error:', error);
-      throw error;
-    }
-  });
+  console.log('[enrichAIDaily] Starting...');
+  const startTime = Date.now();
+  try {
+    const enriched = await enrichAllUnenrichedGames();
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[enrichAIDaily] Done in ${duration}s — enriched: ${enriched.enriched}, failed: ${enriched.failed}`);
+  } catch (error) {
+    console.error('[enrichAIDaily] Fatal:', error);
+    throw error;
+  }
+});
 
 /**
- * ML Props Refresh — runs 2x daily (10 AM + 4 PM ET = 3 PM + 9 PM UTC)
- * Keeps cheatsheet data fresh without manual intervention.
+ * refreshPropsScheduled — 12 PM ET (5 PM UTC)
+ * Layer 2: Fresh odds for content creators (midday).
  */
-exports.refreshMLPropsDaily = onSchedule({
-  schedule: '0 15,21 * * *', // 3 PM + 9 PM UTC = 10 AM + 4 PM ET
+exports.refreshPropsScheduled = onSchedule({
+  schedule: '0 17 * * *', // 5 PM UTC = 12 PM ET
   timeZone: 'UTC',
-  timeoutSeconds: 300,
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
+}, async () => {
+  console.log('[refreshPropsScheduled] Starting midday refresh...');
+  const startTime = Date.now();
+  try {
+    // Auto-discover if no upcoming games in cache (safety net if discoverGamesDaily failed)
+    await ensureGamesExist();
+
+    const result = await refreshAllCachedGames({ pipeline: 'both' });
+    const healResult = await healWithBudget(result, startTime, 'both');
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[refreshPropsScheduled] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
+    if (healResult) console.log(`[refreshPropsScheduled] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
+  } catch (error) {
+    console.error('[refreshPropsScheduled] Fatal:', error);
+    throw error;
+  }
+});
+
+/**
+ * refreshPropsScheduled2 — 5 PM ET (10 PM UTC)
+ * Layer 2: Pre-tipoff refresh (most NBA games start 7 PM ET).
+ */
+exports.refreshPropsScheduled2 = onSchedule({
+  schedule: '0 22 * * *', // 10 PM UTC = 5 PM ET
+  timeZone: 'UTC',
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
+}, async () => {
+  console.log('[refreshPropsScheduled2] Starting pre-tipoff refresh...');
+  const startTime = Date.now();
+  try {
+    await ensureGamesExist();
+
+    const result = await refreshAllCachedGames({ pipeline: 'both' });
+    const healResult = await healWithBudget(result, startTime, 'both');
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[refreshPropsScheduled2] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
+    if (healResult) console.log(`[refreshPropsScheduled2] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
+  } catch (error) {
+    console.error('[refreshPropsScheduled2] Fatal:', error);
+    throw error;
+  }
+});
+
+/**
+ * refreshPropsScheduled3 — 8 PM ET (1 AM UTC next day)
+ * Layer 2: Late-breaking lines (west coast games).
+ */
+exports.refreshPropsScheduled3 = onSchedule({
+  schedule: '0 1 * * *', // 1 AM UTC = 8 PM ET
+  timeZone: 'UTC',
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
+}, async () => {
+  console.log('[refreshPropsScheduled3] Starting late refresh...');
+  const startTime = Date.now();
+  try {
+    await ensureGamesExist();
+
+    const result = await refreshAllCachedGames({ pipeline: 'both' });
+    const healResult = await healWithBudget(result, startTime, 'both');
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[refreshPropsScheduled3] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
+    if (healResult) console.log(`[refreshPropsScheduled3] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
+  } catch (error) {
+    console.error('[refreshPropsScheduled3] Fatal:', error);
+    throw error;
+  }
+});
+
+/**
+ * archiveExpiredGamesScheduled — Every 2 hours
+ * Layer 4: Move expired games to propsHistory, delete from cache.
+ */
+exports.archiveExpiredGamesScheduled = onSchedule({
+  schedule: '0 */2 * * *', // every 2 hours
+  timeZone: 'UTC',
+  timeoutSeconds: 60,
   memory: '256MiB'
 }, async () => {
-  console.log('🤖 Starting daily ML Props refresh...');
-  const startTime = Date.now();
-
+  console.log('[archiveExpiredGamesScheduled] Starting...');
   try {
-    const db = getDb();
-    const now = new Date();
-    const next48Hours = new Date(now.getTime() + (48 * 60 * 60 * 1000)).toISOString();
-
-    // Find all pre-cached NBA games in next 48 hours
-    const snapshot = await db.collection('matchAnalysisCache')
-      .where('sport', '==', 'nba')
-      .where('preCached', '==', true)
-      .get();
-
-    const gamesNeedingProps = snapshot.docs.filter(doc => {
-      const data = doc.data();
-      const gameTime = data.gameStartTime;
-      if (!gameTime) return false;
-
-      // Only refresh games within next 48 hours
-      return gameTime <= next48Hours && gameTime > now.toISOString();
-    });
-
-    console.log(`📊 Found ${gamesNeedingProps.length} NBA games needing props refresh`);
-
-    let updated = 0;
-    let failed = 0;
-
-    for (const doc of gamesNeedingProps) {
-      const data = doc.data();
-      const analysis = data.analysis;
-      const team1 = analysis?.teams?.home;
-      const team2 = analysis?.teams?.away;
-      const gameStartTime = data.gameStartTime;
-
-      if (!team1 || !team2) continue;
-
-      try {
-        console.log(`  🎯 Refreshing props: ${team1} vs ${team2}`);
-
-        const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
-          ? 'http://localhost:5001/betai-f9176/us-central1'
-          : 'https://us-central1-betai-f9176.cloudfunctions.net';
-
-        // Try to get The Odds API event ID from the cached data for alt lines
-        const cachedEventId = data.oddsApiEventId || null;
-
-        // Run both pipelines in parallel
-        const [edgeBoardResult, parlayStackResult] = await Promise.allSettled([
-          axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
-            team1, team2, sport: 'nba',
-            gameDate: gameStartTime, oddsApiEventId: cachedEventId,
-          }, { timeout: 300000 }),
-          cachedEventId ? axios.post(`${baseUrl}/getParlayStackLegs`, {
-            eventId: cachedEventId, team1, team2,
-          }, { timeout: 120000 }) : Promise.resolve(null),
-        ]);
-
-        const edgeData = edgeBoardResult.status === 'fulfilled' ? edgeBoardResult.value?.data : null;
-        const parlayData = parlayStackResult.status === 'fulfilled' ? parlayStackResult.value?.data : null;
-        if (edgeBoardResult.status === 'rejected') {
-          console.error(`    ⚠️ EdgeBoard failed: ${edgeBoardResult.reason?.message}`);
-        }
-        if (parlayStackResult.status === 'rejected') {
-          console.error(`    ⚠️ Parlay Stack failed: ${parlayStackResult.reason?.message}`);
-        }
-
-        if ((edgeData?.success && edgeData.topProps?.length > 0) || parlayData?.success) {
-          const propsData = {
-            topProps: edgeData?.topProps || [],
-            goblinLegs: edgeData?.goblinLegs || [],
-            totalPropsAvailable: edgeData?.totalPropsAvailable || 0,
-            highConfidenceCount: edgeData?.highConfidenceCount || 0,
-            mediumConfidenceCount: edgeData?.mediumConfidenceCount || 0,
-            gameTime: edgeData?.gameTime || null,
-            edgeBoard: edgeData?.success ? {
-              topProps: edgeData.topProps || [],
-              goblinLegs: edgeData.goblinLegs || [],
-            } : null,
-            parlayStack: parlayData?.success ? {
-              legs: parlayData.legs || [],
-            } : null,
-          };
-
-          console.log(`    📝 Writing props to Firestore (${propsData.topProps.length} EdgeBoard + ${propsData.parlayStack?.legs?.length || 0} Parlay Stack)...`);
-          await doc.ref.update({
-            'analysis.mlPlayerProps': propsData
-          });
-          console.log(`    ✅ Firestore update completed for doc ${doc.id}`);
-
-          updated++;
-        } else {
-          console.log(`    ⚠️ No props available yet`);
-        }
-
-      } catch (error) {
-        console.error(`    ❌ Failed to refresh props: ${error.message}`);
-        failed++;
-      }
-    }
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`✅ ML Props refresh completed in ${duration}s`);
-    console.log(`   Updated: ${updated}, Failed: ${failed}, Skipped: ${gamesNeedingProps.length - updated - failed}`);
-
-    return null;
+    const result = await archiveExpiredGames();
+    console.log(`[archiveExpiredGamesScheduled] Done — archived: ${result.archived}, deleted: ${result.deleted}`);
   } catch (error) {
-    console.error('❌ ML Props refresh fatal error:', error);
+    console.error('[archiveExpiredGamesScheduled] Fatal:', error);
     throw error;
   }
 });
@@ -912,19 +1218,17 @@ exports.refreshMLPropsDaily = onSchedule({
  *   pipeline: 'edge' | 'stack' | 'both' (default: 'both')
  */
 exports.refreshProps = onRequest({
-  timeoutSeconds: 300,
-  memory: '512MiB',
+  timeoutSeconds: 540,
+  memory: '1GiB',
   cors: true,
+  secrets: ['API_SPORTS_KEY'],
 }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST');
   res.set('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).send('');
 
-  const pipeline = req.body?.pipeline || 'both'; // 'edge' | 'stack' | 'both'
-  const runEdge = pipeline === 'edge' || pipeline === 'both';
-  const runStack = pipeline === 'stack' || pipeline === 'both';
-
+  const pipeline = req.body?.pipeline || 'both';
   console.log(`[refreshProps] Starting (pipeline: ${pipeline})...`);
   const startTime = Date.now();
 
@@ -932,92 +1236,67 @@ exports.refreshProps = onRequest({
     const db = getDb();
     const now = new Date().toISOString();
 
-    // Find all pre-cached NBA games that haven't expired
+    // Check if we have any upcoming NBA games in cache
     const snapshot = await db.collection('matchAnalysisCache')
       .where('sport', '==', 'nba')
       .where('preCached', '==', true)
       .get();
 
-    const games = snapshot.docs.filter(doc => {
+    const upcomingCount = snapshot.docs.filter(doc => {
       const data = doc.data();
       return data.gameStartTime && data.gameStartTime > now;
-    });
+    }).length;
 
-    console.log(`[refreshProps] Found ${games.length} upcoming NBA games`);
+    // Auto-fetch fallback: if cache is empty, discover games first
+    if (upcomingCount === 0) {
+      console.log('[refreshProps] Cache empty — running discoverGames first...');
+      const freshEvents = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true);
 
-    const baseUrl = process.env.FUNCTIONS_EMULATOR === 'true'
-      ? 'http://127.0.0.1:5001/betai-f9176/us-central1'
-      : 'https://us-central1-betai-f9176.cloudfunctions.net';
-
-    let updated = 0, failed = 0;
-    const gameResults = [];
-
-    for (const doc of games) {
-      const data = doc.data();
-      const team1 = data.analysis?.teams?.home;
-      const team2 = data.analysis?.teams?.away;
-      const eventId = data.oddsApiEventId || null;
-      if (!team1 || !team2) continue;
-
-      try {
-        const existing = data.analysis?.mlPlayerProps || {};
-        const promises = [];
-
-        // EdgeBoard
-        if (runEdge) {
-          promises.push(
-            axios.post(`${baseUrl}/getMLPlayerPropsV2`, {
-              team1, team2, sport: 'nba',
-              gameDate: data.gameStartTime, oddsApiEventId: eventId,
-            }, { timeout: 300000 }).then(r => ({ type: 'edge', data: r.data }))
-          );
-        }
-
-        // Parlay Stack
-        if (runStack && eventId) {
-          promises.push(
-            axios.post(`${baseUrl}/getParlayStackLegs`, {
-              eventId, team1, team2,
-            }, { timeout: 120000 }).then(r => ({ type: 'stack', data: r.data }))
-          );
-        }
-
-        const results = await Promise.allSettled(promises);
-
-        // Build update — merge with existing data for the pipeline we're NOT refreshing
-        const update = { ...existing };
-        for (const r of results) {
-          if (r.status !== 'fulfilled') continue;
-          const { type, data: d } = r.value;
-          if (type === 'edge' && d?.success) {
-            update.topProps = d.topProps || [];
-            update.goblinLegs = d.goblinLegs || [];
-            update.totalPropsAvailable = d.totalPropsAvailable || 0;
-            update.highConfidenceCount = d.highConfidenceCount || 0;
-            update.gameTime = d.gameTime || null;
-            update.edgeBoard = { topProps: d.topProps || [], goblinLegs: d.goblinLegs || [] };
-          }
-          if (type === 'stack' && d?.success) {
-            update.parlayStack = { legs: d.legs || [] };
-          }
-        }
-
-        await doc.ref.update({ 'analysis.mlPlayerProps': update });
-        const edgeCount = update.topProps?.length || 0;
-        const stackCount = update.parlayStack?.legs?.length || 0;
-        console.log(`[refreshProps] ${team1} vs ${team2}: EB=${edgeCount}, PS=${stackCount}`);
-        gameResults.push({ teams: `${team2} @ ${team1}`, edge: edgeCount, stack: stackCount });
-        updated++;
-      } catch (err) {
-        console.error(`[refreshProps] ${team1} vs ${team2}: ${err.message}`);
-        failed++;
+      if (freshEvents.length === 0) {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        return res.status(200).json({ success: true, pipeline, duration: `${duration}s`, updated: 0, failed: 0, games: [], message: 'No upcoming NBA games found on The Odds API' });
       }
+
+      // Create shell docs for discovered games
+      for (const event of freshEvents) {
+        const cacheKey = `nba_${event.id}`;
+        const gameStart = new Date(event.commence_time);
+        const expiresAt = new Date(gameStart.getTime() + POST_GAME_BUFFER_MS).toISOString();
+        try {
+          await db.collection('matchAnalysisCache').doc(cacheKey).set({
+            analysis: {
+              sport: 'nba',
+              teams: { home: event.home_team, away: event.away_team },
+              preCached: true,
+              preCachedAt: new Date().toISOString(),
+              gameStartTime: event.commence_time,
+            },
+            timestamp: new Date().toISOString(),
+            sport: 'nba',
+            language: 'en',
+            preCached: true,
+            gameStartTime: event.commence_time,
+            expiresAt,
+            oddsApiEventId: event.id,
+          });
+        } catch (err) {
+          console.error(`[refreshProps] Failed to create cache entry: ${err.message}`);
+        }
+      }
+      console.log(`[refreshProps] Created ${freshEvents.length} shell docs`);
     }
 
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[refreshProps] Done in ${duration}s — ${updated} updated, ${failed} failed`);
+    // Delegate to shared refresh logic (Layer 2: props only — fast)
+    const result = await refreshAllCachedGames({ pipeline });
 
-    res.status(200).json({ success: true, pipeline, duration: `${duration}s`, updated, failed, games: gameResults });
+    // Multi-pass self-heal with remaining time budget
+    const healing = await healWithBudget(result, startTime, pipeline);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[refreshProps] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
+    if (healing) console.log(`[refreshProps] Healed: ${healing.totalHealed}, stillEmpty: ${healing.totalStillEmpty}`);
+
+    res.status(200).json({ success: true, pipeline, duration: `${duration}s`, ...result, healing });
   } catch (err) {
     console.error('[refreshProps] Fatal:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -1072,56 +1351,8 @@ const TEAM_CODE = {
 };
 function teamCode(name) { return TEAM_CODE[name] || name?.split(' ').pop()?.substring(0,3)?.toUpperCase() || '???'; }
 
-// ── ESPN Headshot Resolution (cached permanently in Firestore) ──
-const espnHeadshotCache = {}; // in-memory warm cache
-
-async function resolveEspnHeadshot(playerName) {
-  const key = playerName.toLowerCase().trim();
-  if (espnHeadshotCache[key]) return espnHeadshotCache[key];
-
-  // Firestore cache (permanent — ESPN IDs don't change)
-  const docId = `espn_hs_${key.replace(/[^a-z0-9]/g, '_')}`;
-  try {
-    const doc = await getDb().collection('ml_cache').doc(docId).get();
-    if (doc.exists && doc.data().headshotUrl) {
-      espnHeadshotCache[key] = doc.data().headshotUrl;
-      return espnHeadshotCache[key];
-    }
-  } catch (e) { /* cache miss */ }
-
-  // ESPN public search API
-  try {
-    const resp = await axios.get(
-      `https://site.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(playerName)}&type=player&sport=basketball&league=nba&limit=1`,
-      { timeout: 5000 }
-    );
-    const item = resp.data?.items?.[0];
-    if (item?.headshot?.href) {
-      const url = item.headshot.href;
-      espnHeadshotCache[key] = url;
-      try {
-        await getDb().collection('ml_cache').doc(docId).set({
-          playerName, espnId: item.id, headshotUrl: url, fetchedAt: Date.now(),
-        });
-      } catch (e) { /* silent */ }
-      return url;
-    }
-  } catch (e) {
-    console.warn(`[espn] Headshot lookup failed for ${playerName}:`, e.message);
-  }
-
-  return null;
-}
-
-async function resolveHeadshotsBatch(playerNames, batchSize = 5) {
-  const map = {};
-  for (let i = 0; i < playerNames.length; i += batchSize) {
-    const batch = playerNames.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map(n => resolveEspnHeadshot(n)));
-    batch.forEach((name, idx) => { map[name] = results[idx]; });
-  }
-  return map;
-}
+// ── ESPN Headshot Resolution (shared module) ──
+const { resolveEspnHeadshot, resolveHeadshotsBatch } = require('./shared/espnHeadshot');
 
 function mapEdgeProp(p) {
   const isOver = p.prediction === 'Over';
@@ -1286,7 +1517,10 @@ exports.getCheatsheetData = onRequest({
 
   try {
     const db = getDb();
-    const now = new Date().toISOString();
+    const now = new Date();
+    const nowISO = now.toISOString();
+    // Only include upcoming games (not yet started, with 30-min buffer for tip-off)
+    const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
 
     const snapshot = await db.collection('matchAnalysisCache')
       .where('sport', '==', 'nba')
@@ -1295,7 +1529,7 @@ exports.getCheatsheetData = onRequest({
 
     const games = snapshot.docs.filter(doc => {
       const data = doc.data();
-      return data.gameStartTime && data.gameStartTime > now;
+      return data.gameStartTime && data.gameStartTime > cutoff;
     });
 
     const edgeProps = [];

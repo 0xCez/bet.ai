@@ -33,6 +33,7 @@ import { FloatingParticles } from "../components/ui/FloatingParticles";
 import { PageIndicator } from "../components/ui/PageIndicator";
 import { HeroGamesCarousel } from "../components/ui/HeroGamesCarousel";
 import { PlayerPropsCarousel } from "../components/ui/PlayerPropsCarousel";
+import { ParlayBuilder } from "../components/ui/ParlayBuilder";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import i18n from "../i18n";
 
@@ -94,6 +95,7 @@ export default function HomeScreen() {
   });
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const [isParlayBuilderVisible, setIsParlayBuilderVisible] = useState(false);
   const { linkUserToFirebase } = useRevenueCatUser();
   const posthog = usePostHog();
 
@@ -357,9 +359,9 @@ export default function HomeScreen() {
           {/* Page 2: Scan - Original home content */}
           <View style={[styles.page, { width: SCREEN_WIDTH }]}>
 
-            {/* Two Buttons Container */}
+            {/* Action Cards */}
             <View style={styles.bottomContainer}>
-              {/* Top Button - Scan a Bet (Primary solid CTA) */}
+              {/* Scan a Slip — primary card */}
               <Animated.View style={getAnimatedStyle(2)}>
               <Pressable
                 onPress={() => {
@@ -371,18 +373,25 @@ export default function HomeScreen() {
                   handleCameraPress();
                 }}
                 style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && styles.primaryButtonPressed,
+                  styles.actionCard,
+                  styles.actionCardPrimary,
+                  pressed && styles.actionCardPressed,
                 ]}
               >
-                <View style={styles.buttonContent}>
-                  <Ionicons name="scan" size={22} color={colors.primaryForeground} />
-                  <Text style={styles.primaryButtonText}>{i18n.t("imagePickerTakePhoto")}</Text>
+                <View style={styles.actionCardLeft}>
+                  <View style={[styles.actionIconWrap, styles.actionIconPrimary]}>
+                    <Ionicons name="scan" size={20} color={colors.primaryForeground} />
+                  </View>
+                  <View>
+                    <Text style={[styles.actionCardTitle, styles.actionCardTitlePrimary]}>{i18n.t("imagePickerTakePhoto")}</Text>
+                    <Text style={styles.actionCardSub}>Scan your bet slip or a live game</Text>
+                  </View>
                 </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.primaryForeground} />
               </Pressable>
               </Animated.View>
 
-              {/* Bottom Button - Choose from Gallery (Glass style) */}
+              {/* Choose from Library — glass card */}
               <Animated.View style={getAnimatedStyle(3)}>
               <Pressable
                 onPress={() => {
@@ -394,16 +403,51 @@ export default function HomeScreen() {
                   handleGalleryPress();
                 }}
                 style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed && styles.secondaryButtonPressed,
+                  styles.actionCard,
+                  styles.actionCardGlass,
+                  pressed && styles.actionCardGlassPressed,
                 ]}
               >
-                <View style={styles.buttonContent}>
-                  <Ionicons name="images-outline" size={22} color={colors.primary} />
-                  <Text style={styles.secondaryButtonText}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
+                <View style={styles.actionCardLeft}>
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons name="images-outline" size={20} color={colors.primary} />
+                  </View>
+                  <View>
+                    <Text style={styles.actionCardTitle}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
+                    <Text style={styles.actionCardSub}>Upload from your photo library</Text>
+                  </View>
                 </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
               </Pressable>
               </Animated.View>
+
+              {/* Build a Parlay — glass card */}
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  if (!isSubscribed) {
+                    router.push("/paywall");
+                    return;
+                  }
+                  setIsParlayBuilderVisible(true);
+                }}
+                style={({ pressed }) => [
+                  styles.actionCard,
+                  styles.actionCardGlass,
+                  pressed && styles.actionCardGlassPressed,
+                ]}
+              >
+                <View style={styles.actionCardLeft}>
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons name="layers" size={20} color={colors.primary} />
+                  </View>
+                  <View>
+                    <Text style={styles.actionCardTitle}>Build a Parlay</Text>
+                    <Text style={styles.actionCardSub}>Pick legs, set risk, get your slip</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+              </Pressable>
             </View>
           </View>
 
@@ -423,6 +467,11 @@ export default function HomeScreen() {
         <SettingsBottomSheet
           isVisible={isSettingsVisible}
           onClose={() => setIsSettingsVisible(false)}
+        />
+
+        <ParlayBuilder
+          visible={isParlayBuilderVisible}
+          onClose={() => setIsParlayBuilderVisible(false)}
         />
       </View>
     </ScreenBackground>
@@ -476,65 +525,64 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 30,
     width: "100%",
-    gap: spacing[4],
+    gap: spacing[3],
   },
-  // Primary CTA - Solid cyan with glow
-  primaryButton: {
-    height: 72,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    // Intense glow effect
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  primaryButtonPressed: {
-    transform: [{ scale: 0.97 }],
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
-  },
-  primaryButtonText: {
-    color: colors.primaryForeground,
-    fontSize: typography.sizes.lg,
-    fontFamily: typography.fontFamily.bold,
-    marginLeft: spacing[2],
-  },
-  // Secondary button - Glass style with cyan accent
-  secondaryButton: {
-    height: 72,
-    borderRadius: borderRadius.full,
-    backgroundColor: "rgba(22, 26, 34, 0.85)",
-    borderWidth: 1,
-    borderColor: colors.rgba.primary30,
-    alignItems: "center",
-    justifyContent: "center",
-    // Subtle glow
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 5,
-  },
-  secondaryButtonPressed: {
-    transform: [{ scale: 0.97 }],
-    backgroundColor: "rgba(22, 26, 34, 0.95)",
-    borderColor: colors.rgba.primary50,
-    shadowOpacity: 0.25,
-  },
-  secondaryButtonText: {
-    color: colors.foreground,
-    fontSize: typography.sizes.lg,
-    fontFamily: typography.fontFamily.medium,
-    marginLeft: spacing[2],
-  },
-  buttonContent: {
+  // Shared card base
+  actionCard: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    height: 68,
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing[4],
+  },
+  actionCardPrimary: {
+    backgroundColor: colors.primary,
+  },
+  actionCardGlass: {
+    backgroundColor: "rgba(22, 26, 34, 0.85)",
+    borderWidth: 1,
+    borderColor: colors.rgba.primary20,
+  },
+  actionCardPressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.9,
+  },
+  actionCardGlassPressed: {
+    transform: [{ scale: 0.97 }],
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+    borderColor: colors.rgba.primary30,
+  },
+  actionCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    flex: 1,
+  },
+  actionIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.lg,
+    backgroundColor: "rgba(0, 215, 215, 0.1)",
+    alignItems: "center",
     justifyContent: "center",
+  },
+  actionIconPrimary: {
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
+  },
+  actionCardTitle: {
+    color: colors.foreground,
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.bold,
+  },
+  actionCardTitlePrimary: {
+    color: colors.primaryForeground,
+  },
+  actionCardSub: {
+    color: colors.mutedForeground,
+    fontSize: 11,
+    fontFamily: typography.fontFamily.regular,
+    marginTop: 1,
   },
   loadingContainer: {
     flex: 1,
