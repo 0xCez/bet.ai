@@ -16,6 +16,8 @@ import { useCachedGames } from "../../app/hooks/useCachedGames";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { openBookmakerLink } from "../../utils/bookmakerLinks";
+import { getTeamAbbreviation, formatStatType, formatOdds, BOOKMAKER_LOGOS } from "../../utils/formatters";
+import { CachedGame } from "./CachedGameCard";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -60,62 +62,6 @@ interface ParlayBuilderProps {
   visible: boolean;
   onClose: () => void;
 }
-
-// ──────────────────────────────────────────────
-// BOOKMAKER LOGOS
-// ──────────────────────────────────────────────
-
-const BOOKMAKER_LOGOS: Record<string, any> = {
-  DraftKings: require("../../assets/images/Draftkings.png"),
-  FanDuel: require("../../assets/images/Fanduel.png"),
-  BetMGM: require("../../assets/images/Betmgm.png"),
-  Caesars: require("../../assets/images/Caesars.png"),
-  ESPNBet: require("../../assets/images/Espnbet.png"),
-  "ESPN BET": require("../../assets/images/Espnbet.png"),
-  BetRivers: require("../../assets/images/Betrivers.png"),
-  Bovada: require("../../assets/images/Bovada.png"),
-  Fanatics: require("../../assets/images/fanatics.png"),
-  "Hard Rock": require("../../assets/images/Hardrockbet.png"),
-  BallyBet: require("../../assets/images/Ballybet.png"),
-};
-
-// ──────────────────────────────────────────────
-// HELPERS
-// ──────────────────────────────────────────────
-
-const getTeamAbbreviation = (teamName?: string): string => {
-  if (!teamName) return "TBD";
-  const abbrevMap: { [key: string]: string } = {
-    "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN",
-    "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE",
-    "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET",
-    "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND",
-    "LA Clippers": "LAC", "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL",
-    "LA Lakers": "LAL", "Memphis Grizzlies": "MEM", "Miami Heat": "MIA",
-    "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN", "New Orleans Pelicans": "NOP",
-    "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL",
-    "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR",
-    "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR",
-    "Utah Jazz": "UTA", "Washington Wizards": "WAS",
-  };
-  return abbrevMap[teamName] || teamName.substring(0, 3).toUpperCase();
-};
-
-const formatStatType = (statType: string): string => {
-  const formatMap: { [key: string]: string } = {
-    points: "PTS", rebounds: "REB", assists: "AST", steals: "STL",
-    blocks: "BLK", turnovers: "TO", three_pointers_made: "3PT",
-    threepointersmade: "3PT", threes: "3PT",
-    "points+rebounds": "PTS+REB", "points+assists": "PTS+AST",
-    "rebounds+assists": "REB+AST", "points+rebounds+assists": "PRA",
-    "blocks+steals": "BLK+STL", pts_rebs_asts: "PRA",
-  };
-  return formatMap[statType.toLowerCase()] || statType.replace(/[_+]/g, "+").toUpperCase();
-};
-
-const formatOdds = (odds: number): string => {
-  return odds > 0 ? `+${odds}` : `${odds}`;
-};
 
 // Risk-level color palette
 const RISK_THEME = {
@@ -266,25 +212,19 @@ const buildParlayForBook = (
 };
 
 // ──────────────────────────────────────────────
-// COMPONENT
+// CONTENT COMPONENT (reusable in ActionSheet or inline)
 // ──────────────────────────────────────────────
 
-export const ParlayBuilder: React.FC<ParlayBuilderProps> = ({ visible, onClose }) => {
-  const actionSheetRef = useRef<ActionSheetRef>(null);
-  const { games: allGames } = useCachedGames();
+interface ParlayBuilderContentProps {
+  games: CachedGame[];
+  showDragHandle?: boolean;
+}
+
+export const ParlayBuilderContent: React.FC<ParlayBuilderContentProps> = ({ games: allGames, showDragHandle = false }) => {
   const [legCount, setLegCount] = useState<LegCount>(4);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("steady");
   const [selectedBookmaker, setSelectedBookmaker] = useState<string | null>(null);
   const [step, setStep] = useState<BuilderStep>("config");
-
-  // Show/hide ActionSheet based on visible prop
-  useEffect(() => {
-    if (visible) {
-      actionSheetRef.current?.show();
-    } else {
-      actionSheetRef.current?.hide();
-    }
-  }, [visible]);
 
   // Derive color theme from selected risk level
   const theme = RISK_THEME[riskLevel];
@@ -423,12 +363,6 @@ export const ParlayBuilder: React.FC<ParlayBuilderProps> = ({ visible, onClose }
     setStep("config");
   }, []);
 
-  const handleClose = useCallback(async () => {
-    await actionSheetRef.current?.hide();
-    setStep("config");
-    setTimeout(() => onClose(), 300);
-  }, [onClose]);
-
   const riskOptions: { id: RiskLevel; label: string; icon: string; desc: string }[] = [
     { id: "lock", label: "LOCK", icon: "shield-checkmark", desc: "Safest alt lines" },
     { id: "steady", label: "STEADY", icon: "swap-horizontal", desc: "Balanced alt lines" },
@@ -438,21 +372,12 @@ export const ParlayBuilder: React.FC<ParlayBuilderProps> = ({ visible, onClose }
   const legOptions: LegCount[] = [2, 3, 4, 5, 6];
 
   return (
-    <ActionSheet
-      ref={actionSheetRef}
-      headerAlwaysVisible={false}
-      useBottomSafeAreaPadding={true}
-      CustomHeaderComponent={<View />}
-      onClose={handleClose}
-      containerStyle={[styles.container, { borderColor: theme.border }] as any}
-      indicatorStyle={styles.indicator}
-      gestureEnabled={true}
-    >
       <View style={styles.contentContainer}>
-          {/* Drag handle */}
-          <View style={styles.handleContainer}>
-            <View style={styles.handle} />
-          </View>
+          {showDragHandle && (
+            <View style={styles.handleContainer}>
+              <View style={styles.handle} />
+            </View>
+          )}
 
           {step === "config" ? (
             <ScrollView style={styles.sheetContent} showsVerticalScrollIndicator={false}>
@@ -761,6 +686,42 @@ export const ParlayBuilder: React.FC<ParlayBuilderProps> = ({ visible, onClose }
             </ScrollView>
           )}
       </View>
+  );
+};
+
+// ──────────────────────────────────────────────
+// ACTIONSHEET WRAPPER (for Scan page backward compat)
+// ──────────────────────────────────────────────
+
+export const ParlayBuilder: React.FC<ParlayBuilderProps> = ({ visible, onClose }) => {
+  const actionSheetRef = useRef<ActionSheetRef>(null);
+  const { games: allGames } = useCachedGames();
+
+  useEffect(() => {
+    if (visible) {
+      actionSheetRef.current?.show();
+    } else {
+      actionSheetRef.current?.hide();
+    }
+  }, [visible]);
+
+  const handleClose = useCallback(async () => {
+    await actionSheetRef.current?.hide();
+    setTimeout(() => onClose(), 300);
+  }, [onClose]);
+
+  return (
+    <ActionSheet
+      ref={actionSheetRef}
+      headerAlwaysVisible={false}
+      useBottomSafeAreaPadding={true}
+      CustomHeaderComponent={<View />}
+      onClose={handleClose}
+      containerStyle={styles.container as any}
+      indicatorStyle={styles.indicator}
+      gestureEnabled={true}
+    >
+      <ParlayBuilderContent games={allGames} showDragHandle={true} />
     </ActionSheet>
   );
 };

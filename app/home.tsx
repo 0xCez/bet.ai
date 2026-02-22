@@ -5,10 +5,7 @@ import {
   StyleSheet,
   Pressable,
   Animated,
-  ScrollView,
   Dimensions,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
@@ -31,10 +28,9 @@ import { LogoSpinner } from "../components/ui/LogoSpinner";
 import { GradientOrb } from "../components/ui/GradientOrb";
 import { FloatingParticles } from "../components/ui/FloatingParticles";
 import { PageIndicator } from "../components/ui/PageIndicator";
-import { HeroGamesCarousel } from "../components/ui/HeroGamesCarousel";
-import { PlayerPropsCarousel } from "../components/ui/PlayerPropsCarousel";
-import { ParlayBuilder } from "../components/ui/ParlayBuilder";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BoardView } from "../components/ui/BoardView";
+import { BuilderView } from "../components/ui/BuilderView";
+import { useCachedGames } from "./hooks/useCachedGames";
 import i18n from "../i18n";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -42,21 +38,21 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RATING_SHOWN_KEY = "@rating_shown";
 
 type HomeParams = {
-  page?: "discover" | "scan";
+  page?: "board" | "scan" | "builder";
 };
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<HomeParams>();
   const { isSubscribed, purchaseLoading } = useRevenueCatPurchases();
-  const insets = useSafeAreaInsets();
 
-  // Determine initial page based on params (0 = Discover, 1 = Scan)
-  const initialPage = params.page === "discover" ? 0 : 1;
+  // Determine initial page based on params (0 = Board, 1 = Scan, 2 = Builder)
+  const initialPage = params.page === "board" ? 0 : params.page === "builder" ? 2 : 1;
 
-  // Page state for horizontal swiping
+  // Page state for tab switching
   const [activePage, setActivePage] = useState(initialPage);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const isScrollingProgrammatically = useRef(false);
+
+  // Single shared data fetch for Board + Builder tabs
+  const { games: allGames, loading: gamesLoading, error: gamesError } = useCachedGames();
 
   // Staggered animation values (4 elements: top bar, orb, scan button, gallery button)
   const cardAnimations = useRef(
@@ -95,7 +91,6 @@ export default function HomeScreen() {
   });
   const [isBottomSheetVisible, setIsBottomSheetVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
-  const [isParlayBuilderVisible, setIsParlayBuilderVisible] = useState(false);
   const { linkUserToFirebase } = useRevenueCatUser();
   const posthog = usePostHog();
 
@@ -159,41 +154,11 @@ export default function HomeScreen() {
     }
   };
 
-  // Handle horizontal page scroll (only for user-initiated scrolls)
-  const handlePageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    // Skip state updates during programmatic scrolls
-    if (isScrollingProgrammatically.current) return;
-
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const page = Math.round(offsetX / SCREEN_WIDTH);
-    if (page !== activePage && page >= 0 && page <= 2) {
-      setActivePage(page);
-    }
-  };
-
-  // Handle page indicator tap
+  // Handle tab change
   const handlePageChange = (page: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    isScrollingProgrammatically.current = true;
-    scrollViewRef.current?.scrollTo({
-      x: page * SCREEN_WIDTH,
-      animated: true,
-    });
     setActivePage(page);
-    // Reset flag after scroll animation completes
-    setTimeout(() => {
-      isScrollingProgrammatically.current = false;
-    }, 350);
   };
-
-  // We don't need this anymore as we're directly calling the camera/gallery functions
-  // const handleImagePickerPress = async () => {
-  //   if (!isSubscribed) {
-  //     router.push("/paywall");
-  //     return;
-  //   }
-  //   setIsBottomSheetVisible(true);
-  // };
 
   // Helper function to compress image
   const compressImage = async (uri: string): Promise<string> => {
@@ -339,123 +304,107 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Horizontal Swipeable Pages */}
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handlePageScroll}
-          scrollEventThrottle={16}
-          bounces={false}
-          contentOffset={{ x: initialPage * SCREEN_WIDTH, y: 0 }} // Start on the appropriate page
-          style={styles.pagesContainer}
-        >
-          {/* Page 1: Discover - Hero Game Cards */}
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-            <HeroGamesCarousel />
-          </View>
+        {/* Tab Content — all tabs stay mounted, hidden via display */}
+        <View style={[styles.tabContent, activePage !== 0 && styles.hidden]}>
+          <BoardView games={allGames} loading={gamesLoading} error={gamesError} />
+        </View>
 
-          {/* Page 2: Scan - Original home content */}
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-
-            {/* Action Cards */}
-            <View style={styles.bottomContainer}>
-              {/* Scan a Slip — primary card */}
-              <Animated.View style={getAnimatedStyle(2)}>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  if (!isSubscribed) {
-                    router.push("/paywall");
-                    return;
-                  }
-                  handleCameraPress();
-                }}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  styles.actionCardPrimary,
-                  pressed && styles.actionCardPressed,
-                ]}
-              >
-                <View style={styles.actionCardLeft}>
-                  <View style={[styles.actionIconWrap, styles.actionIconPrimary]}>
-                    <Ionicons name="scan" size={20} color={colors.primaryForeground} />
-                  </View>
-                  <View>
-                    <Text style={[styles.actionCardTitle, styles.actionCardTitlePrimary]}>{i18n.t("imagePickerTakePhoto")}</Text>
-                    <Text style={styles.actionCardSub}>Scan your bet slip or a live game</Text>
-                  </View>
+        <View style={[styles.tabContent, activePage !== 1 && styles.hidden]}>
+          {/* Scan page — COMPLETELY UNCHANGED */}
+          <View style={styles.bottomContainer}>
+            {/* Scan a Slip — primary card */}
+            <Animated.View style={getAnimatedStyle(2)}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                if (!isSubscribed) {
+                  router.push("/paywall");
+                  return;
+                }
+                handleCameraPress();
+              }}
+              style={({ pressed }) => [
+                styles.actionCard,
+                styles.actionCardPrimary,
+                pressed && styles.actionCardPressed,
+              ]}
+            >
+              <View style={styles.actionCardLeft}>
+                <View style={[styles.actionIconWrap, styles.actionIconPrimary]}>
+                  <Ionicons name="scan" size={20} color={colors.primaryForeground} />
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.primaryForeground} />
-              </Pressable>
-              </Animated.View>
-
-              {/* Choose from Library — glass card */}
-              <Animated.View style={getAnimatedStyle(3)}>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (!isSubscribed) {
-                    router.push("/paywall");
-                    return;
-                  }
-                  handleGalleryPress();
-                }}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  styles.actionCardGlass,
-                  pressed && styles.actionCardGlassPressed,
-                ]}
-              >
-                <View style={styles.actionCardLeft}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="images-outline" size={20} color={colors.primary} />
-                  </View>
-                  <View>
-                    <Text style={styles.actionCardTitle}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
-                    <Text style={styles.actionCardSub}>Upload from your photo library</Text>
-                  </View>
+                <View>
+                  <Text style={[styles.actionCardTitle, styles.actionCardTitlePrimary]}>{i18n.t("imagePickerTakePhoto")}</Text>
+                  <Text style={styles.actionCardSub}>Scan your bet slip or a live game</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-              </Pressable>
-              </Animated.View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.primaryForeground} />
+            </Pressable>
+            </Animated.View>
 
-              {/* Build a Parlay — glass card */}
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  if (!isSubscribed) {
-                    router.push("/paywall");
-                    return;
-                  }
-                  setIsParlayBuilderVisible(true);
-                }}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  styles.actionCardGlass,
-                  pressed && styles.actionCardGlassPressed,
-                ]}
-              >
-                <View style={styles.actionCardLeft}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="layers" size={20} color={colors.primary} />
-                  </View>
-                  <View>
-                    <Text style={styles.actionCardTitle}>Build a Parlay</Text>
-                    <Text style={styles.actionCardSub}>Pick legs, set risk, get your slip</Text>
-                  </View>
+            {/* Choose from Library — glass card */}
+            <Animated.View style={getAnimatedStyle(3)}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (!isSubscribed) {
+                  router.push("/paywall");
+                  return;
+                }
+                handleGalleryPress();
+              }}
+              style={({ pressed }) => [
+                styles.actionCard,
+                styles.actionCardGlass,
+                pressed && styles.actionCardGlassPressed,
+              ]}
+            >
+              <View style={styles.actionCardLeft}>
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name="images-outline" size={20} color={colors.primary} />
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-              </Pressable>
-            </View>
-          </View>
+                <View>
+                  <Text style={styles.actionCardTitle}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
+                  <Text style={styles.actionCardSub}>Upload from your photo library</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            </Pressable>
+            </Animated.View>
 
-          {/* Page 3: Props - ML Player Props */}
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-            <PlayerPropsCarousel />
+            {/* Build a Parlay — switches to Builder tab */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                if (!isSubscribed) {
+                  router.push("/paywall");
+                  return;
+                }
+                handlePageChange(2);
+              }}
+              style={({ pressed }) => [
+                styles.actionCard,
+                styles.actionCardGlass,
+                pressed && styles.actionCardGlassPressed,
+              ]}
+            >
+              <View style={styles.actionCardLeft}>
+                <View style={styles.actionIconWrap}>
+                  <Ionicons name="layers" size={20} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.actionCardTitle}>Build a Parlay</Text>
+                  <Text style={styles.actionCardSub}>Pick legs, set risk, get your slip</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+            </Pressable>
           </View>
-        </ScrollView>
+        </View>
+
+        <View style={[styles.tabContent, activePage !== 2 && styles.hidden]}>
+          <BuilderView games={allGames} />
+        </View>
 
         <ImagePickerSheet
           isVisible={isBottomSheetVisible}
@@ -467,11 +416,6 @@ export default function HomeScreen() {
         <SettingsBottomSheet
           isVisible={isSettingsVisible}
           onClose={() => setIsSettingsVisible(false)}
-        />
-
-        <ParlayBuilder
-          visible={isParlayBuilderVisible}
-          onClose={() => setIsParlayBuilderVisible(false)}
         />
       </View>
     </ScreenBackground>
@@ -494,30 +438,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
   },
-  content: {
+  tabContent: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 0,
-    paddingBottom: 150,
   },
-  mainText: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    textAlign: "center",
-  },
-  subText: {
-    fontSize: 28,
-    color: "rgba(255, 255, 255, 0.7)",
-    textAlign: "center",
-    marginTop: 4,
-  },
-  centerImage: {
-    width: "100%",
-    height: 400,
-    alignSelf: "center",
-    marginBottom: 55,
+  hidden: {
+    display: "none",
   },
   bottomContainer: {
     padding: spacing[4],
@@ -589,12 +514,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: colors.background,
-  },
-  pagesContainer: {
-    flex: 1,
-  },
-  page: {
-    flex: 1,
   },
   pageIndicatorContainer: {
     alignItems: "center",

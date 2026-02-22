@@ -11,9 +11,9 @@ interface PageIndicatorProps {
 }
 
 const pages = [
-  { id: 0, label: "Picks", icon: "flame" as const },
+  { id: 0, label: "Board", icon: "grid" as const },
   { id: 1, label: "Scan", icon: "scan" as const },
-  { id: 2, label: "Props", icon: "person" as const },
+  { id: 2, label: "Builder", icon: "layers" as const },
 ];
 
 export const PageIndicator: React.FC<PageIndicatorProps> = ({
