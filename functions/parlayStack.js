@@ -43,21 +43,15 @@ function oddsToImplied(odds) {
 }
 
 /**
- * Core Parlay Stack pipeline.
+ * Core Parlay Stack processing — accepts pre-fetched data (no API calls).
+ * Used by the orchestrator (refreshGameProps.js) for shared data fetching.
  *
  * @param {string} eventId - The Odds API event ID
- * @param {object} options - { homeTeam, awayTeam } (optional, saves an API call if provided)
+ * @param {object} sharedData - { altPropsMap, playerIdMap, gameLogsMap, oppStatsData, homeTeam, awayTeam }
  * @returns {object} - { success, legs, ... }
  */
-async function getParlayStackLegs(eventId, options = {}) {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('API_SPORTS_KEY not configured');
-
-  let { homeTeam, awayTeam } = options;
-
-  // 1. Fetch alt props from The Odds API
-  console.log(`[ParlayStack] Fetching alt props for event ${eventId}...`);
-  const altMap = await fetchAltProps(eventId);
+async function processParlayStack(eventId, sharedData) {
+  const { altPropsMap: altMap, playerIdMap, gameLogsMap, oppStatsData, homeTeam, awayTeam } = sharedData;
 
   if (!altMap || altMap.size === 0) {
     return {
@@ -68,41 +62,9 @@ async function getParlayStackLegs(eventId, options = {}) {
     };
   }
 
-  // 2. Collect unique players from alt props
-  const playerStatTypes = new Map(); // playerName → Set of statTypes
-  for (const [mapKey, lines] of altMap) {
-    const [playerName, statType] = mapKey.split('|');
-    if (!playerStatTypes.has(playerName)) playerStatTypes.set(playerName, new Set());
-    playerStatTypes.get(playerName).add(statType);
-  }
+  console.log(`[ParlayStack] Processing ${altMap.size} player-stat combos`);
 
-  const uniquePlayers = [...playerStatTypes.keys()];
-  console.log(`[ParlayStack] ${altMap.size} player-stat combos from ${uniquePlayers.length} players`);
-
-  // 3. Resolve player IDs (shared Firestore cache)
-  const playerIdMap = await resolvePlayerIdsBatch(uniquePlayers);
-  const resolvedCount = Object.values(playerIdMap).filter(id => id !== null).length;
-  console.log(`[ParlayStack] Resolved ${resolvedCount}/${uniquePlayers.length} player IDs`);
-
-  // 4. Fetch game logs (shared Firestore cache)
-  const gameLogsMap = await getGameLogsBatch(playerIdMap);
-
-  // 5. Fetch opponent defensive stats (shared 24h cache)
-  const oppStatsData = await getOpponentDefensiveStats();
-
-  // 6. If home/away not provided, try to determine from alt lines data
-  // (The fetchAltProps doesn't return team info, but the caller usually has it)
-  if (!homeTeam || !awayTeam) {
-    // Try to find the event from events list
-    const events = await fetchEvents('basketball_nba');
-    const event = events.find(e => e.id === eventId);
-    if (event) {
-      homeTeam = event.home_team;
-      awayTeam = event.away_team;
-    }
-  }
-
-  // 7. Determine player teams from game logs
+  // Determine player teams from game logs
   const playerTeamMap = {};
   for (const [name, logs] of Object.entries(gameLogsMap)) {
     if (logs.length > 0) {
@@ -273,10 +235,53 @@ function validateLeg({ playerName, statType, prediction, altLine, altOdds, bookm
 }
 
 // ──────────────────────────────────────────────
+// STANDALONE WRAPPER (fetches own data, for HTTP & backward compat)
+// ──────────────────────────────────────────────
+
+/**
+ * Standalone Parlay Stack — fetches data internally then delegates to processParlayStack.
+ * Used by the HTTP endpoint and legacy callers.
+ */
+async function getParlayStackLegs(eventId, options = {}) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('API_SPORTS_KEY not configured');
+
+  let { homeTeam, awayTeam } = options;
+
+  // Fetch data
+  console.log(`[ParlayStack] Fetching alt props for event ${eventId}...`);
+  const altPropsMap = await fetchAltProps(eventId);
+
+  // Collect unique players from alt props
+  const uniquePlayers = [...new Set(
+    [...(altPropsMap?.keys() || [])].map(k => k.split('|')[0])
+  )];
+
+  const playerIdMap = await resolvePlayerIdsBatch(uniquePlayers);
+  const gameLogsMap = await getGameLogsBatch(playerIdMap);
+  const oppStatsData = await getOpponentDefensiveStats();
+
+  // Resolve teams if not provided
+  if (!homeTeam || !awayTeam) {
+    const events = await fetchEvents('basketball_nba');
+    const event = events.find(e => e.id === eventId);
+    if (event) {
+      homeTeam = event.home_team;
+      awayTeam = event.away_team;
+    }
+  }
+
+  // Delegate to core processing
+  return processParlayStack(eventId, {
+    altPropsMap, playerIdMap, gameLogsMap, oppStatsData, homeTeam, awayTeam,
+  });
+}
+
+// ──────────────────────────────────────────────
 // HTTP CLOUD FUNCTION
 // ──────────────────────────────────────────────
 
-exports.getParlayStackLegs = functions.https.onRequest(
+exports.getParlayStackLegsHTTP = functions.https.onRequest(
   { timeoutSeconds: 120, memory: '512MiB', cors: true },
   async (req, res) => {
     try {
@@ -298,5 +303,5 @@ exports.getParlayStackLegs = functions.https.onRequest(
   }
 );
 
-// Export for direct use by preCacheTopGames
-module.exports = { getParlayStackLegs, getParlayStackLegsHTTP: exports.getParlayStackLegs };
+// Export for orchestrator (processParlayStack) and legacy callers (getParlayStackLegs)
+module.exports = { getParlayStackLegs, processParlayStack, getParlayStackLegsHTTP: exports.getParlayStackLegsHTTP };

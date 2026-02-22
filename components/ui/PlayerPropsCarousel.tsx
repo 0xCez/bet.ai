@@ -227,63 +227,46 @@ export const PlayerPropsCarousel: React.FC = () => {
     setMode(newMode);
   };
 
-  // ─── Segmented Toggle ───
-  const renderSegmentedToggle = () => (
-    <View style={styles.segmentedContainer}>
-      <Pressable
-        onPress={() => handleModeChange("picks")}
-        style={[styles.segmentedTab, mode === "picks" && styles.segmentedTabActive]}
-      >
-        <Ionicons
-          name="analytics"
-          size={14}
-          color={mode === "picks" ? colors.background : colors.mutedForeground}
-        />
-        <Text style={[styles.segmentedText, mode === "picks" && styles.segmentedTextActive]}>
-          Picks
-        </Text>
-      </Pressable>
-      <Pressable
-        onPress={() => handleModeChange("parlays")}
-        style={[styles.segmentedTab, mode === "parlays" && styles.segmentedTabActive]}
-      >
-        <Ionicons
-          name="layers"
-          size={14}
-          color={mode === "parlays" ? colors.background : colors.mutedForeground}
-        />
-        <Text style={[styles.segmentedText, mode === "parlays" && styles.segmentedTextActive]}>
-          Parlays
-        </Text>
-        {parlayLegs.length > 0 && (
-          <View style={styles.legCountBadge}>
-            <Text style={styles.legCountText}>{parlayLegs.length}</Text>
-          </View>
-        )}
-      </Pressable>
-    </View>
-  );
+  // ─── Segmented Toggle (Parlays tab commented out for now) ───
+  // const renderSegmentedToggle = () => (
+  //   <View style={styles.segmentedContainer}>
+  //     <Pressable
+  //       onPress={() => handleModeChange("picks")}
+  //       style={[styles.segmentedTab, mode === "picks" && styles.segmentedTabActive]}
+  //     >
+  //       <Ionicons name="analytics" size={14} color={mode === "picks" ? colors.background : colors.mutedForeground} />
+  //       <Text style={[styles.segmentedText, mode === "picks" && styles.segmentedTextActive]}>Picks</Text>
+  //     </Pressable>
+  //     <Pressable
+  //       onPress={() => handleModeChange("parlays")}
+  //       style={[styles.segmentedTab, mode === "parlays" && styles.segmentedTabActive]}
+  //     >
+  //       <Ionicons name="layers" size={14} color={mode === "parlays" ? colors.background : colors.mutedForeground} />
+  //       <Text style={[styles.segmentedText, mode === "parlays" && styles.segmentedTextActive]}>Parlays</Text>
+  //       {parlayLegs.length > 0 && (
+  //         <View style={styles.legCountBadge}>
+  //           <Text style={styles.legCountText}>{parlayLegs.length}</Text>
+  //         </View>
+  //       )}
+  //     </Pressable>
+  //   </View>
+  // );
 
   // ─── Header ───
   const renderHeader = () => (
     <View style={styles.header}>
-      <Text style={styles.title}>
-        {mode === "picks" ? "Player Props" : "Parlay Legs"}
-      </Text>
-      <View style={styles.headerControls}>
-        {renderSegmentedToggle()}
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setShowDropdown(true);
-          }}
-          style={({ pressed }) => [styles.teamSelector, pressed && styles.teamSelectorPressed]}
-        >
-          <Ionicons name="people" size={13} color={colors.primary} />
-          <Text style={styles.teamSelectorText}>{currentTeamOption.label}</Text>
-          <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
-        </Pressable>
-      </View>
+      <Text style={styles.title}>Player Props</Text>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowDropdown(true);
+        }}
+        style={({ pressed }) => [styles.teamSelector, pressed && styles.teamSelectorPressed]}
+      >
+        <Ionicons name="people" size={13} color={colors.primary} />
+        <Text style={styles.teamSelectorText}>{currentTeamOption.label}</Text>
+        <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+      </Pressable>
     </View>
   );
 
@@ -347,7 +330,7 @@ export const PlayerPropsCarousel: React.FC = () => {
         {renderDropdown()}
         <View style={styles.scrollContent}>
           <View style={styles.cardWrapper}>
-            {mode === "picks" ? <PlayerPropCardSkeleton /> : <ParlayLegCardSkeleton />}
+            <PlayerPropCardSkeleton />
           </View>
         </View>
       </View>
@@ -367,64 +350,18 @@ export const PlayerPropsCarousel: React.FC = () => {
     );
   }
 
-  // ─── Picks Mode ───
-  if (mode === "picks") {
-    if (filteredPlayers.length === 0) {
-      return (
-        <View style={styles.container}>
-          {renderHeader()}
-          {renderDropdown()}
-          <View style={styles.emptyContainer}>
-            <Ionicons name="analytics-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
-            <Text style={styles.emptyText}>
-              {teamFilter === "all" ? "No player props available" : `No props for ${currentTeamOption.label}`}
-            </Text>
-            <Text style={styles.emptySubtext}>Check back closer to game time</Text>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.container}>
-        {renderHeader()}
-        {renderDropdown()}
-        <ScrollView
-          ref={picksScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          snapToInterval={SNAP_INTERVAL}
-          decelerationRate="fast"
-          onScroll={handlePicksScroll}
-          scrollEventThrottle={16}
-        >
-          {filteredPlayers.map((player, index) => (
-            <View
-              key={`${player.gameId}-${player.playerName}-${index}`}
-              style={[styles.cardWrapper, index === filteredPlayers.length - 1 && styles.lastCardWrapper]}
-            >
-              <PlayerPropCard player={player} onPress={handlePlayerPress} />
-            </View>
-          ))}
-        </ScrollView>
-        {renderDots(filteredPlayers.length, picksIndex)}
-      </View>
-    );
-  }
-
-  // ─── Parlays Mode ───
-  if (filteredParlayLegs.length === 0) {
+  // ─── Picks Mode (only active mode for now) ───
+  if (filteredPlayers.length === 0) {
     return (
       <View style={styles.container}>
         {renderHeader()}
         {renderDropdown()}
         <View style={styles.emptyContainer}>
-          <Ionicons name="layers-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
+          <Ionicons name="analytics-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
           <Text style={styles.emptyText}>
-            {teamFilter === "all" ? "No parlay legs available" : `No parlay legs for ${currentTeamOption.label}`}
+            {teamFilter === "all" ? "No player props available" : `No props for ${currentTeamOption.label}`}
           </Text>
-          <Text style={styles.emptySubtext}>Alt lines with validated signals</Text>
+          <Text style={styles.emptySubtext}>Check back closer to game time</Text>
         </View>
       </View>
     );
@@ -435,32 +372,79 @@ export const PlayerPropsCarousel: React.FC = () => {
       {renderHeader()}
       {renderDropdown()}
       <ScrollView
-        ref={parlaysScrollRef}
+        ref={picksScrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        snapToInterval={PARLAY_SNAP_INTERVAL}
+        snapToInterval={SNAP_INTERVAL}
         decelerationRate="fast"
-        onScroll={handleParlaysScroll}
+        onScroll={handlePicksScroll}
         scrollEventThrottle={16}
       >
-        {filteredParlayLegs.map((leg, index) => (
+        {filteredPlayers.map((player, index) => (
           <View
-            key={`${leg.gameId}-${leg.playerName}-${leg.statType}-${index}`}
-            style={[styles.cardWrapper, index === filteredParlayLegs.length - 1 && styles.lastCardWrapper]}
+            key={`${player.gameId}-${player.playerName}-${index}`}
+            style={[styles.cardWrapper, index === filteredPlayers.length - 1 && styles.lastCardWrapper]}
           >
-            <ParlayLegCard leg={leg} onPress={handleParlayLegPress} />
+            <PlayerPropCard player={player} onPress={handlePlayerPress} />
           </View>
         ))}
       </ScrollView>
-      {renderDots(filteredParlayLegs.length, parlaysIndex)}
+      {renderDots(filteredPlayers.length, picksIndex)}
     </View>
   );
+
+  // ─── Parlays Mode (commented out — will revisit later) ───
+  // if (filteredParlayLegs.length === 0) {
+  //   return (
+  //     <View style={styles.container}>
+  //       {renderHeader()}
+  //       {renderDropdown()}
+  //       <View style={styles.emptyContainer}>
+  //         <Ionicons name="layers-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
+  //         <Text style={styles.emptyText}>
+  //           {teamFilter === "all" ? "No parlay legs available" : `No parlay legs for ${currentTeamOption.label}`}
+  //         </Text>
+  //         <Text style={styles.emptySubtext}>Alt lines with validated signals</Text>
+  //       </View>
+  //     </View>
+  //   );
+  // }
+  //
+  // return (
+  //   <View style={styles.container}>
+  //     {renderHeader()}
+  //     {renderDropdown()}
+  //     <ScrollView
+  //       ref={parlaysScrollRef}
+  //       horizontal
+  //       showsHorizontalScrollIndicator={false}
+  //       contentContainerStyle={styles.scrollContent}
+  //       snapToInterval={PARLAY_SNAP_INTERVAL}
+  //       decelerationRate="fast"
+  //       onScroll={handleParlaysScroll}
+  //       scrollEventThrottle={16}
+  //     >
+  //       {filteredParlayLegs.map((leg, index) => (
+  //         <View
+  //           key={`${leg.gameId}-${leg.playerName}-${leg.statType}-${index}`}
+  //           style={[styles.cardWrapper, index === filteredParlayLegs.length - 1 && styles.lastCardWrapper]}
+  //         >
+  //           <ParlayLegCard leg={leg} onPress={handleParlayLegPress} />
+  //         </View>
+  //       ))}
+  //     </ScrollView>
+  //     {renderDots(filteredParlayLegs.length, parlaysIndex)}
+  //   </View>
+  // );
 };
 
 const styles = StyleSheet.create({
   container: {},
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: spacing[6],
     marginBottom: spacing[3],
   },
@@ -468,13 +452,6 @@ const styles = StyleSheet.create({
     color: colors.foreground,
     fontSize: typography.sizes["2xl"],
     fontFamily: typography.fontFamily.bold,
-    marginBottom: spacing[2],
-  },
-  headerControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[2],
   },
   // Segmented toggle
   segmentedContainer: {

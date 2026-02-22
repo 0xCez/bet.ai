@@ -1,17 +1,34 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Dimensions, Image } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions, Image } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
+import { router } from "expo-router";
 import { colors, spacing, borderRadius, typography, glass } from "../../constants/designTokens";
 import { getPlayerImage } from "../../utils/playerImages";
+import { openBookmakerLink } from "../../utils/bookmakerLinks";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HORIZONTAL_PADDING = spacing[6];
 export const PLAYER_CARD_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2;
 
-// Max props to show on card (prevents overflow)
-const MAX_PROPS_SHOWN = 3;
+// Show all props on the card
+const MAX_PROPS_SHOWN = 10;
+
+const BOOKMAKER_LOGOS: Record<string, any> = {
+  DraftKings: require("../../assets/images/Draftkings.png"),
+  FanDuel: require("../../assets/images/Fanduel.png"),
+  BetMGM: require("../../assets/images/Betmgm.png"),
+  Caesars: require("../../assets/images/Caesars.png"),
+  ESPNBet: require("../../assets/images/Espnbet.png"),
+  "ESPN BET": require("../../assets/images/Espnbet.png"),
+  BetRivers: require("../../assets/images/Betrivers.png"),
+  Bovada: require("../../assets/images/Bovada.png"),
+  Fanatics: require("../../assets/images/fanatics.png"),
+  "Hard Rock": require("../../assets/images/Hardrockbet.png"),
+  BallyBet: require("../../assets/images/Ballybet.png"),
+};
 
 // Player prop data structure from ML predictions
 export interface PlayerProp {
@@ -275,27 +292,18 @@ const GreenScoreDots: React.FC<{ score: number; max?: number }> = ({ score, max 
 // COMPONENT
 // ──────────────────────────────────────────────
 
-export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress }) => {
+export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player }) => {
   const gameTime = formatGameTime(player.gameStartTime);
   const teamAbbrev = getTeamAbbreviation(player.team);
   const opponentAbbrev = getTeamAbbreviation(player.opponent);
   const playerName = player.playerName || "Unknown Player";
   const playerImage = getPlayerImage(playerName, teamAbbrev);
 
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onPress(player);
-  };
-
   const stats = player.playerStats || player.props[0]?.playerStats;
   const visibleProps = player.props.slice(0, MAX_PROPS_SHOWN);
-  const extraCount = player.props.length - MAX_PROPS_SHOWN;
 
   return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-    >
+    <View style={styles.card}>
       <BlurView intensity={glass.card.blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />
 
       <View style={styles.content}>
@@ -366,28 +374,15 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
             </Text>
           </View>
 
-          <View style={styles.propsList}>
+          <ScrollView style={styles.propsList} contentContainerStyle={styles.propsListContent} nestedScrollEnabled showsVerticalScrollIndicator={false}>
             {visibleProps.map((prop, index) => {
               const predictionLower = (prop.prediction || "").toLowerCase();
               const isOver = predictionLower === "over";
 
-              // Calibrated + capped probability
-              const calibratedProb = prop.displayConfidence;
-              const rawProb = isOver
-                ? prop.probabilityOver || prop.probability_over
-                : prop.probabilityUnder || prop.probability_under;
-              const displayProb = calibratedProb ?? rawProb;
-
-              const probabilityPercent = prop.displayConfidencePercent
-                ? `${prop.displayConfidencePercent}%`
-                : typeof displayProb === "number"
-                  ? `${(displayProb * 100).toFixed(0)}%`
-                  : "—";
-
-              const probValue = typeof displayProb === "number" ? displayProb : 0;
-              const isStrong = probValue >= 0.65;
-              const pillBg = isStrong ? "rgba(34, 197, 94, 0.2)" : "rgba(255, 184, 0, 0.2)";
-              const pillText = isStrong ? colors.success : "#FFB800";
+              // Bookmaker for this prop's predicted direction
+              const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
+              const bookLogo = bookmaker ? BOOKMAKER_LOGOS[bookmaker] : null;
+              const odds = isOver ? prop.oddsOver : prop.oddsUnder;
 
               // L10 avg — use prop's own l10Avg first, fall back to playerStats
               const avgNum = prop.l10Avg ?? null;
@@ -403,30 +398,71 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
               const greenScore = prop.greenScore ?? null;
 
               return (
-                <View key={index} style={styles.propRow}>
-                  {/* Line 1: Stat + Direction/Line + Avg ... Probability */}
+                <Pressable
+                  key={index}
+                  style={styles.propRow}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    // Build other props list (all props except the tapped one)
+                    const others = visibleProps
+                      .filter((_, i) => i !== index)
+                      .map((p) => ({
+                        statType: p.statType,
+                        line: p.line,
+                        prediction: p.prediction,
+                        oddsOver: p.oddsOver,
+                        oddsUnder: p.oddsUnder,
+                        l10Avg: p.l10Avg,
+                        greenScore: p.greenScore,
+                      }));
+                    router.push({
+                      pathname: "/player-prop-chart" as any,
+                      params: {
+                        playerName: prop.playerName,
+                        statType: prop.statType,
+                        line: String(prop.line),
+                        otherProps: JSON.stringify(others),
+                      },
+                    });
+                  }}
+                >
+                  {/* Row 1: Stat + line + avg | bookmaker */}
                   <View style={styles.propTopRow}>
                     <View style={styles.propInfo}>
                       <Text style={styles.propStat}>{formatStatType(prop.statType)}</Text>
-                      <Text style={styles.propDivider}> </Text>
                       <Text style={[styles.propDirection, isOver ? styles.propOver : styles.propUnder]}>
                         {isOver ? "O" : "U"} {prop.line}
                       </Text>
                       {avgNum != null && (
-                        <>
-                          <Text style={styles.propDivider}>  </Text>
-                          <Text style={[styles.propAvg, { color: avgColor }]}>
-                            Avg {avgNum}
-                          </Text>
-                        </>
+                        <Text style={[styles.propAvg, { color: avgColor }]}>
+                          Avg {avgNum}
+                        </Text>
+                      )}
+                      {odds != null && (
+                        <Text style={styles.propOdds}>
+                          {odds > 0 ? `+${odds}` : `${odds}`}
+                        </Text>
                       )}
                     </View>
-                    <View style={[styles.propProbPill, { backgroundColor: pillBg }]}>
-                      <Text style={[styles.propProbText, { color: pillText }]}>{probabilityPercent}</Text>
-                    </View>
+                    {(bookLogo || bookmaker) && (
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          openBookmakerLink(bookmaker!, "nba");
+                        }}
+                        style={styles.bookBadge}
+                      >
+                        {bookLogo ? (
+                          <ExpoImage source={bookLogo} style={styles.bookBadgeLogo} contentFit="contain" />
+                        ) : (
+                          <Text style={styles.bookBadgeText}>{bookmaker}</Text>
+                        )}
+                      </Pressable>
+                    )}
                   </View>
 
-                  {/* Line 2: Tags + Green Score */}
+                  {/* Row 2: Tags + Green Score */}
                   <View style={styles.propBottomRow}>
                     {tags.map((tag, ti) => (
                       <Text
@@ -441,19 +477,14 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player, onPress 
                     ))}
                     {greenScore != null && <GreenScoreDots score={greenScore} />}
                   </View>
-                </View>
+                </Pressable>
               );
             })}
 
-            {extraCount > 0 && (
-              <View style={styles.morePropsRow}>
-                <Text style={styles.morePropsText}>+{extraCount} more</Text>
-              </View>
-            )}
-          </View>
+          </ScrollView>
         </View>
       </View>
-    </Pressable>
+    </View>
   );
 };
 
@@ -633,15 +664,18 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   propsList: {
+    maxHeight: 240,
+  },
+  propsListContent: {
     gap: spacing[1] + 2,
   },
-  // Individual prop row — compact 2-line layout
+  // Individual prop row
   propRow: {
     backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderRadius: borderRadius.sm,
-    paddingVertical: spacing[1] + 3,
-    paddingHorizontal: spacing[2],
-    gap: 5,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[2] + 2,
+    gap: spacing[1] + 2,
   },
   propTopRow: {
     flexDirection: "row",
@@ -650,21 +684,18 @@ const styles = StyleSheet.create({
   },
   propInfo: {
     flexDirection: "row",
-    alignItems: "baseline",
+    alignItems: "center",
     flex: 1,
+    gap: spacing[2],
   },
   propStat: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
-  propDivider: {
-    color: colors.mutedForeground,
-    fontSize: 11,
-  },
   propDirection: {
-    fontSize: 12,
-    fontFamily: typography.fontFamily.medium,
+    fontSize: 13,
+    fontFamily: typography.fontFamily.semibold,
   },
   propOver: {
     color: colors.success,
@@ -673,18 +704,30 @@ const styles = StyleSheet.create({
     color: "#FF6B6B",
   },
   propAvg: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: typography.fontFamily.medium,
   },
-  propProbPill: {
-    paddingHorizontal: spacing[2],
-    paddingVertical: 3,
-    borderRadius: borderRadius.full,
-    marginLeft: spacing[1],
-  },
-  propProbText: {
+  propOdds: {
     fontSize: 12,
     fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+  },
+  bookBadge: {
+    paddingHorizontal: spacing[1],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.md,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    marginLeft: spacing[2],
+  },
+  bookBadgeLogo: {
+    width: 28,
+    height: 28,
+  },
+  bookBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+    paddingHorizontal: 2,
   },
   // Tags + Green dots row
   propBottomRow: {
@@ -694,9 +737,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   propTag: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: typography.fontFamily.bold,
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     overflow: "hidden",
@@ -726,17 +769,6 @@ const styles = StyleSheet.create({
   },
   greenDotEmpty: {
     backgroundColor: "rgba(122, 139, 163, 0.25)",
-  },
-  // More props
-  morePropsRow: {
-    alignItems: "center",
-    paddingVertical: 2,
-  },
-  morePropsText: {
-    fontSize: 10,
-    fontFamily: typography.fontFamily.medium,
-    color: colors.mutedForeground,
-    opacity: 0.7,
   },
   // Skeleton
   skeleton: {

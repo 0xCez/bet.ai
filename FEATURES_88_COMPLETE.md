@@ -10,7 +10,7 @@
 
 ## Architecture: 44 Raw + 44 Derived = 88
 
-The 88 features split into two halves:
+The 88 featu1res split into two halves:
 
 | Group | Count | What they are | Where they come from |
 |-------|-------|---------------|----------------------|

@@ -8,6 +8,7 @@
  */
 
 const axios = require('axios');
+const { withRetry } = require('./retry');
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
 
@@ -167,7 +168,10 @@ async function fetchStandardProps(eventId) {
 
   try {
     console.log(`[oddsApi] Fetching standard props for event ${eventId}...`);
-    const resp = await axios.get(url, { timeout: 15000 });
+    const resp = await withRetry(
+      () => axios.get(url, { timeout: 15000 }),
+      { maxRetries: 2, label: `stdProps-${eventId}` }
+    );
 
     const propsMap = parseOddsResponse(resp.data);
 
@@ -220,7 +224,10 @@ async function fetchAltProps(eventId) {
 
   try {
     console.log(`[oddsApi] Fetching alt props for event ${eventId}...`);
-    const resp = await axios.get(url, { timeout: 15000 });
+    const resp = await withRetry(
+      () => axios.get(url, { timeout: 15000 }),
+      { maxRetries: 2, label: `altProps-${eventId}` }
+    );
 
     const altMap = parseOddsResponse(resp.data);
     const totalLines = [...altMap.values()].reduce((s, a) => s + a.length, 0);
@@ -241,7 +248,10 @@ async function fetchEvents(sport = 'basketball_nba') {
 
   const url = `https://api.the-odds-api.com/v4/sports/${sport}/events?apiKey=${ODDS_API_KEY}`;
   try {
-    const resp = await axios.get(url, { timeout: 15000 });
+    const resp = await withRetry(
+      () => axios.get(url, { timeout: 15000 }),
+      { maxRetries: 2, label: 'events' }
+    );
     return resp.data || [];
   } catch (err) {
     console.error(`[oddsApi] Events fetch failed: ${err.message}`);
