@@ -20,7 +20,7 @@ const { GoogleAuth } = require('google-auth-library');
 const { fetchStandardProps, fetchAltProps, fetchEvents, findBestGoblinLine, normalizeBookmaker } = require('./shared/oddsApi');
 const { resolvePlayerIdsBatch, getGameLogsBatch, getL10AvgForStat, getApiKey, getCurrentNBASeason } = require('./shared/playerStats');
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
-const { calculateHitRates } = require('./shared/hitRates');
+const { calculateExtendedHitRates } = require('./shared/hitRates');
 const { calibrateProbability, getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
 
 // ── Config ──
@@ -526,14 +526,30 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     playerTeamInfo[name] = resolvePlayerTeam(logs, homeTeam, awayTeam);
   }
 
-  // 7. Enrich props with team + isHome, filter to those with game logs
-  const enrichedProps = allProps
+  // 7. Enrich props with team + isHome, filter to those with game logs + quality gate
+  const MIN_GAMES = 5;
+  const MIN_AVG_MINUTES = 20;
+
+  const allEnriched = allProps
     .map(p => ({
       ...p,
       team: playerTeamInfo[p.playerName]?.team || homeTeam,
       isHome: playerTeamInfo[p.playerName]?.isHome ?? false,
     }))
     .filter(p => gameLogsMap[p.playerName]?.length > 0);
+
+  const enrichedProps = allEnriched.filter(p => {
+    const logs = gameLogsMap[p.playerName];
+    if (logs.length < MIN_GAMES) return false;
+    const recent = logs.slice(0, 10);
+    const avgMin = recent.reduce((s, g) => s + parseMinutes(g.min), 0) / recent.length;
+    return avgMin >= MIN_AVG_MINUTES;
+  });
+
+  const qualityFiltered = allEnriched.length - enrichedProps.length;
+  if (qualityFiltered > 0) {
+    console.log(`[EdgeBoard] Quality filter removed ${qualityFiltered} players (min ${MIN_GAMES} games, ${MIN_AVG_MINUTES} min/game)`);
+  }
 
   console.log(`[EdgeBoard] Processing ${enrichedProps.length} props through ML`);
 
@@ -596,7 +612,7 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     const bettingValue = confidence > 0.15 ? 'high' : confidence >= 0.10 ? 'medium' : 'low';
 
     if (shouldBet) {
-      const hitRates = calculateHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
+      const hitRates = calculateExtendedHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
       const pStats = playerStatsMap[prop.playerName];
       const opponentTeam = prop.team === homeTeam ? awayTeam : homeTeam;
       const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
@@ -644,6 +660,66 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
       // Trend
       const trend = parseFloat(getTrendForStat(featuresList[idx], prop.statType).toFixed(1));
 
+      // Bet Score: weighted hit rate strength (70%) + edge vs odds (30%)
+      // Step 1: Weighted hit rate from signals + defense (0-100)
+      const hr = hitRates;
+      const defRank = opponentDefense?.rank || 15;
+      const defScore = isOver ? ((defRank / 30) * 100) : (((31 - defRank) / 30) * 100);
+      const hitSignals = [
+        { pct: hr.l3?.pct ?? null,     weight: 0.10 },
+        { pct: hr.l5?.pct ?? null,     weight: 0.15 },
+        { pct: hr.l10?.pct ?? null,    weight: 0.25 },
+        { pct: hr.l20?.pct ?? null,    weight: 0.15 },
+        { pct: hr.season?.pct ?? null, weight: 0.15 },
+        { pct: defScore,               weight: 0.20 },
+      ];
+      let totalWeight = 0, totalScore = 0;
+      for (const s of hitSignals) {
+        if (s.pct === null) continue;
+        // For Under bets, invert hit rate pcts (not defense)
+        const val = (!isOver && s !== hitSignals[hitSignals.length - 1]) ? (100 - s.pct) : s.pct;
+        totalScore += val * s.weight;
+        totalWeight += s.weight;
+      }
+      const weightedHitRate = totalWeight > 0 ? (totalScore / totalWeight) : 0;
+
+      // Step 2: Edge vs implied probability from odds (0-100 scale)
+      let edgeScore = 50; // neutral default when no odds
+      if (relevantOdds != null) {
+        const impliedProb = relevantOdds < 0
+          ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
+          : 100 / (relevantOdds + 100);
+        const impliedPct = impliedProb * 100;
+        // edge = how much our hit rate exceeds what the odds imply
+        const edgeRaw = weightedHitRate - impliedPct;
+        // Scale: 0 edge = 50, +25% edge = 100, -25% edge = 0
+        edgeScore = Math.min(100, Math.max(0, 50 + edgeRaw * 2));
+      }
+
+      // Step 3: Blend — 70% signal strength, 30% edge vs odds
+      const betScore = Math.round(weightedHitRate * 0.7 + edgeScore * 0.3);
+
+      // Explicit edge: how much our hit rate exceeds implied probability
+      let edge = 0;
+      if (relevantOdds != null) {
+        const impliedProb = relevantOdds < 0
+          ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
+          : 100 / (relevantOdds + 100);
+        edge = parseFloat((weightedHitRate - impliedProb * 100).toFixed(1));
+      }
+
+      // Directional hit rates: pct reflects the prediction direction (Over or Under)
+      const dirPct = (window) => {
+        const raw = hitRates[window]?.pct ?? null;
+        if (raw === null) return null;
+        return isOver ? raw : 100 - raw;
+      };
+      const directionalHitRates = {
+        l10: dirPct('l10'),
+        l20: dirPct('l20'),
+        season: dirPct('season'),
+      };
+
       results.push({
         playerName: prop.playerName,
         playerId: playerIdMap[prop.playerName] || null,
@@ -669,24 +745,28 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
         displayConfidencePercent: (displayConfidence * 100).toFixed(1),
         bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
         bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
+        allBookmakers: prop.allBookmakers || [],
         hitRates,
+        directionalHitRates,
         reasoning,
         opponent: opponentTeam,
         opponentDefense,
         greenScore,
         greenSignals,
+        betScore,
+        edge,
       });
     }
   });
 
-  // 12. Filter out goblin-tier odds, sort by display confidence, take top 10
+  // 12. Filter out goblin-tier odds, sort by betScore (hit rate + edge), take top 15
   const edgeResults = results.filter(r => {
     const relevantOdds = r.prediction === 'Over' ? r.oddsOver : r.oddsUnder;
     return relevantOdds == null || relevantOdds >= EDGEBOARD_ODDS_CEILING;
   });
   console.log(`[EdgeBoard] ${results.length} total → ${edgeResults.length} after odds ceiling (≥${EDGEBOARD_ODDS_CEILING}), ${results.length - edgeResults.length} goblin-tier excluded`);
-  edgeResults.sort((a, b) => b.displayConfidence - a.displayConfidence);
-  const topProps = edgeResults.slice(0, 10);
+  edgeResults.sort((a, b) => b.betScore - a.betScore);
+  const topProps = edgeResults.slice(0, 15);
 
   const highCount = topProps.filter(p => p.confidenceTier === 'high').length;
   const mediumCount = topProps.filter(p => p.confidenceTier === 'medium').length;
@@ -707,7 +787,7 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     if (goblin) {
       prop.goblinLine = goblin;
 
-      const goblinHitRates = calculateHitRates(
+      const goblinHitRates = calculateExtendedHitRates(
         gameLogsMap[prop.playerName], prop.statType, goblin.line
       );
       prop.goblinHitRates = goblinHitRates;

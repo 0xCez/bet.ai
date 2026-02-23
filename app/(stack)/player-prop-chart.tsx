@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Dimensions,
+  Modal,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { BlurView } from "expo-blur";
@@ -14,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { TopBar } from "../../components/ui/TopBar";
 import {
   colors,
   spacing,
@@ -31,6 +33,18 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 const CHART_URL =
   "https://us-central1-betai-f9176.cloudfunctions.net/getPlayerPropChart";
+
+// ── NBA Team Primary Colors ──
+const NBA_TEAM_COLORS: Record<string, string> = {
+  ATL: "#E03A3E", BOS: "#007A33", BKN: "#FFFFFF", CHA: "#1D1160",
+  CHI: "#CE1141", CLE: "#6F263D", DAL: "#00538C", DEN: "#0E2240",
+  DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62",
+  LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E",
+  MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#F58426",
+  OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#E56020",
+  POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141",
+  UTA: "#002B5C", WAS: "#002B5C",
+};
 
 // ── Bookmaker logos ──
 
@@ -90,6 +104,7 @@ interface ChartData {
     green: number | null;
     defRank: number | null;
     edge?: number | null;
+    betScore?: number | null;
   };
   gameLogs: GameLogEntry[];
   hitRates: {
@@ -99,7 +114,33 @@ interface ChartData {
     season: HitRate;
     h2h: HitRate;
   };
+  defense: DefenseContext | null;
+  ev: number | null;
   safeLines: SafeLine[];
+  otherProps: OtherProp[];
+}
+
+interface DefenseContext {
+  rank: number;
+  totalTeams: number;
+  label: string;
+  allowed: number;
+  stat: string;
+  opponentCode: string;
+  supports: boolean;
+  narrative: string;
+}
+
+interface OtherProp {
+  statType: string;
+  stat: string;
+  line: number;
+  prediction: string;
+  oddsOver: number | null;
+  oddsUnder: number | null;
+  bookmaker: string | null;
+  l10Avg: number | null;
+  greenScore: number | null;
 }
 
 interface HitRate {
@@ -121,29 +162,34 @@ interface SafeLine {
   sznHitPct: number | null;
   l10Avg: number | null;
   parlayEdge: number | null;
-  greenScore: number | null;
 }
 
 
 // ── Helpers ──
 
-function formatGameTime(iso: string): string {
+// Map home team code → IANA timezone for venue-local formatting
+const TEAM_TIMEZONE: Record<string, string> = {
+  ATL: "America/New_York", BOS: "America/New_York", BKN: "America/New_York",
+  CHA: "America/New_York", CLE: "America/New_York", DET: "America/Detroit",
+  IND: "America/Indiana/Indianapolis", MIA: "America/New_York",
+  NYK: "America/New_York", ORL: "America/New_York", PHI: "America/New_York",
+  TOR: "America/Toronto", WAS: "America/New_York",
+  CHI: "America/Chicago", DAL: "America/Chicago", HOU: "America/Chicago",
+  MEM: "America/Chicago", MIL: "America/Chicago", MIN: "America/Chicago",
+  NOP: "America/Chicago", OKC: "America/Chicago", SAS: "America/Chicago",
+  DEN: "America/Denver", UTA: "America/Denver", PHX: "America/Phoenix",
+  POR: "America/Los_Angeles", GSW: "America/Los_Angeles",
+  LAC: "America/Los_Angeles", LAL: "America/Los_Angeles",
+  SAC: "America/Los_Angeles",
+};
+
+function formatGameTime(iso: string, homeTeamCode?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const time = d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  if (isToday) return `Today ${time}`;
-  if (isTomorrow) return `Tmrw ${time}`;
-  const day = d.toLocaleDateString("en-US", { weekday: "short" });
-  return `${day} ${time}`;
+  const tz = homeTeamCode ? TEAM_TIMEZONE[homeTeamCode] : undefined;
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true };
+  if (tz) opts.timeZone = tz;
+  return d.toLocaleString("en-US", opts);
 }
 
 function formatOdds(odds: number | null): string {
@@ -278,6 +324,7 @@ export default function PlayerPropChartScreen() {
     playerName?: string;
     statType?: string;
     line?: string;
+    from?: string;
   }>();
 
   const [data, setData] = useState<ChartData | null>(null);
@@ -286,6 +333,7 @@ export default function PlayerPropChartScreen() {
   const [selectedWindow, setSelectedWindow] = useState<ChartWindow>("l10");
   const [activeStat, setActiveStat] = useState<string>(params.statType || "");
   const [activeLine, setActiveLine] = useState<number>(Number(params.line) || 0);
+  const [showLineDropdown, setShowLineDropdown] = useState(false);
 
   const playerName = params.playerName || "";
 
@@ -344,19 +392,23 @@ export default function PlayerPropChartScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Top Bar */}
-      <View style={styles.topBar}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      <TopBar
+        showBack
+        onBackPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          if (params.from) {
+            // Navigate back to the specific tab the user came from
+            const page = params.from === "picks" ? "picks"
+              : params.from === "parlay" || params.from === "builder" ? "parlay"
+              : "board";
+            router.replace({ pathname: "/home" as any, params: { page } });
+          } else if (router.canGoBack()) {
             router.back();
-          }}
-          style={styles.backButton}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </Pressable>
-        <Text style={styles.topBarTitle}>Player Props</Text>
-        <View style={{ width: 40 }} />
-      </View>
+          } else {
+            router.replace({ pathname: "/home" as any, params: { page: "board" } });
+          }
+        }}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -376,70 +428,126 @@ export default function PlayerPropChartScreen() {
         ) : data ? (
           <>
             {/* ── Player Header Card ── */}
-            <View style={styles.headerCard}>
-              <LinearGradient
-                colors={["rgba(0, 215, 215, 0.08)", "rgba(22, 26, 34, 0.95)", "rgba(22, 26, 34, 1)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <BlurView intensity={glass.card.blurIntensity} tint="dark" style={StyleSheet.absoluteFill} />
-
-              <View style={styles.headerContent}>
-                <View style={styles.headshotContainer}>
-                  {data.player.headshotUrl ? (
-                    <ExpoImage source={{ uri: data.player.headshotUrl }} style={styles.headshot} contentFit="cover" />
-                  ) : localPlayerImage ? (
-                    <ExpoImage source={localPlayerImage} style={styles.headshot} contentFit="cover" />
-                  ) : (
-                    <View style={styles.headshotFallback}>
-                      <Text style={styles.headshotInitials}>{getPlayerInitials(data.player.name)}</Text>
+            {(() => {
+              const teamColor = NBA_TEAM_COLORS[data.player.teamCode] || "#0D7377";
+              const teamLogoWatermark = getNBATeamLogo(data.player.team);
+              return (
+                <View style={styles.headerCard}>
+                  <LinearGradient
+                    colors={[`${teamColor}40`, `${teamColor}18`, "transparent"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  {/* Team logo watermark — large, faded, right-aligned */}
+                  {teamLogoWatermark && (
+                    <View style={styles.teamWatermark}>
+                      <ExpoImage
+                        source={teamLogoWatermark}
+                        style={styles.teamWatermarkImage}
+                        contentFit="contain"
+                      />
                     </View>
                   )}
-                  {(() => {
-                    const teamLogo = getNBATeamLogo(data.player.team);
-                    return teamLogo ? (
-                      <View style={styles.teamLogoOverlay}>
-                        <ExpoImage source={teamLogo} style={styles.teamLogoSmall} contentFit="contain" />
+
+                  <View style={styles.headerContent}>
+                    <View style={styles.headshotContainer}>
+                      {data.player.headshotUrl ? (
+                        <ExpoImage source={{ uri: data.player.headshotUrl }} style={[styles.headshot, { borderColor: `${teamColor}66` }]} contentFit="cover" />
+                      ) : localPlayerImage ? (
+                        <ExpoImage source={localPlayerImage} style={[styles.headshot, { borderColor: `${teamColor}66` }]} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.headshotFallback, { borderColor: `${teamColor}66` }]}>
+                          <Text style={[styles.headshotInitials, { color: teamColor }]}>{getPlayerInitials(data.player.name)}</Text>
+                        </View>
+                      )}
+                      {(() => {
+                        const teamLogo = getNBATeamLogo(data.player.team);
+                        return teamLogo ? (
+                          <View style={styles.teamLogoOverlay}>
+                            <ExpoImage source={teamLogo} style={styles.teamLogoSmall} contentFit="contain" />
+                          </View>
+                        ) : null;
+                      })()}
+                    </View>
+
+                    <View style={styles.playerInfo}>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.playerName} numberOfLines={1}>{data.player.name}</Text>
+                        {data.player.position && <Text style={styles.position}>{data.player.position}</Text>}
                       </View>
-                    ) : null;
-                  })()}
-                </View>
 
-                <View style={styles.playerInfo}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.playerName} numberOfLines={1}>{data.player.name}</Text>
-                    {data.player.position && <Text style={styles.position}>{data.player.position}</Text>}
-                  </View>
-                  <Text style={styles.statLine}>{data.prop.stat} {data.prop.line}</Text>
-                  <Text style={styles.matchupText}>
-                    {getTeamAbbrev(data.matchup.away)} @ {getTeamAbbrev(data.matchup.home)} {" · "}
-                    {formatGameTime(data.matchup.gameTime)}
-                  </Text>
-                </View>
-              </View>
+                      {/* Direction badge */}
+                      <View style={[styles.dirBadge, {
+                        backgroundColor: data.prop.prediction === "over" ? "rgba(34,197,94,0.15)" : "rgba(255,107,107,0.15)",
+                      }]}>
+                        <Text style={[styles.dirBadgeText, {
+                          color: data.prop.prediction === "over" ? colors.success : "#FF6B6B",
+                        }]}>
+                          {data.prop.prediction === "over" ? "OVER" : "UNDER"}
+                        </Text>
+                      </View>
 
-              {/* Odds + Bookmaker row */}
-              <View style={styles.oddsRow}>
-                {data.prop.bookmaker && BOOKMAKER_LOGOS[data.prop.bookmaker] && (
-                  <ExpoImage source={BOOKMAKER_LOGOS[data.prop.bookmaker]} style={styles.bookLogo} contentFit="contain" />
-                )}
-                <View style={styles.oddsContainer}>
-                  <Text style={styles.oddsLabel}>Line: {data.prop.line}</Text>
-                  <View style={styles.oddsValues}>
-                    <Text style={styles.oddsOver}>O {formatOdds(data.prop.oddsOver)}</Text>
-                    <Text style={styles.oddsUnder}>U {formatOdds(data.prop.oddsUnder)}</Text>
+                      {/* Stat line with dropdown trigger */}
+                      {data.otherProps && data.otherProps.length > 0 ? (
+                        <Pressable
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setShowLineDropdown(true);
+                          }}
+                          style={styles.statLineRow}
+                        >
+                          <Text style={styles.statLineBold}>
+                            {formatStatShort(activeStat)} {data.prop.prediction === "over" ? "O" : "U"} {data.prop.line}
+                          </Text>
+                          <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                        </Pressable>
+                      ) : (
+                        <Text style={styles.statLineBold}>
+                          {formatStatShort(activeStat)} {data.prop.prediction === "over" ? "O" : "U"} {data.prop.line}
+                        </Text>
+                      )}
+
+                      <Text style={styles.matchupText}>
+                        {getTeamAbbrev(data.matchup.away)} @ {getTeamAbbrev(data.matchup.home)} {" · "}
+                        {formatGameTime(data.matchup.gameTime, getTeamAbbrev(data.matchup.home))}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Odds + Bookmaker row */}
+                  <View style={styles.oddsRow}>
+                    {data.prop.bookmaker && BOOKMAKER_LOGOS[data.prop.bookmaker] && (
+                      <ExpoImage source={BOOKMAKER_LOGOS[data.prop.bookmaker]} style={styles.bookLogo} contentFit="contain" />
+                    )}
+                    <View style={styles.oddsContainer}>
+                      <Text style={styles.oddsLabel}>Line: {data.prop.line}</Text>
+                      <View style={styles.oddsValues}>
+                        <Text style={styles.oddsOver}>O {formatOdds(data.prop.oddsOver)}</Text>
+                        <Text style={styles.oddsUnder}>U {formatOdds(data.prop.oddsUnder)}</Text>
+                      </View>
+                    </View>
+                    {data.prop.avg != null && (
+                      <View style={styles.avgBadge}>
+                        <Text style={styles.avgLabel}>AVG</Text>
+                        <Text style={styles.avgValue}>{data.prop.avg}</Text>
+                      </View>
+                    )}
+                    {data.ev != null && (
+                      <View style={[styles.valueBadge, {
+                        borderColor: data.ev >= 0 ? "rgba(34, 197, 94, 0.3)" : "rgba(255, 107, 107, 0.3)",
+                        backgroundColor: data.ev >= 0 ? "rgba(34, 197, 94, 0.08)" : "rgba(255, 107, 107, 0.08)",
+                      }]}>
+                        <Text style={styles.valueLabel}>EV</Text>
+                        <Text style={[styles.valueScore, {
+                          color: data.ev >= 0 ? colors.success : "#FF6B6B",
+                        }]}>{data.ev >= 0 ? "+" : ""}{data.ev}%</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-                {data.prop.avg != null && (
-                  <View style={styles.avgBadge}>
-                    <Text style={styles.avgLabel}>AVG</Text>
-                    <Text style={styles.avgValue}>{data.prop.avg}</Text>
-                  </View>
-                )}
-                {data.prop.green != null && <GreenScoreDots score={data.prop.green} />}
-              </View>
-            </View>
+              );
+            })()}
 
             {/* ── Bar Chart ── */}
             <View style={styles.chartSection}>
@@ -463,13 +571,61 @@ export default function PlayerPropChartScreen() {
               <HitRateCard label="L20" windowKey="l20" rate={data.hitRates.l20} selected={selectedWindow === "l20"} onPress={setSelectedWindow} />
             </View>
 
+            {/* ── Defense Matchup Section ── */}
+            {data.defense && (
+              <View style={styles.defenseSection}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="shield-half" size={14} color={colors.primary} />
+                  <Text style={styles.sectionTitle}>DEFENSE MATCHUP</Text>
+                </View>
+                <View style={styles.defenseCard}>
+                  <View style={styles.defenseRow}>
+                    {(() => {
+                      const oppLogo = getNBATeamLogo(data.matchup.opponent);
+                      return oppLogo ? (
+                        <ExpoImage source={oppLogo} style={styles.defenseTeamLogo} contentFit="contain" />
+                      ) : null;
+                    })()}
+                    <Text style={styles.defenseTeam}>vs {data.defense.opponentCode}</Text>
+                    <View style={[styles.defenseRankBadge, {
+                      backgroundColor: data.defense.rank <= 10 ? "rgba(34, 197, 94, 0.12)" : data.defense.rank >= 21 ? "rgba(255, 107, 107, 0.12)" : "rgba(0, 215, 215, 0.08)",
+                    }]}>
+                      <Text style={[styles.defenseRankText, {
+                        color: data.defense.rank <= 10 ? colors.success : data.defense.rank >= 21 ? "#FF6B6B" : colors.primary,
+                      }]}>DEF #{data.defense.rank}/{data.defense.totalTeams}</Text>
+                    </View>
+                    <Text style={[styles.defenseLabel, {
+                      color: data.defense.rank <= 5 ? colors.success : data.defense.rank <= 12 ? colors.success : data.defense.rank <= 18 ? colors.mutedForeground : "#FF6B6B",
+                    }]}>{data.defense.label}</Text>
+                  </View>
+                  <Text style={styles.defenseAllowed}>
+                    Allows {data.defense.allowed} {data.defense.stat}/G to opponents
+                  </Text>
+                  <View style={[styles.defenseNarrativeTag, {
+                    backgroundColor: data.defense.supports ? "rgba(34, 197, 94, 0.12)" : "rgba(255, 165, 0, 0.12)",
+                  }]}>
+                    <Ionicons
+                      name={data.defense.supports ? "checkmark-circle" : "warning"}
+                      size={12}
+                      color={data.defense.supports ? colors.success : "#FFA500"}
+                    />
+                    <Text style={[styles.defenseNarrativeText, {
+                      color: data.defense.supports ? colors.success : "#FFA500",
+                    }]}>
+                      {data.defense.narrative} {data.prop.prediction === "over" ? "Over" : "Under"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* ── Safe Lines (validated alt lines from parlay stack) ── */}
             {data.safeLines && data.safeLines.length > 0 && (
               <View style={styles.safeLinesSection}>
                 <View style={styles.sectionHeader}>
                   <Ionicons name="shield-checkmark" size={14} color={colors.success} />
-                  <Text style={styles.sectionTitle}>SAFE LINES</Text>
-                  <Text style={styles.sectionSubtitle}>Validated alt lines</Text>
+                  <Text style={styles.sectionTitle}>ALT LINES</Text>
+                  <Text style={styles.sectionSubtitle}>Alternative lines</Text>
                 </View>
                 {data.safeLines.map((sl, i) => {
                   const isOver = sl.prediction === "over";
@@ -505,13 +661,12 @@ export default function PlayerPropChartScreen() {
                       </View>
 
                       <View style={styles.safeLineRight}>
-                        {sl.altOdds != null && (
-                          <Text style={styles.safeLineOdds}>{formatOdds(sl.altOdds)}</Text>
-                        )}
                         {bookLogo && (
                           <ExpoImage source={bookLogo} style={styles.safeLineBook} contentFit="contain" />
                         )}
-                        {sl.greenScore != null && <GreenScoreDots score={sl.greenScore} size={5} />}
+                        {sl.altOdds != null && (
+                          <Text style={styles.safeLineOdds}>{formatOdds(sl.altOdds)}</Text>
+                        )}
                       </View>
                     </Pressable>
                   );
@@ -522,6 +677,63 @@ export default function PlayerPropChartScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {/* ── Line Selector Dropdown ── */}
+      {data && data.otherProps && data.otherProps.length > 0 && (
+        <Modal
+          visible={showLineDropdown}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowLineDropdown(false)}
+        >
+          <Pressable style={styles.dropdownOverlay} onPress={() => setShowLineDropdown(false)}>
+            <View style={styles.dropdownContainer}>
+              <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.dropdownContent}>
+                <Text style={styles.dropdownTitle}>Other Lines</Text>
+
+                {/* Currently viewing */}
+                <View style={[styles.dropdownOption, styles.dropdownOptionActive]}>
+                  <Text style={styles.dropdownStatType}>{formatStatShort(activeStat)}</Text>
+                  <Text style={styles.dropdownLine}>
+                    {data.prop.prediction === "over" ? "O" : "U"} {activeLine}
+                  </Text>
+                  {data.prop.bookmaker && BOOKMAKER_LOGOS[data.prop.bookmaker] && (
+                    <ExpoImage source={BOOKMAKER_LOGOS[data.prop.bookmaker]} style={styles.dropdownBookLogo} contentFit="contain" />
+                  )}
+                  <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: "auto" }} />
+                </View>
+
+                {/* Other lines */}
+                {data.otherProps.map((op, i) => {
+                  const isOver = op.prediction === "over";
+                  const bookLogo = op.bookmaker ? BOOKMAKER_LOGOS[op.bookmaker] : null;
+                  return (
+                    <Pressable
+                      key={`${op.statType}-${op.line}-${i}`}
+                      style={({ pressed }) => [styles.dropdownOption, pressed && styles.dropdownOptionPressed]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveStat(op.statType);
+                        setActiveLine(op.line);
+                        setShowLineDropdown(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownStatType}>{formatStatShort(op.statType)}</Text>
+                      <Text style={[styles.dropdownLine, isOver ? styles.dirOver : styles.dirUnder]}>
+                        {isOver ? "O" : "U"} {op.line}
+                      </Text>
+                      {bookLogo && (
+                        <ExpoImage source={bookLogo} style={styles.dropdownBookLogo} contentFit="contain" />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -532,26 +744,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
-  },
-  topBarTitle: {
-    fontSize: typography.sizes.lg,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
   },
   scrollView: {
     flex: 1,
@@ -575,10 +767,25 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
+  teamWatermark: {
+    position: "absolute",
+    right: -20,
+    top: "50%",
+    transform: [{ translateY: -75 }],
+    width: 150,
+    height: 150,
+    opacity: 0.06,
+  },
+  teamWatermarkImage: {
+    width: 150,
+    height: 150,
+  },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
+    position: "relative",
+    zIndex: 1,
   },
   headshotContainer: {
     position: "relative",
@@ -643,10 +850,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
   },
-  statLine: {
+  statLineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  statLineBold: {
     fontSize: typography.sizes.base,
-    fontFamily: typography.fontFamily.medium,
-    color: colors.primary,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.foreground,
   },
   matchupText: {
     fontSize: typography.sizes.xs,
@@ -717,7 +929,8 @@ const styles = StyleSheet.create({
   // ── Chart Section ──
   chartSection: {
     marginTop: spacing[5],
-    marginHorizontal: -spacing[6], // Cancel parent scroll padding — full screen width
+    marginHorizontal: -spacing[6],
+    alignItems: "center",
   },
 
   // ── Hit Rate Cards ──
@@ -799,14 +1012,14 @@ const styles = StyleSheet.create({
   safeLineLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[2],
-    minWidth: 110,
+    gap: spacing[1],
+    minWidth: 100,
   },
   safeLineStat: {
     fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
-    minWidth: 48,
+    minWidth: 40,
   },
   safeLineDir: {
     fontSize: 13,
@@ -856,6 +1069,80 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: borderRadius.sm,
+  },
+
+  dirBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+    marginBottom: 2,
+  },
+  dirBadgeText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    letterSpacing: 0.8,
+  },
+
+  // ── Defense Matchup Section ──
+  defenseSection: {
+    marginTop: spacing[5],
+  },
+  defenseCard: {
+    backgroundColor: glass.card.backgroundColor,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: borderRadius.lg,
+    padding: spacing[3],
+    gap: spacing[2],
+  },
+  defenseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  defenseTeamLogo: {
+    width: 24,
+    height: 24,
+  },
+  defenseTeam: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.foreground,
+  },
+  defenseRankBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  defenseRankText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    letterSpacing: 0.3,
+  },
+  defenseLabel: {
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.semibold,
+  },
+  defenseAllowed: {
+    fontSize: typography.sizes.xs,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+    marginLeft: spacing[1],
+  },
+  defenseNarrativeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 3,
+    borderRadius: borderRadius.sm,
+  },
+  defenseNarrativeText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    letterSpacing: 0.3,
   },
 
   dirOver: {
@@ -916,5 +1203,83 @@ const styles = StyleSheet.create({
   skeleton: {
     backgroundColor: colors.secondary,
     borderRadius: borderRadius.md,
+  },
+
+  // ── Value Badge ──
+  valueBadge: {
+    alignItems: "center",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+  },
+  valueLabel: {
+    fontSize: 9,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+    letterSpacing: 0.5,
+  },
+  valueScore: {
+    fontSize: typography.sizes.base,
+    fontFamily: typography.fontFamily.bold,
+  },
+
+  // ── Line Selector Dropdown ──
+  dropdownOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  dropdownContainer: {
+    width: SCREEN_WIDTH - spacing[8] * 2,
+    maxHeight: 400,
+    borderRadius: borderRadius.xl,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+  },
+  dropdownContent: {
+    padding: spacing[4],
+    gap: spacing[2],
+  },
+  dropdownTitle: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+    letterSpacing: 1,
+    marginBottom: spacing[1],
+  },
+  dropdownOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[3],
+    borderRadius: borderRadius.md,
+  },
+  dropdownOptionActive: {
+    backgroundColor: "rgba(0, 215, 215, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.25)",
+  },
+  dropdownOptionPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  dropdownStatType: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.foreground,
+    minWidth: 48,
+  },
+  dropdownLine: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.semibold,
+    color: colors.foreground,
+  },
+  dropdownBookLogo: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
   },
 });

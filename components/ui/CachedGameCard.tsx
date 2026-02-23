@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { colors, spacing, borderRadius, typography } from "../../constants/designTokens";
+import type { SportId } from "../../config/sports";
 
 export interface CachedGame {
   id: string;
-  sport: "nba" | "soccer";
+  sport: SportId;
   team1: string;
   team2: string;
   team1Id: string;

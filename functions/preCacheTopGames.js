@@ -5,7 +5,7 @@
  * Layer 1: Shared Data Fetch  — refreshGameProps.js fetches all data once per game
  * Layer 2: Pipeline Processing — refreshAllCachedGames() runs EdgeBoard + Parlay Stack
  * Layer 3: AI Enrichment      — enrichWithAIAnalysis() adds GPT-4 analysis independently
- * Layer 4: Archive on Expiry  — archiveExpiredGames() → propsHistory collection
+ * Layer 4: Archive on Expiry  — archiveExpiredGames() → gameArchive collection
  *
  * Schedulers:
  *   discoverGamesDaily       — 6 AM ET: discover + archive + props
@@ -13,7 +13,7 @@
  *   refreshPropsScheduled    — 12 PM ET: fresh odds for content creators
  *   refreshPropsScheduled2   — 5 PM ET: pre-tipoff refresh
  *   refreshPropsScheduled3   — 8 PM ET: late-breaking west coast lines
- *   archiveExpiredGames      — every 2h: move expired → propsHistory
+ *   archiveExpiredGames      — every 2h: move expired → gameArchive
  *
  * HTTP endpoints:
  *   preCacheTopGames  — manual trigger (all layers)
@@ -142,56 +142,52 @@ function sanitizeForFirestore(obj) {
  * For Soccer: prioritizes big market teams
  */
 async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeamFilter = false) {
-  try {
-    const url = `https://api.the-odds-api.com/v4/sports/${sport}/events?apiKey=${ODDS_API_KEY}`;
-    console.log(`[discovery] Fetching events for ${sport}...`);
+  const url = `https://api.the-odds-api.com/v4/sports/${sport}/events?apiKey=${ODDS_API_KEY}`;
+  console.log(`[discovery] Fetching events for ${sport}...`);
 
-    const response = await withRetry(
-      () => axios.get(url, { timeout: 15000 }),
-      { maxRetries: 2, label: `discover-${sport}` }
+  // Let API errors propagate — callers must distinguish between
+  // "API failed" (thrown error) and "0 games scheduled" (empty array).
+  const response = await withRetry(
+    () => axios.get(url, { timeout: 15000 }),
+    { maxRetries: 2, label: `discover-${sport}` }
+  );
+  const events = response.data || [];
+
+  console.log(`[discovery] ${events.length} upcoming events for ${sport}`);
+
+  // If skipTeamFilter is true (for NBA), just sort by time and take first N
+  if (skipTeamFilter) {
+    const sortedByTime = events.sort((a, b) =>
+      new Date(a.commence_time) - new Date(b.commence_time)
     );
-    const events = response.data || [];
-
-    console.log(`Found ${events.length} total upcoming events for ${sport}`);
-
-    // If skipTeamFilter is true (for NBA), just sort by time and take first N
-    if (skipTeamFilter) {
-      const sortedByTime = events.sort((a, b) =>
-        new Date(a.commence_time) - new Date(b.commence_time)
-      );
-      const selectedGames = sortedByTime.slice(0, limit);
-      console.log(`Selected ${selectedGames.length} games for ${sport} (no team filter):`,
-        selectedGames.map(g => `${g.home_team} vs ${g.away_team} (${g.commence_time})`));
-      return selectedGames;
-    }
-
-    // For soccer: Score each game by big market team involvement
-    const scoredGames = events.map(event => {
-      let score = 0;
-      if (bigMarketTeams.some(team => event.home_team.includes(team) || team.includes(event.home_team))) score += 2;
-      if (bigMarketTeams.some(team => event.away_team.includes(team) || team.includes(event.away_team))) score += 2;
-      // Bonus for games between two big market teams
-      if (score === 4) score += 2;
-      return { ...event, bigMarketScore: score };
-    });
-
-    // Sort by big market score (descending), then by commence_time (ascending)
-    scoredGames.sort((a, b) => {
-      if (b.bigMarketScore !== a.bigMarketScore) return b.bigMarketScore - a.bigMarketScore;
-      return new Date(a.commence_time) - new Date(b.commence_time);
-    });
-
-    // Take top N games
-    const selectedGames = scoredGames.slice(0, limit);
-    console.log(`Selected ${selectedGames.length} games for ${sport}:`,
-      selectedGames.map(g => `${g.home_team} vs ${g.away_team} (score: ${g.bigMarketScore})`));
-
+    const selectedGames = sortedByTime.slice(0, limit);
+    console.log(`[discovery] Selected ${selectedGames.length} games for ${sport} (no team filter):`,
+      selectedGames.map(g => `${g.home_team} vs ${g.away_team} (${g.commence_time})`));
     return selectedGames;
-
-  } catch (error) {
-    console.error(`Error fetching games for ${sport}:`, error.message);
-    return [];
   }
+
+  // For soccer: Score each game by big market team involvement
+  const scoredGames = events.map(event => {
+    let score = 0;
+    if (bigMarketTeams.some(team => event.home_team.includes(team) || team.includes(event.home_team))) score += 2;
+    if (bigMarketTeams.some(team => event.away_team.includes(team) || team.includes(event.away_team))) score += 2;
+    // Bonus for games between two big market teams
+    if (score === 4) score += 2;
+    return { ...event, bigMarketScore: score };
+  });
+
+  // Sort by big market score (descending), then by commence_time (ascending)
+  scoredGames.sort((a, b) => {
+    if (b.bigMarketScore !== a.bigMarketScore) return b.bigMarketScore - a.bigMarketScore;
+    return new Date(a.commence_time) - new Date(b.commence_time);
+  });
+
+  // Take top N games
+  const selectedGames = scoredGames.slice(0, limit);
+  console.log(`[discovery] Selected ${selectedGames.length} games for ${sport}:`,
+    selectedGames.map(g => `${g.home_team} vs ${g.away_team} (score: ${g.bigMarketScore})`));
+
+  return selectedGames;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -209,11 +205,17 @@ async function fetchUpcomingGamesForSport(sport, bigMarketTeams, limit, skipTeam
  */
 async function discoverGames() {
   const cacheRef = getDb().collection('matchAnalysisCache');
-  const results = { nba: 0, soccer: 0, skipped: 0 };
+  const results = { nba: 0, soccer: 0, skipped: 0, apiErrors: [] };
 
   // ── NBA: all upcoming games (no team filter) ──
   console.log('[discoverGames] Fetching NBA games...');
-  const nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 15, true);
+  let nbaGames = [];
+  try {
+    nbaGames = await fetchUpcomingGamesForSport('basketball_nba', null, 15, true);
+  } catch (err) {
+    console.error(`[discoverGames] NBA API ERROR: ${err.message}`);
+    results.apiErrors.push(`nba: ${err.message}`);
+  }
   console.log(`[discoverGames] Found ${nbaGames.length} NBA games`);
 
   for (const game of nbaGames) {
@@ -255,11 +257,17 @@ async function discoverGames() {
 
   // ── Soccer: big market teams across leagues ──
   console.log('[discoverGames] Fetching Soccer games...');
-  const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
-    fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
-      .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
-  );
-  const soccerGames = (await Promise.all(soccerLeaguePromises)).flat();
+  let soccerGames = [];
+  try {
+    const soccerLeaguePromises = SOCCER_LEAGUES.map(league =>
+      fetchUpcomingGamesForSport(league.key, BIG_MARKET_SOCCER_TEAMS, league.limit, false)
+        .then(games => games.map(g => ({ ...g, league: league.name, leagueKey: league.key })))
+    );
+    soccerGames = (await Promise.all(soccerLeaguePromises)).flat();
+  } catch (err) {
+    console.error(`[discoverGames] Soccer API ERROR: ${err.message}`);
+    results.apiErrors.push(`soccer: ${err.message}`);
+  }
   console.log(`[discoverGames] Found ${soccerGames.length} Soccer games`);
 
   for (const game of soccerGames) {
@@ -298,6 +306,9 @@ async function discoverGames() {
     results.soccer++;
   }
 
+  if (results.apiErrors.length > 0) {
+    console.error(`[discoverGames] API ERRORS: ${results.apiErrors.join('; ')}`);
+  }
   console.log(`[discoverGames] Done — NBA: ${results.nba}, Soccer: ${results.soccer}, Skipped: ${results.skipped}`);
   return results;
 }
@@ -533,8 +544,8 @@ async function selfHeal(refreshResult, options = {}) {
 /**
  * ensureGamesExist — Safety net for refresh schedulers.
  * If no upcoming NBA games exist in cache, run discovery first.
- * Prevents the scenario where discoverGamesDaily fails and all
- * subsequent schedulers find 0 games to refresh.
+ * If discovery fails due to API errors, waits 30s and retries once.
+ * Distinguishes "API failed" (retry) from "0 games scheduled" (accept).
  */
 async function ensureGamesExist() {
   const db = getDb();
@@ -550,15 +561,36 @@ async function ensureGamesExist() {
     return data.gameStartTime && data.gameStartTime > now;
   });
 
-  if (upcoming.length === 0) {
-    console.warn('[ensureGamesExist] 0 upcoming NBA games in cache — running emergency discovery');
-    const discovered = await discoverGames();
-    console.log(`[ensureGamesExist] Discovered: NBA=${discovered.nba}, Soccer=${discovered.soccer}`);
-    return discovered;
+  if (upcoming.length > 0) {
+    console.log(`[ensureGamesExist] ${upcoming.length} upcoming games already in cache — skipping discovery`);
+    return null;
   }
 
-  console.log(`[ensureGamesExist] ${upcoming.length} upcoming games already in cache — skipping discovery`);
-  return null;
+  console.warn('[ensureGamesExist] 0 upcoming NBA games in cache — running emergency discovery');
+  const discovered = await discoverGames();
+
+  // If discovery found 0 NBA games AND had API errors, the API might be down.
+  // Wait 30s and retry once before accepting empty.
+  if (discovered.nba === 0 && discovered.apiErrors?.length > 0) {
+    console.warn(`[ensureGamesExist] Discovery returned 0 with API errors — retrying in 30s...`);
+    await new Promise(r => setTimeout(r, 30000));
+    const retry = await discoverGames();
+    console.log(`[ensureGamesExist] Retry result: NBA=${retry.nba}, Soccer=${retry.soccer}, errors=${retry.apiErrors?.length || 0}`);
+    if (retry.nba > 0) return retry;
+    // If retry also fails, log clearly so it's visible in monitoring
+    if (retry.apiErrors?.length > 0) {
+      console.error('[ensureGamesExist] ALERT: Odds API appears down — cache is empty due to API failure');
+    }
+    return retry;
+  }
+
+  // Discovery succeeded (no API errors). If 0 NBA games, that's legitimate (off-season/no games today).
+  if (discovered.nba === 0) {
+    console.log('[ensureGamesExist] No NBA games scheduled — cache legitimately empty');
+  } else {
+    console.log(`[ensureGamesExist] Discovered: NBA=${discovered.nba}, Soccer=${discovered.soccer}`);
+  }
+  return discovered;
 }
 
 /**
@@ -624,7 +656,7 @@ async function healWithBudget(refreshResult, startTime, pipeline = 'both') {
  * preCacheTopGames - HTTP endpoint (manual trigger)
  *
  * Uses the new layered architecture:
- *   Layer 4: Archive expired games → propsHistory
+ *   Layer 4: Archive expired games → gameArchive
  *   Layer 0: Discover upcoming games (create shell docs)
  *   Layer 2: Refresh props for all cached NBA games
  *   Layer 3: Enrich unenriched games with AI analysis
@@ -670,6 +702,9 @@ exports.preCacheTopGames = onRequest({
       // Multi-pass self-heal with remaining time budget
       const healing = await healWithBudget(refreshed, startTime, 'both');
 
+      // Aggregate cross-game leaderboard + parlay slips
+      const leaderboard = await writeLeaderboardAndSlips();
+
       // Layer 3: AI enrichment — runs by default for complete data
       // Skip with { skipAI: true } if you only want props
       let enriched = { enriched: 0, failed: 0 };
@@ -689,6 +724,7 @@ exports.preCacheTopGames = onRequest({
           discovered: { nba: discovered.nba, soccer: discovered.soccer, skipped: discovered.skipped },
           props: { updated: refreshed.updated, failed: refreshed.failed },
           aiEnriched: enriched.enriched,
+          leaderboard,
         },
         games: refreshed.games,
         healing,
@@ -974,12 +1010,12 @@ async function enrichAllUnenrichedGames() {
 
 // ──────────────────────────────────────────────────────────────
 // LAYER 4: Archive on Expiry
-// Copies expired game data to propsHistory for tracking, then
+// Copies expired game data to gameArchive for tracking, then
 // deletes from matchAnalysisCache.
 // ──────────────────────────────────────────────────────────────
 
 /**
- * Archive expired games to propsHistory, then delete from cache.
+ * Archive expired games to gameArchive, then delete from cache.
  * @returns {{ archived: number, deleted: number }}
  */
 async function archiveExpiredGames() {
@@ -1007,19 +1043,14 @@ async function archiveExpiredGames() {
 
   for (const doc of expired) {
     const data = doc.data();
-    const analysis = data.analysis || {};
 
-    // Archive: copy key fields to propsHistory
-    const archiveDoc = {
-      sport: data.sport,
-      teams: analysis.teams || {},
-      gameStartTime: data.gameStartTime,
-      oddsApiEventId: data.oddsApiEventId || null,
-      mlPlayerProps: analysis.mlPlayerProps || null,
-      archivedAt: new Date().toISOString(),
-    };
+    // Archive: preserve FULL document so past games look identical to live ones.
+    // This keeps aiAnalysis, matchSnapshot, xFactors, marketIntelligence,
+    // teamStats, keyInsightsNew, mlPlayerProps, teams.logos — everything.
+    const archiveDoc = { ...data, archivedAt: new Date().toISOString(), preCached: false };
+    delete archiveDoc.expiresAt; // archived games don't expire
 
-    const historyRef = db.collection('propsHistory').doc(doc.id);
+    const historyRef = db.collection('gameArchive').doc(doc.id);
     batch.set(historyRef, archiveDoc);
     archived++;
 
@@ -1069,6 +1100,9 @@ exports.discoverGamesDaily = onSchedule({
 
     // Self-heal with remaining time budget (multi-pass)
     const healResult = await healWithBudget(refreshed, startTime, 'both');
+
+    // Aggregate leaderboard + parlay slips across all games
+    await writeLeaderboardAndSlips();
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[discoverGamesDaily] Done in ${duration}s`);
@@ -1125,6 +1159,7 @@ exports.refreshPropsScheduled = onSchedule({
 
     const result = await refreshAllCachedGames({ pipeline: 'both' });
     const healResult = await healWithBudget(result, startTime, 'both');
+    await writeLeaderboardAndSlips();
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[refreshPropsScheduled] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
     if (healResult) console.log(`[refreshPropsScheduled] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
@@ -1152,6 +1187,7 @@ exports.refreshPropsScheduled2 = onSchedule({
 
     const result = await refreshAllCachedGames({ pipeline: 'both' });
     const healResult = await healWithBudget(result, startTime, 'both');
+    await writeLeaderboardAndSlips();
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[refreshPropsScheduled2] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
     if (healResult) console.log(`[refreshPropsScheduled2] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
@@ -1179,6 +1215,7 @@ exports.refreshPropsScheduled3 = onSchedule({
 
     const result = await refreshAllCachedGames({ pipeline: 'both' });
     const healResult = await healWithBudget(result, startTime, 'both');
+    await writeLeaderboardAndSlips();
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[refreshPropsScheduled3] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
     if (healResult) console.log(`[refreshPropsScheduled3] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
@@ -1190,22 +1227,47 @@ exports.refreshPropsScheduled3 = onSchedule({
 
 /**
  * archiveExpiredGamesScheduled — Every 2 hours
- * Layer 4: Move expired games to propsHistory, delete from cache.
+ * Layer 4: Move expired games to gameArchive, delete from cache.
  */
 exports.archiveExpiredGamesScheduled = onSchedule({
   schedule: '0 */2 * * *', // every 2 hours
   timeZone: 'UTC',
-  timeoutSeconds: 60,
-  memory: '256MiB'
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
 }, async () => {
   console.log('[archiveExpiredGamesScheduled] Starting...');
+  const startTime = Date.now();
+
+  // Step 1: Archive expired games
+  let archiveResult = { archived: 0, deleted: 0 };
   try {
-    const result = await archiveExpiredGames();
-    console.log(`[archiveExpiredGamesScheduled] Done — archived: ${result.archived}, deleted: ${result.deleted}`);
+    archiveResult = await archiveExpiredGames();
+    console.log(`[archiveExpiredGamesScheduled] Archived: ${archiveResult.archived}, deleted: ${archiveResult.deleted}`);
   } catch (error) {
-    console.error('[archiveExpiredGamesScheduled] Fatal:', error);
-    throw error;
+    console.error('[archiveExpiredGamesScheduled] Archive failed:', error.message);
+    // Continue to safety net even if archive itself fails
   }
+
+  // Step 2: Safety net — if cache is now empty, discover + refresh immediately.
+  // This prevents the gap where archive clears expired games but discovery
+  // hasn't run yet, leaving users with an empty cache for hours.
+  // Runs regardless of whether archive deleted anything (covers edge cases).
+  try {
+    const discovered = await ensureGamesExist();
+    if (discovered) {
+      console.log(`[archiveExpiredGamesScheduled] Cache was empty — discovered NBA=${discovered.nba}, Soccer=${discovered.soccer}`);
+      const refreshed = await refreshAllCachedGames({ pipeline: 'both' });
+      console.log(`[archiveExpiredGamesScheduled] Refreshed: ${refreshed.updated} updated, ${refreshed.failed} failed`);
+      const healing = await healWithBudget(refreshed, startTime, 'both');
+      if (healing) console.log(`[archiveExpiredGamesScheduled] Healed: ${healing.totalHealed}, stillEmpty: ${healing.totalStillEmpty}`);
+    }
+  } catch (error) {
+    console.error('[archiveExpiredGamesScheduled] Safety net failed:', error.message);
+  }
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[archiveExpiredGamesScheduled] Done in ${duration}s`);
 });
 
 /**
@@ -1250,7 +1312,14 @@ exports.refreshProps = onRequest({
     // Auto-fetch fallback: if cache is empty, discover games first
     if (upcomingCount === 0) {
       console.log('[refreshProps] Cache empty — running discoverGames first...');
-      const freshEvents = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true);
+      let freshEvents = [];
+      try {
+        freshEvents = await fetchUpcomingGamesForSport('basketball_nba', null, 10, true);
+      } catch (apiErr) {
+        console.error(`[refreshProps] Odds API failed: ${apiErr.message}`);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        return res.status(502).json({ success: false, duration: `${duration}s`, error: 'Odds API unavailable', detail: apiErr.message });
+      }
 
       if (freshEvents.length === 0) {
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1292,6 +1361,9 @@ exports.refreshProps = onRequest({
     // Multi-pass self-heal with remaining time budget
     const healing = await healWithBudget(result, startTime, pipeline);
 
+    // Aggregate leaderboard + parlay slips across all games
+    await writeLeaderboardAndSlips();
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[refreshProps] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
     if (healing) console.log(`[refreshProps] Healed: ${healing.totalHealed}, stillEmpty: ${healing.totalStillEmpty}`);
@@ -1332,6 +1404,7 @@ const BOOK_SHORT = {
   'Caesars': 'CAESARS', 'ESPNBet': 'ESPN', 'Bet365': 'BET365',
   'Bovada': 'BOV', 'BetRivers': 'BR', 'Unibet': 'UNI',
   'Hard Rock': 'HR', 'Fanatics': 'FAN', 'BallyBet': 'BALLY',
+  'MyBookie': 'MYBK', 'BetOnline': 'BOL', 'BetUS': 'BETUS',
 };
 
 function shortBook(name) { return BOOK_SHORT[name] || name; }
@@ -1356,29 +1429,44 @@ const { resolveEspnHeadshot, resolveHeadshotsBatch } = require('./shared/espnHea
 
 function mapEdgeProp(p) {
   const isOver = p.prediction === 'Over';
+  // Build allBookmakers from the prop's full odds array
+  const allBks = (p.allBookmakers || []).map(b => ({
+    bk: shortBook(b.bk),
+    odds: isOver ? b.over : b.under,
+  })).filter(b => b.odds != null);
+
   return {
     name: p.playerName,
     playerId: p.playerId || null,
     teamCode: teamCode(p.team),
     stat: STAT_DISPLAY[p.statType] || p.statType,
+    statType: p.statType,
     dir: p.prediction?.toLowerCase() || 'over',
     line: p.line,
     avg: p.l10Avg,
     odds: isOver ? p.oddsOver : p.oddsUnder,
     bk: shortBook(isOver ? p.bookmakerOver : p.bookmakerUnder),
+    allBks: allBks.length > 0 ? allBks : undefined,
     l10: p.hitRates?.l10?.pct ?? null,
     szn: p.hitRates?.season?.pct ?? null,
+    dirL10: p.directionalHitRates?.l10 ?? null,
     trend: p.trend,
     defRank: p.opponentDefense?.rank ?? null,
     defTeam: teamCode(p.opponent),
     isHome: p.isHome,
     green: p.greenScore,
+    betScore: p.betScore ?? null,
+    edge: p.edge ?? null,
   };
 }
 
 // ── Parlay Slip Builder ──
-// Builds 3 pre-made parlay slips from the cross-game leg pool.
-// Each slip has 5+ legs, no duplicate players within a slip.
+// Each slip is for ONE bookmaker (you can't combine odds from different books).
+// For each bookmaker, we build per-book leg pools and compose the best parlay per tier.
+//
+// LOCK: 3-5 alt-line legs, safest picks, all on same book
+// STEADY: 2-4 legs (max 2 alt + max 2 reg), medium risk, same book
+// SNIPER: 2-3 legs (max 2 alt + max 2 reg), higher risk regs, same book
 
 function oddsToImplied(odds) {
   if (odds <= -100) return Math.abs(odds) / (Math.abs(odds) + 100);
@@ -1406,7 +1494,7 @@ function pickLegs(pool, count, preferDiversity) {
   const picked = [];
   const usedPlayers = new Set();
   const usedGames = new Set();
-  const deferred = []; // legs skipped for game diversity
+  const deferred = [];
 
   for (const leg of pool) {
     if (usedPlayers.has(leg.name)) continue;
@@ -1423,7 +1511,6 @@ function pickLegs(pool, count, preferDiversity) {
     if (picked.length >= count) return picked;
   }
 
-  // Fill from deferred (same game, different player)
   for (const leg of deferred) {
     if (usedPlayers.has(leg.name)) continue;
     usedPlayers.add(leg.name);
@@ -1434,66 +1521,165 @@ function pickLegs(pool, count, preferDiversity) {
   return picked;
 }
 
-function buildParlaySlips(legs) {
-  if (legs.length < 5) return [];
+/**
+ * Expand a mapped leg into per-bookmaker copies.
+ * Each leg has allBks: [{bk, odds}]. We create one copy per bookmaker
+ * with that book's specific odds (not the best-across-books odds).
+ */
+function expandLegsByBook(legs) {
+  const byBook = {}; // bk → array of leg copies with that book's odds
+
+  for (const leg of legs) {
+    const books = leg.allBks || [];
+    // Fallback: if no allBks, use the primary bk/odds
+    const entries = books.length > 0 ? books : (leg.bk && leg.odds != null ? [{ bk: leg.bk, odds: leg.odds }] : []);
+
+    for (const { bk, odds } of entries) {
+      if (!bk || odds == null) continue;
+      if (!byBook[bk]) byBook[bk] = [];
+      byBook[bk].push({ ...leg, odds, bk });
+    }
+  }
+
+  return byBook;
+}
+
+/**
+ * Score a parlay slip for ranking: average directional hit rate × leg count bonus.
+ * More legs with high hit rates = better score.
+ */
+function slipScore(legs) {
+  if (legs.length === 0) return 0;
+  const avgDir = legs.reduce((s, l) => s + dirHitRate(l), 0) / legs.length;
+  return avgDir * (1 + 0.05 * legs.length); // slight bonus for more legs
+}
+
+/**
+ * Build 3 suggested parlay slips from alt-line legs + edge props.
+ * Each slip is locked to a SINGLE bookmaker — no cross-book mixing.
+ *
+ * @param {Array} altLegs — mapped stack legs (sorted by parlayEdge desc)
+ * @param {Array} edgeProps — mapped edge props (sorted by betScore desc)
+ */
+function buildParlaySlips(altLegs, edgeProps) {
+  // Expand both pools into per-bookmaker copies
+  const altByBook = expandLegsByBook(altLegs);
+  const edgeByBook = expandLegsByBook(edgeProps || []);
+
+  // Collect all bookmakers that have legs
+  const allBooks = new Set([...Object.keys(altByBook), ...Object.keys(edgeByBook)]);
+
+  // Build LOCK / STEADY / SNIPER for EVERY bookmaker that qualifies.
+  // Each slip is playable on exactly one book.
   const slips = [];
 
-  // Slip 1: LOCK — Top 5 by edge, max game diversity
-  const lockLegs = pickLegs(legs, 5, true);
-  if (lockLegs.length >= 5) {
-    slips.push({
-      name: 'LOCK',
-      subtitle: 'Highest edge across games',
-      legs: lockLegs,
-      combinedOdds: combinedAmericanOdds(lockLegs),
+  for (const bk of allBooks) {
+    const bookAlt = (altByBook[bk] || []).sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+    const bookEdge = (edgeByBook[bk] || []).sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
+
+    // ── LOCK: 3-5 alt-line legs, safest possible ──
+    const lockPool = bookAlt.filter(l => dirHitRate(l) >= 70);
+    if (lockPool.length >= 3) {
+      const count = Math.min(lockPool.length, 5);
+      const lockLegs = pickLegs(lockPool, count, true);
+      if (lockLegs.length >= 3) {
+        slips.push({
+          name: 'LOCK',
+          subtitle: `Safest alt lines`,
+          bk,
+          legs: lockLegs,
+          combinedOdds: combinedAmericanOdds(lockLegs),
+        });
+      }
+    }
+
+    // ── STEADY: 2-4 legs, max 2 alt + max 2 regular, medium risk ──
+    const steadyAltPool = bookAlt
+      .filter(l => dirHitRate(l) >= 65)
+      .sort((a, b) => Math.abs(a.odds) - Math.abs(b.odds));
+    const steadyRegPool = bookEdge.filter(p => {
+      const dHit = p.dirL10 ?? dirHitRate(p);
+      return dHit >= 60 && (p.betScore ?? 0) >= 65 && p.odds != null;
     });
-  }
 
-  // Slip 2: SAFE — Only legs with 80%+ directional hit rate
-  const safePool = legs.filter(l => dirHitRate(l) >= 80);
-  if (safePool.length >= 5) {
-    const safeLegs = pickLegs(safePool, 5, true);
-    if (safeLegs.length >= 5) {
-      slips.push({
-        name: 'SAFE',
-        subtitle: '80%+ hit rate, maximum safety',
-        legs: safeLegs,
-        combinedOdds: combinedAmericanOdds(safeLegs),
-      });
+    if (steadyAltPool.length >= 1 && steadyRegPool.length >= 1) {
+      const steadyAltPicks = pickLegs(steadyAltPool, 2, true);
+      const usedSteadyNames = new Set(steadyAltPicks.map(l => l.name));
+      const steadyRegFiltered = steadyRegPool.filter(p => !usedSteadyNames.has(p.name));
+      const steadyRegPicks = pickLegs(steadyRegFiltered, 2, true);
+      for (const p of steadyRegPicks) p.source = 'edge';
+
+      const steadyLegs = [...steadyAltPicks, ...steadyRegPicks];
+      if (steadyLegs.length >= 2 && steadyRegPicks.length >= 1) {
+        slips.push({
+          name: 'STEADY',
+          subtitle: `Alt + regular mix`,
+          bk,
+          legs: steadyLegs,
+          combinedOdds: combinedAmericanOdds(steadyLegs),
+        });
+      }
+    }
+
+    // ── SNIPER: 2-3 legs, max 2 alt + max 2 reg, higher risk regs ──
+    const sniperRegPool = bookEdge.filter(p => {
+      const dHit = p.dirL10 ?? dirHitRate(p);
+      return dHit >= 55 && (p.betScore ?? 0) >= 55 && p.odds != null;
+    });
+    const sniperAltPool = bookAlt.filter(l => dirHitRate(l) >= 60);
+
+    if (sniperRegPool.length >= 1) {
+      const sniperRegPicks = pickLegs(sniperRegPool, 2, true);
+      for (const p of sniperRegPicks) p.source = 'edge';
+      const usedSniperNames = new Set(sniperRegPicks.map(l => l.name));
+      const sniperAltFiltered = sniperAltPool.filter(l => !usedSniperNames.has(l.name));
+      const sniperAltPicks = pickLegs(sniperAltFiltered, 2, true);
+
+      const sniperLegs = [...sniperRegPicks, ...sniperAltPicks].slice(0, 3);
+      if (sniperLegs.length >= 2) {
+        slips.push({
+          name: 'SNIPER',
+          subtitle: `High-edge picks`,
+          bk,
+          legs: sniperLegs,
+          combinedOdds: combinedAmericanOdds(sniperLegs),
+        });
+      }
     }
   }
 
-  // Slip 3: VALUE — Lightest juice legs with positive edge (best parlay payout)
-  const valuePool = legs
-    .filter(l => (l.edge ?? 0) > 0)
-    .sort((a, b) => Math.abs(a.odds) - Math.abs(b.odds)); // lightest juice first
-  if (valuePool.length >= 5) {
-    const valueLegs = pickLegs(valuePool, 5, true);
-    if (valueLegs.length >= 5) {
-      slips.push({
-        name: 'VALUE',
-        subtitle: 'Best payout-to-safety ratio',
-        legs: valueLegs,
-        combinedOdds: combinedAmericanOdds(valueLegs),
-      });
-    }
-  }
+  // Sort: group by bookmaker, within each book order LOCK → STEADY → SNIPER
+  const tierOrder = { LOCK: 0, STEADY: 1, SNIPER: 2 };
+  slips.sort((a, b) => {
+    if (a.bk !== b.bk) return a.bk.localeCompare(b.bk);
+    return (tierOrder[a.name] ?? 9) - (tierOrder[b.name] ?? 9);
+  });
 
+  const bookCount = new Set(slips.map(s => s.bk)).size;
+  console.log(`[ParlaySlips] Built ${slips.length} slips across ${bookCount} bookmakers: ${slips.map(s => `${s.name}@${s.bk}`).join(', ')}`);
   return slips;
 }
 
 function mapStackLeg(p) {
+  // Build allBks from the leg's full bookmaker array
+  const allBks = (p.allBookmakers || []).map(b => ({
+    bk: shortBook(b.bk),
+    odds: b.odds,
+  })).filter(b => b.odds != null);
+
   return {
     name: p.playerName,
     playerId: p.playerId || null,
     teamCode: teamCode(p.team),
     stat: STAT_DISPLAY[p.statType] || p.statType,
+    statType: p.statType,
     dir: p.prediction?.toLowerCase() || 'over',
     line: p.altLine,
     avg: p.l10Avg,
     trend: p.trend,
     odds: p.altOdds,
     bk: shortBook(p.bookmaker),
+    allBks: allBks.length > 0 ? allBks : undefined,
     l10: p.hitRates?.l10?.pct ?? null,
     szn: p.hitRates?.season?.pct ?? null,
     defRank: p.opponentDefense?.rank ?? null,
@@ -1503,6 +1689,78 @@ function mapStackLeg(p) {
     green: p.greenScore,
     edge: p.parlayEdge ?? null,
   };
+}
+
+/**
+ * Aggregate cross-game leaderboard + parlay slips and write to Firestore.
+ * Called after refreshAllCachedGames + healing completes.
+ * Writes two docs: 'leaderboard' and 'parlayOfTheDay' to matchAnalysisCache.
+ */
+async function writeLeaderboardAndSlips() {
+  const db = getDb();
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(); // 24h TTL
+
+  const snapshot = await db.collection('matchAnalysisCache')
+    .where('sport', '==', 'nba')
+    .where('preCached', '==', true)
+    .get();
+
+  const games = snapshot.docs.filter(doc => {
+    const data = doc.data();
+    return data.gameStartTime && data.gameStartTime > cutoff;
+  });
+
+  const edgeProps = [];
+  const stackLegs = [];
+
+  for (const doc of games) {
+    const data = doc.data();
+    const ml = data.analysis?.mlPlayerProps || {};
+
+    const topProps = ml.edgeBoard?.topProps || ml.topProps || [];
+    for (const p of topProps) edgeProps.push(mapEdgeProp(p));
+
+    const legs = ml.parlayStack?.legs || [];
+    for (const p of legs) stackLegs.push(mapStackLeg(p));
+  }
+
+  // Leaderboard: edge sorted by betScore, stack sorted by parlayEdge
+  edgeProps.sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
+  stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+  // Parlay slips — pass both alt legs and edge props for COMBO slip
+  const parlaySlips = buildParlaySlips(stackLegs, edgeProps);
+
+  // Resolve headshots
+  const uniqueNames = [...new Set([...edgeProps.map(p => p.name), ...stackLegs.map(p => p.name)])];
+  const headshotMap = await resolveHeadshotsBatch(uniqueNames);
+  for (const p of edgeProps) p.headshotUrl = headshotMap[p.name] || null;
+  for (const p of stackLegs) p.headshotUrl = headshotMap[p.name] || null;
+  for (const slip of parlaySlips) {
+    for (const l of slip.legs) l.headshotUrl = headshotMap[l.name] || null;
+  }
+
+  // Write leaderboard doc
+  await db.collection('matchAnalysisCache').doc('leaderboard').set({
+    edge: edgeProps.slice(0, 15),
+    stack: stackLegs.slice(0, 15),
+    generatedAt: now.toISOString(),
+    expiresAt,
+  });
+
+  // Write parlay of the day doc
+  if (parlaySlips.length > 0) {
+    await db.collection('matchAnalysisCache').doc('parlayOfTheDay').set({
+      slips: parlaySlips,
+      generatedAt: now.toISOString(),
+      expiresAt,
+    });
+  }
+
+  console.log(`[Leaderboard] Written: ${edgeProps.length} edge props, ${stackLegs.length} stack legs, ${parlaySlips.length} slips`);
+  return { edgeCount: edgeProps.length, stackCount: stackLegs.length, slipCount: parlaySlips.length };
 }
 
 exports.getCheatsheetData = onRequest({
@@ -1557,7 +1815,7 @@ exports.getCheatsheetData = onRequest({
     stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
 
     // Build pre-made parlay slips from cross-game leg pool
-    const parlaySlips = buildParlaySlips(stackLegs);
+    const parlaySlips = buildParlaySlips(stackLegs, edgeProps);
 
     // Resolve ESPN headshots for all unique players (cached permanently)
     const uniqueNames = [...new Set([...edgeProps.map(p => p.name), ...stackLegs.map(p => p.name)])];

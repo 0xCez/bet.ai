@@ -115,12 +115,13 @@ const PropChartBarGraph: React.FC<PropChartBarGraphProps> = ({
   const hasUpcoming = !!matchup;
   const totalBars = displayLogs.length + (hasUpcoming ? 1 : 0);
 
-  // Compute bar width dynamically
+  // Compute bar width dynamically — wider bars when fewer games
+  const dynamicMaxWidth = totalBars <= 6 ? 56 : totalBars <= 10 ? 44 : MAX_BAR_WIDTH;
   const computedBarWidth =
     totalBars > 0
       ? (CHART_AREA_WIDTH - MIN_BAR_GAP * (totalBars + 1)) / totalBars
       : 20;
-  const barWidth = Math.min(computedBarWidth, MAX_BAR_WIDTH);
+  const barWidth = Math.min(computedBarWidth, dynamicMaxWidth);
   const barGap =
     totalBars > 1
       ? (CHART_AREA_WIDTH - barWidth * totalBars) / (totalBars + 1)
@@ -129,12 +130,13 @@ const PropChartBarGraph: React.FC<PropChartBarGraphProps> = ({
   // Dynamic sizing based on how many bars we have
   const showValueLabels = totalBars <= 15;
 
-  // Calculate available px per slot to decide label density
+  // Calculate available px per slot to decide label density and logo size
   const slotWidth = totalBars > 0 ? CHART_AREA_WIDTH / totalBars : 40;
-  // Need ~24px per labeled slot for a logo + date to breathe
-  const showLabelEvery = slotWidth >= 24 ? 1 : slotWidth >= 12 ? 2 : 3;
-  const logoSize = slotWidth >= 24 ? 20 : 16;
-  const dateFontSize = slotWidth >= 24 ? 9 : 7;
+  // Show dates only when there's room; hide entirely on L20+
+  const showDates = slotWidth >= 20;
+  const showDateEvery = slotWidth >= 28 ? 1 : 2;
+  const logoSize = slotWidth >= 50 ? 28 : slotWidth >= 28 ? 24 : slotWidth >= 20 ? 18 : Math.min(Math.floor(barWidth), 14);
+  const dateFontSize = slotWidth >= 28 ? 9 : 8;
 
   const maxValue = displayLogs.reduce((max, g) => Math.max(max, g.value), 0);
   const { max: yMax, ticks } = computeYScale(maxValue, line);
@@ -290,18 +292,30 @@ const PropChartBarGraph: React.FC<PropChartBarGraphProps> = ({
             const projY = TOP_PADDING + CHART_AREA_HEIGHT - projHeight;
 
             return (
-              <Rect
-                x={x}
-                y={projY}
-                width={barWidth}
-                height={projHeight}
-                rx={BAR_RADIUS}
-                ry={BAR_RADIUS}
-                fill="none"
-                stroke="rgba(0, 215, 215, 0.3)"
-                strokeWidth={1.5}
-                strokeDasharray="4,4"
-              />
+              <>
+                <Rect
+                  x={x}
+                  y={projY}
+                  width={barWidth}
+                  height={projHeight}
+                  rx={BAR_RADIUS}
+                  ry={BAR_RADIUS}
+                  fill="rgba(0, 215, 215, 0.08)"
+                  stroke="rgba(0, 215, 215, 0.5)"
+                  strokeWidth={2}
+                  strokeDasharray="5,3"
+                />
+                <SvgText
+                  x={x + barWidth / 2}
+                  y={projY - 6}
+                  fontSize={13}
+                  fontFamily={typography.fontFamily.bold}
+                  fill="rgba(0, 215, 215, 0.7)"
+                  textAnchor="middle"
+                >
+                  ?
+                </SvgText>
+              </>
             );
           })()}
       </Svg>
@@ -309,9 +323,8 @@ const PropChartBarGraph: React.FC<PropChartBarGraphProps> = ({
       {/* X-axis: Team logos + dates (spaced to avoid overlap) */}
       <View style={styles.xAxis}>
         {displayLogs.map((game, i) => {
-          const showLabel = i % showLabelEvery === 0;
-          const teamLogo = showLabel && game.opponent ? getNBATeamLogo(game.opponent) : null;
-          const dateStr = showLabel ? formatDateCompact(game.date) : "";
+          const teamLogo = game.opponent ? getNBATeamLogo(game.opponent) : null;
+          const dateStr = showDates && i % showDateEvery === 0 ? formatDateCompact(game.date) : "";
           const logoStyle = { width: logoSize, height: logoSize, borderRadius: logoSize / 2 };
           return (
             <View
@@ -324,15 +337,13 @@ const PropChartBarGraph: React.FC<PropChartBarGraphProps> = ({
                 },
               ]}
             >
-              {showLabel ? (
-                teamLogo ? (
-                  <ExpoImage source={teamLogo} style={logoStyle} contentFit="contain" />
-                ) : (
-                  <View style={[styles.teamLogoFallback, logoStyle, { backgroundColor: colors.secondary }]}>
-                    <Text style={styles.teamLogoText}>{game.opponentCode || "?"}</Text>
-                  </View>
-                )
-              ) : null}
+              {teamLogo ? (
+                <ExpoImage source={teamLogo} style={logoStyle} contentFit="contain" />
+              ) : (
+                <View style={[styles.teamLogoFallback, logoStyle, { backgroundColor: colors.secondary }]}>
+                  <Text style={styles.teamLogoText}>{game.opponentCode || "?"}</Text>
+                </View>
+              )}
               {dateStr !== "" && (
                 <Text style={[styles.xAxisDate, { fontSize: dateFontSize }]}>{dateStr}</Text>
               )}

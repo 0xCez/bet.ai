@@ -272,10 +272,15 @@ exports.analyzeImage = functions.https.onRequest(async (req, res) => {
       // return;
 
 
-          // Check if we have cached data for this match
-          const cachedAnalysis = await checkCacheForMatch(sport, team1Id, team2Id, locale);
+          // Check if we have cached data for this match (includes gameArchive fallback for past games)
+          const cachedAnalysis = await checkCacheForMatch(sport, team1Id, team2Id, locale, team1, team2);
 
           if (cachedAnalysis) {
+            // If this is an archived past game, return it directly — no fresh API calls possible
+            if (cachedAnalysis.isArchived) {
+              console.log("Returning archived past game data from gameArchive");
+              return res.status(200).json(cachedAnalysis);
+            }
             // Check if the cached analysis language matches the requested locale
             if (!cachedAnalysis.language || cachedAnalysis.language === locale) {
               console.log("Returning cached analysis data");
@@ -2179,7 +2184,7 @@ async function getOddsData(sport, team1, team2, team1_code, team2_code, locale =
 }
 
 // Function to check cache for existing match analysis
-async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en') {
+async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1Name = null, team2Name = null) {
   try {
     // Ensure consistent data types for IDs (convert to strings)
     const team1IdStr = String(team1Id);
@@ -2289,6 +2294,64 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en') {
     }
 
     console.log(`Cache miss for ${cacheKey}`);
+
+    // ── Fallback: check gameArchive for archived/past games ──
+    // Archived docs use different doc IDs (nba_{oddsApiEventId}) so we
+    // query by team names stored in analysis.teams.home / analysis.teams.away.
+    if (team1Name && team2Name && typeof team1Name === 'string' && typeof team2Name === 'string') {
+      console.log(`[checkCacheForMatch] Checking gameArchive for archived game: ${team1Name} vs ${team2Name}`);
+      try {
+        const archiveSnapshot = await db.collection('gameArchive')
+          .where('sport', '==', sport.toLowerCase())
+          .get();
+
+        if (!archiveSnapshot.empty) {
+          const t1 = team1Name.toLowerCase().trim();
+          const t2 = team2Name.toLowerCase().trim();
+
+          // Helper: check if two team names refer to the same team.
+          // Handles "Lakers" vs "Los Angeles Lakers", "Man City" vs "Manchester City", etc.
+          // Requires at least 4 chars to match via includes() to avoid false positives.
+          function teamsMatch(name1, name2) {
+            if (name1 === name2) return true;
+            if (name1.length < 4 || name2.length < 4) return false;
+            return name1.includes(name2) || name2.includes(name1);
+          }
+
+          const matchingDocs = archiveSnapshot.docs
+            .filter(doc => {
+              const data = doc.data();
+              const analysis = data.analysis;
+              // Skip shell docs that were archived before enrichment (no real data)
+              if (!analysis || !analysis.aiAnalysis) return false;
+              const home = (analysis.teams?.home || '').toLowerCase().trim();
+              const away = (analysis.teams?.away || '').toLowerCase().trim();
+              if (!home || !away) return false;
+              return (teamsMatch(home, t1) && teamsMatch(away, t2)) ||
+                     (teamsMatch(home, t2) && teamsMatch(away, t1));
+            })
+            .sort((a, b) => {
+              // Sort most recent first; docs without gameStartTime go last
+              const aTime = a.data().gameStartTime || '0';
+              const bTime = b.data().gameStartTime || '0';
+              return bTime.localeCompare(aTime);
+            });
+
+          if (matchingDocs.length > 0) {
+            const archivedData = matchingDocs[0].data();
+            console.log(`✅ gameArchive HIT for ${team1Name} vs ${team2Name} (doc: ${matchingDocs[0].id}, gameStart: ${archivedData.gameStartTime})`);
+            const analysisData = archivedData.analysis;
+            analysisData.language = archivedData.language || 'en';
+            analysisData.isArchived = true;
+            return analysisData;
+          }
+        }
+        console.log(`[checkCacheForMatch] No matching archived game found in gameArchive`);
+      } catch (archiveError) {
+        console.error('[checkCacheForMatch] gameArchive fallback error:', archiveError.message);
+      }
+    }
+
     return null;
   } catch (error) {
     console.error("Error checking cache:", error);
@@ -3328,7 +3391,8 @@ exports.marketIntelligence = functions.https.onRequest(async (req, res) => {
 
     // Check if we have pre-cached analysis for this match (for replay content)
     // Use baseSport for cache key to match how preCacheTopGames stores data
-    const cachedAnalysis = await checkCacheForMatch(baseSport, team1Id, team2Id, userLocale);
+    // Pass team names for gameArchive fallback on past/archived games
+    const cachedAnalysis = await checkCacheForMatch(baseSport, team1Id, team2Id, userLocale, team1, team2);
 
     if (cachedAnalysis && cachedAnalysis.marketIntelligence) {
       console.log(`📦 Cache HIT for marketIntelligence: ${normalizedSport} ${team1Id} vs ${team2Id}`);

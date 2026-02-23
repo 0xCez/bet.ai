@@ -9,11 +9,11 @@ import { updateAppState } from "../utils/appStorage";
 import i18n from "../i18n";
 import { colors, spacing, borderRadius, typography } from "../constants/designTokens";
 import { OnboardingSlide2Visual } from "../components/ui/OnboardingSlide2Visual";
-import { SharpsVsPublicChart, OddsMovementChart } from "../components/ui/OnboardingSlide3Visual";
-import { OnboardingSlide4Visual } from "../components/ui/OnboardingSlide4Visual";
 import { OnboardingSlide5Visual } from "../components/ui/OnboardingSlide5Visual";
 import { OnboardingSlide1Visual } from "../components/ui/OnboardingSlide1Visual";
 import { OnboardingSlide3MLPropsVisual } from "../components/ui/OnboardingSlide3MLPropsVisual";
+import { OnboardingSlide4PicksVisual } from "../components/ui/OnboardingSlide4PicksVisual";
+import { OnboardingSlide5BuilderVisual } from "../components/ui/OnboardingSlide5BuilderVisual";
 import { useOnboardingAnalytics } from "../hooks/useOnboardingAnalytics";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -182,18 +182,9 @@ export default function OnboardingScreen() {
         ) : item.id === 3 ? (
           <OnboardingSlide3MLPropsVisual isActive={activeIndex === 2} />
         ) : item.id === 4 ? (
-          <View style={styles.slide3Container}>
-            <View style={styles.slide3ChartsWrapper}>
-              <View style={styles.sharpsChartPosition}>
-                <SharpsVsPublicChart isActive={activeIndex === 3} />
-              </View>
-              <View style={styles.oddsChartPosition}>
-                <OddsMovementChart isActive={activeIndex === 3} />
-              </View>
-            </View>
-          </View>
+          <OnboardingSlide4PicksVisual isActive={activeIndex === 3} />
         ) : item.id === 5 ? (
-          <OnboardingSlide4Visual isActive={activeIndex === 4} />
+          <OnboardingSlide5BuilderVisual isActive={activeIndex === 4} />
         ) : item.id === 6 ? (
           <OnboardingSlide5Visual isActive={activeIndex === 5} />
         ) : (
@@ -319,31 +310,6 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT * 0.45,
     justifyContent: "center",
     alignItems: "center",
-  },
-  slide3Container: {
-    width: SCREEN_WIDTH * 0.9,
-    height: SCREEN_HEIGHT * 0.50,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  slide3ChartsWrapper: {
-    position: "relative",
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  sharpsChartPosition: {
-    position: "absolute",
-    top: 25,
-    left: -10,
-    zIndex: 1,
-  },
-  oddsChartPosition: {
-    position: "absolute",
-    bottom: 15,
-    right: -10,
-    zIndex: 2,
   },
   image: {
     width: "100%",

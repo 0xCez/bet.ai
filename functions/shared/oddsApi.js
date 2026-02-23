@@ -76,6 +76,9 @@ const BOOKMAKER_MAP = {
   'hardrockbet': 'Hard Rock',
   'fanatics': 'Fanatics',
   'ballybet': 'BallyBet',
+  'mybookieag': 'MyBookie',
+  'betonlineag': 'BetOnline',
+  'betus': 'BetUS',
 };
 
 function normalizeBookmaker(key) {
@@ -83,13 +86,15 @@ function normalizeBookmaker(key) {
   return BOOKMAKER_MAP[key.toLowerCase()] || key;
 }
 
-const BOOKMAKERS = 'draftkings,fanduel,betmgm,caesars,espnbet';
+// All US bookmakers with NBA player prop coverage (us + us2 regions)
+const BOOKMAKERS = 'draftkings,fanduel,betmgm,caesars,espnbet,betrivers,bovada,fanatics,hardrockbet,ballybet,mybookieag,betonlineag,betus';
 
 /**
  * Parse The Odds API response into a normalized props structure.
  * Works for both standard and alternate markets.
  *
- * Returns Map keyed by "PlayerName|statType" → array of { line, oddsOver, oddsUnder, bookmakerOver, bookmakerUnder }
+ * Returns Map keyed by "PlayerName|statType" → array of line objects.
+ * Each line has best odds (bookmakerOver/Under) + allBookmakers array with every book's odds.
  */
 function parseOddsResponse(data) {
   const propsMap = new Map();
@@ -121,7 +126,7 @@ function parseOddsResponse(data) {
         const existing = propsMap.get(mapKey);
         const dup = existing.find(e => e.line === entry.line);
         if (dup) {
-          // Keep best odds per bookmaker
+          // Track best odds (backwards compat)
           if (entry.oddsOver != null && (dup.oddsOver == null || entry.oddsOver > dup.oddsOver)) {
             dup.oddsOver = entry.oddsOver;
             dup.bookmakerOver = entry.bookmakerOver;
@@ -130,6 +135,12 @@ function parseOddsResponse(data) {
             dup.oddsUnder = entry.oddsUnder;
             dup.bookmakerUnder = entry.bookmakerUnder;
           }
+          // Append to allBookmakers
+          dup.allBookmakers.push({
+            bk: bookmaker,
+            over: entry.oddsOver ?? null,
+            under: entry.oddsUnder ?? null,
+          });
         } else {
           existing.push({
             line: entry.line,
@@ -137,6 +148,11 @@ function parseOddsResponse(data) {
             oddsUnder: entry.oddsUnder ?? null,
             bookmakerOver: entry.oddsOver != null ? entry.bookmakerOver : null,
             bookmakerUnder: entry.oddsUnder != null ? entry.bookmakerUnder : null,
+            allBookmakers: [{
+              bk: bookmaker,
+              over: entry.oddsOver ?? null,
+              under: entry.oddsUnder ?? null,
+            }],
           });
         }
       }
@@ -191,6 +207,7 @@ async function fetchStandardProps(eventId) {
         oddsUnder: line.oddsUnder,
         bookmakerOver: line.bookmakerOver,
         bookmakerUnder: line.bookmakerUnder,
+        allBookmakers: line.allBookmakers || [],
       });
     }
 

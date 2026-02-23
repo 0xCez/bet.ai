@@ -15,9 +15,10 @@ const { onRequest } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 
 // Shared modules
-const { resolvePlayerId, getGameLogs, getTeamSchedule, getPlayerPosition } = require('./shared/playerStats');
+const { resolvePlayerId, getGameLogs, getTeamSchedule, getPlayerPosition, API_SPORTS_TEAM_IDS, TEAM_ID_TO_NAME } = require('./shared/playerStats');
 const { getStatValue, calculateExtendedHitRates, calculateH2HHitRate, getL10Average, getTrend } = require('./shared/hitRates');
 const { resolveEspnPlayer } = require('./shared/espnHeadshot');
+const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
 
 let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
@@ -31,6 +32,11 @@ const STAT_DISPLAY = {
   'points+rebounds+assists': 'PTS+REB+AST', 'points+rebounds': 'PTS+REB',
   'points+assists': 'PTS+AST', 'rebounds+assists': 'REB+AST',
 };
+
+// Reverse lookup: display name → raw stat key (for when display names arrive as statType)
+const STAT_FROM_DISPLAY = Object.fromEntries(
+  Object.entries(STAT_DISPLAY).map(([k, v]) => [v.toLowerCase(), k])
+);
 
 const TEAM_CODE = {
   'Atlanta Hawks': 'ATL', 'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN',
@@ -55,6 +61,37 @@ const BOOK_SHORT = {
   'Hard Rock': 'HR', 'Fanatics': 'FAN', 'BallyBet': 'BALLY',
 };
 function shortBook(name) { return BOOK_SHORT[name] || name; }
+
+/**
+ * Label defensive quality based on rank (1-30).
+ * 1-5 = Elite, 6-12 = Strong, 13-18 = Average, 19-25 = Weak, 26-30 = Poor
+ */
+function defenseLabel(rank) {
+  if (rank <= 5) return 'Elite';
+  if (rank <= 12) return 'Strong';
+  if (rank <= 18) return 'Average';
+  if (rank <= 25) return 'Weak';
+  return 'Poor';
+}
+
+/**
+ * Calculate Expected Value (EV+) percentage.
+ * Blends directional L10 + Season hit rates, then regresses toward
+ * market implied probability to produce realistic EV estimates.
+ * Matches the formula used in PicksView.tsx.
+ */
+function calculateEV(dirL10Pct, dirSznPct, americanOdds) {
+  if (dirL10Pct == null || americanOdds == null) return null;
+  const baseP = (dirSznPct != null ? 0.4 * dirL10Pct + 0.6 * dirSznPct : dirL10Pct) / 100;
+  const impliedP = americanOdds < 0
+    ? Math.abs(americanOdds) / (Math.abs(americanOdds) + 100)
+    : 100 / (americanOdds + 100);
+  const adjP = 0.4 * baseP + 0.6 * impliedP;
+  const decimal = americanOdds < 0
+    ? 1 + 100 / Math.abs(americanOdds)
+    : 1 + americanOdds / 100;
+  return parseFloat(((adjP * (decimal - 1) - (1 - adjP)) * 100).toFixed(1));
+}
 
 /**
  * Format ISO date string to short display: "Feb 19"
@@ -89,10 +126,13 @@ async function findPropInCache(playerName, statType, line) {
   });
 
   const nameNorm = playerName.toLowerCase().trim();
+  // Normalize statType: if a display name was passed (e.g. "3PT MADE"), resolve to raw key
+  const statNorm = (STAT_FROM_DISPLAY[statType.toLowerCase()] || statType).toLowerCase();
   let result = null;
 
-  // Collect ALL parlay stack legs for this player across all games
+  // Collect ALL props for this player across all games (for dropdown + alt lines)
   const allPlayerStackLegs = [];
+  const allPlayerEdgeProps = [];
 
   for (const doc of upcoming) {
     const data = doc.data();
@@ -109,14 +149,21 @@ async function findPropInCache(playerName, statType, line) {
       }
     }
 
+    // Collect all EdgeBoard props for this player (any stat type)
+    const edgeProps = ml.edgeBoard?.topProps || ml.topProps || [];
+    for (const p of edgeProps) {
+      if (p.playerName?.toLowerCase().trim() === nameNorm) {
+        allPlayerEdgeProps.push(p);
+      }
+    }
+
     // Only search for the matching prop if we haven't found it yet
     if (result) continue;
 
     // Search EdgeBoard topProps
-    const topProps = ml.edgeBoard?.topProps || ml.topProps || [];
-    for (const p of topProps) {
+    for (const p of edgeProps) {
       if (p.playerName?.toLowerCase().trim() === nameNorm &&
-          p.statType?.toLowerCase() === statType.toLowerCase() &&
+          p.statType?.toLowerCase() === statNorm &&
           p.line === line) {
         const isOver = p.prediction === 'Over';
         result = {
@@ -132,6 +179,7 @@ async function findPropInCache(playerName, statType, line) {
             trend: p.trend,
             green: p.greenScore,
             defRank: p.opponentDefense?.rank ?? null,
+            betScore: p.betScore ?? null,
           },
           game: {
             home, away, gameTime,
@@ -150,7 +198,7 @@ async function findPropInCache(playerName, statType, line) {
     // Search Parlay Stack legs for exact match
     for (const p of legs) {
       if (p.playerName?.toLowerCase().trim() === nameNorm &&
-          p.statType?.toLowerCase() === statType.toLowerCase() &&
+          p.statType?.toLowerCase() === statNorm &&
           p.altLine === line) {
         result = {
           prop: {
@@ -166,6 +214,7 @@ async function findPropInCache(playerName, statType, line) {
             green: p.greenScore,
             defRank: p.opponentDefense?.rank ?? null,
             edge: p.parlayEdge,
+            betScore: p.betScore ?? null,
           },
           game: {
             home, away, gameTime,
@@ -185,23 +234,47 @@ async function findPropInCache(playerName, statType, line) {
   // Format safe lines: all validated alt lines for this player, sorted by edge
   // Exclude the exact line currently being viewed
   const safeLines = allPlayerStackLegs
-    .filter(p => !(p.statType?.toLowerCase() === statType.toLowerCase() && p.altLine === line))
+    .filter(p => !(p.statType?.toLowerCase() === statNorm && p.altLine === line))
     .sort((a, b) => (b.parlayEdge || 0) - (a.parlayEdge || 0))
-    .map(p => ({
-      statType: p.statType,
-      stat: STAT_DISPLAY[p.statType] || p.statType,
-      prediction: p.prediction?.toLowerCase() || 'over',
-      altLine: p.altLine,
-      altOdds: p.altOdds,
-      bookmaker: shortBook(p.bookmaker),
-      l10HitPct: p.hitRates?.l10?.pct ?? null,
-      sznHitPct: p.hitRates?.season?.pct ?? null,
-      l10Avg: p.l10Avg,
-      parlayEdge: p.parlayEdge,
-      greenScore: p.greenScore,
-    }));
+    .map(p => {
+      const isOver = p.prediction?.toLowerCase() === 'over';
+      const rawL10 = p.hitRates?.l10?.pct ?? null;
+      const rawSzn = p.hitRates?.season?.pct ?? null;
+      return {
+        statType: p.statType,
+        stat: STAT_DISPLAY[p.statType] || p.statType,
+        prediction: p.prediction?.toLowerCase() || 'over',
+        altLine: p.altLine,
+        altOdds: p.altOdds,
+        bookmaker: shortBook(p.bookmaker),
+        l10HitPct: rawL10 != null ? (isOver ? rawL10 : 100 - rawL10) : null,
+        sznHitPct: rawSzn != null ? (isOver ? rawSzn : 100 - rawSzn) : null,
+        l10Avg: p.l10Avg,
+        parlayEdge: p.parlayEdge,
+      };
+    });
 
   result.safeLines = safeLines;
+
+  // Format other EdgeBoard props for this player (for line selector dropdown)
+  // Exclude the exact prop currently being viewed
+  result.otherProps = allPlayerEdgeProps
+    .filter(p => !(p.statType?.toLowerCase() === statNorm && p.line === line))
+    .map(p => {
+      const isOver = p.prediction === 'Over';
+      return {
+        statType: p.statType,
+        stat: STAT_DISPLAY[p.statType] || p.statType,
+        line: p.line,
+        prediction: p.prediction?.toLowerCase() || 'over',
+        oddsOver: p.oddsOver,
+        oddsUnder: p.oddsUnder,
+        bookmaker: shortBook(isOver ? p.bookmakerOver : p.bookmakerUnder),
+        l10Avg: p.l10Avg,
+        greenScore: p.greenScore,
+      };
+    });
+
   return result;
 }
 
@@ -211,7 +284,8 @@ async function findPropInCache(playerName, statType, line) {
  *
  * @returns {Array} [{ date, displayDate, opponent, opponentCode, value, hit }, ...]
  */
-function buildGameLogEntries(gameLogs, statType, line, schedule, maxGames = 20) {
+function buildGameLogEntries(gameLogs, statType, line, schedule, prediction = 'over', maxGames = 20) {
+  const isOver = prediction === 'over';
   const entries = [];
 
   for (const g of gameLogs) {
@@ -224,21 +298,29 @@ function buildGameLogEntries(gameLogs, statType, line, schedule, maxGames = 20) 
     const gameDate = schedEntry?.date || g.game?.date || null;
 
     entries.push({
+      gameId: gameId || 0,
       date: gameDate,
       displayDate: formatDisplayDate(gameDate),
       opponent: schedEntry?.opponent || null,
       opponentCode: schedEntry?.opponentCode || null,
       value,
-      hit: value > line,
+      hit: isOver ? value > line : value < line,
     });
   }
 
-  // Sort by date descending (most recent first) — game IDs aren't always chronological
+  // Sort by date descending (most recent first)
+  // Fallback to game ID descending for entries without dates (IDs are roughly chronological)
   entries.sort((a, b) => {
-    if (!a.date && !b.date) return 0;
-    if (!a.date) return 1;
-    if (!b.date) return -1;
-    return new Date(b.date) - new Date(a.date);
+    if (a.date && b.date) return new Date(b.date) - new Date(a.date);
+    if (a.date && !b.date) {
+      // Place undated entry relative to dated entry using game ID heuristic
+      return b.gameId - a.gameId || -1;
+    }
+    if (!a.date && b.date) {
+      return b.gameId - a.gameId || 1;
+    }
+    // Both undated: sort by game ID descending
+    return (b.gameId || 0) - (a.gameId || 0);
   });
 
   return entries.slice(0, maxGames);
@@ -267,18 +349,20 @@ exports.getPlayerPropChart = onRequest({
       });
     }
 
-    console.log(`[playerPropChart] ${playerName} — ${statType} ${line}`);
+    // Normalize statType: resolve display names (e.g. "3PT MADE") to raw keys (e.g. "threePointersMade")
+    const resolvedStatType = STAT_FROM_DISPLAY[statType.toLowerCase()] || statType;
+    console.log(`[playerPropChart] ${playerName} — ${resolvedStatType} ${line}`);
 
     // 1. Find this prop in the matchAnalysisCache (get game context + prop details)
-    const cached = await findPropInCache(playerName, statType, line);
+    const cached = await findPropInCache(playerName, resolvedStatType, line);
     if (!cached) {
       return res.status(404).json({
         success: false,
-        error: `Prop not found in cache: ${playerName} ${statType} ${line}`,
+        error: `Prop not found in cache: ${playerName} ${resolvedStatType} ${line}`,
       });
     }
 
-    const { prop, game, source, safeLines } = cached;
+    const { prop, game, source, safeLines, otherProps } = cached;
 
     // 2. Resolve player ID + get game logs (both Firestore-cached)
     const [playerId, espnData] = await Promise.all([
@@ -301,32 +385,111 @@ exports.getPlayerPropChart = onRequest({
       });
     }
 
-    // 3. Get team schedule (for opponent derivation per past game)
+    // 3. Get team schedule(s) for opponent derivation per past game
+    //    Handle mid-season trades: player's game logs may span multiple teams
     const teamName = game.team;
-    const schedule = teamName ? await getTeamSchedule(teamName) : {};
+    let schedule = teamName ? await getTeamSchedule(teamName) : {};
 
-    // 4. Build per-game bar chart data
-    const gameLogEntries = buildGameLogEntries(gameLogs, statType, line, schedule);
+    // Detect additional teams from game logs (e.g., player was traded mid-season)
+    const mainTeamId = API_SPORTS_TEAM_IDS[teamName];
+    const otherTeamIds = new Set();
+    for (const g of gameLogs) {
+      const tid = g.team?.id;
+      if (tid && tid !== mainTeamId) otherTeamIds.add(tid);
+    }
+    if (otherTeamIds.size > 0) {
+      const extraSchedules = await Promise.all(
+        [...otherTeamIds].map(tid => {
+          const name = TEAM_ID_TO_NAME[tid];
+          return name ? getTeamSchedule(name) : Promise.resolve({});
+        })
+      );
+      for (const extra of extraSchedules) {
+        schedule = { ...schedule, ...extra };
+      }
+      console.log(`[playerPropChart] Fetched ${otherTeamIds.size} extra schedule(s) for traded player`);
+    }
 
-    // 5. Calculate extended hit rates
-    const hitRates = calculateExtendedHitRates(gameLogs, statType, line);
+    // 4. Build per-game bar chart data (sorted by date, most recent first)
+    const prediction = prop.prediction || 'over';
+    const isOver = prediction === 'over';
+    const gameLogEntries = buildGameLogEntries(gameLogs, resolvedStatType, line, schedule, prediction);
+
+    // 5. Calculate hit rates FROM the sorted entries (consistent with chart display)
+    //    L5/L10/L20 use the chart entries; Season uses ALL raw game logs
+    const pct = (over, total) => total > 0 ? Math.round((over / total) * 100) : 0;
+    let l5Over = 0, l5Total = 0, l10Over = 0, l10Total = 0;
+    let l20Over = 0, l20Total = 0;
+    for (let i = 0; i < gameLogEntries.length; i++) {
+      const hit = gameLogEntries[i].hit;
+      if (i < 20) { l20Total++; if (hit) l20Over++; }
+      if (i < 10) { l10Total++; if (hit) l10Over++; }
+      if (i < 5)  { l5Total++;  if (hit) l5Over++;  }
+    }
+
+    // Season: iterate ALL raw game logs (not just chart's 20)
+    let seasonHit = 0, seasonTotal = 0;
+    for (const g of gameLogs) {
+      const val = getStatValue(g, resolvedStatType);
+      if (val === null) continue;
+      seasonTotal++;
+      if (isOver ? val > line : val < line) seasonHit++;
+    }
+
+    const hitRates = {
+      l5:     { over: l5Over,     total: l5Total,     pct: pct(l5Over, l5Total) },
+      l10:    { over: l10Over,    total: l10Total,    pct: pct(l10Over, l10Total) },
+      l20:    { over: l20Over,    total: l20Total,    pct: pct(l20Over, l20Total) },
+      season: { over: seasonHit,  total: seasonTotal, pct: pct(seasonHit, seasonTotal) },
+    };
 
     // 6. Calculate H2H hit rate (games vs today's opponent)
     let h2h = { over: 0, total: 0, pct: 0 };
     if (game.opponent) {
-      // Find all game IDs where this team played the opponent
-      const opponentGameIds = new Set();
-      for (const [gameId, sched] of Object.entries(schedule)) {
-        if (sched.opponent === game.opponent) {
-          opponentGameIds.add(Number(gameId));
+      // Match H2H from sorted entries (consistent with chart)
+      let h2hOver = 0, h2hTotal = 0;
+      for (const entry of gameLogEntries) {
+        if (entry.opponent === game.opponent) {
+          h2hTotal++;
+          if (entry.hit) h2hOver++;
         }
       }
-      if (opponentGameIds.size > 0) {
-        h2h = calculateH2HHitRate(gameLogs, statType, line, opponentGameIds);
+      h2h = { over: h2hOver, total: h2hTotal, pct: pct(h2hOver, h2hTotal) };
+    }
+
+    // 7. Opponent defense context
+    let defense = null;
+    if (game.opponent) {
+      try {
+        const oppStats = await getOpponentDefensiveStats();
+        const oppDef = getOpponentStatForProp(oppStats, game.opponent, resolvedStatType);
+        if (oppDef) {
+          const label = defenseLabel(oppDef.rank);
+          // Does this defense context support or contradict the prediction?
+          // Good defense (low rank) supports Under, contradicts Over; bad defense supports Over
+          const supportsOver = oppDef.rank >= 19; // Weak/Poor defense → supports Over
+          const supports = isOver ? supportsOver : !supportsOver;
+          defense = {
+            rank: oppDef.rank,
+            totalTeams: 30,
+            label,
+            allowed: oppDef.allowed,
+            stat: oppDef.stat,
+            opponentCode: teamCode(game.opponent),
+            supports,
+            narrative: supports ? 'Supports' : 'Contradicts',
+          };
+        }
+      } catch (e) {
+        console.warn('[playerPropChart] Defense fetch failed:', e.message);
       }
     }
 
-    // 7. Assemble response
+    // 8. EV+ calculation — hitRates are already directional (computed with isOver check)
+    const relevantOdds = isOver ? prop.oddsOver : prop.oddsUnder;
+    const ev = calculateEV(hitRates.l10?.pct, hitRates.season?.pct, relevantOdds);
+
+    // 9. Assemble response
     const response = {
       success: true,
       source, // 'edge' or 'stack'
@@ -351,10 +514,13 @@ exports.getPlayerPropChart = onRequest({
         ...hitRates,
         h2h,
       },
+      defense,
+      ev,
       safeLines: safeLines || [],
+      otherProps: otherProps || [],
     };
 
-    console.log(`[playerPropChart] ${playerName} — ${gameLogEntries.length} games, H2H: ${h2h.total} games, safeLines: ${(safeLines || []).length}`);
+    console.log(`[playerPropChart] ${playerName} — ${gameLogEntries.length} games, H2H: ${h2h.total} games, DEF: ${defense ? `#${defense.rank} ${defense.label}` : 'N/A'}, EV: ${ev != null ? `${ev}%` : 'N/A'}, safeLines: ${(safeLines || []).length}`);
     res.status(200).json(response);
 
   } catch (err) {

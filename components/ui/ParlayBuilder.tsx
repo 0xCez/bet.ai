@@ -390,117 +390,123 @@ export const ParlayBuilderContent: React.FC<ParlayBuilderContentProps> = ({ game
                 {allLegs.length} validated legs across today's games
               </Text>
 
-              {/* Leg Count */}
-              <Text style={styles.sectionLabel}>How many legs?</Text>
-              <View style={styles.optionsRow}>
-                {legOptions.map((count) => (
-                  <Pressable
-                    key={count}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setLegCount(count);
-                    }}
-                    style={[
-                      styles.countOption,
-                      legCount === count && {
-                        backgroundColor: theme.bg12,
-                        borderColor: theme.accent,
-                      },
-                    ]}
-                  >
-                    <Text style={[
-                      styles.countText,
-                      legCount === count && { color: theme.accent },
-                    ]}>
-                      {count}
-                    </Text>
-                  </Pressable>
-                ))}
+              {/* Leg Count — Card */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionLabel}>How many legs?</Text>
+                <View style={styles.optionsRow}>
+                  {legOptions.map((count) => (
+                    <Pressable
+                      key={count}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setLegCount(count);
+                      }}
+                      style={[
+                        styles.countOption,
+                        legCount === count && {
+                          backgroundColor: theme.bg12,
+                          borderColor: theme.accent,
+                        },
+                      ]}
+                    >
+                      <Text style={[
+                        styles.countText,
+                        legCount === count && { color: theme.accent },
+                      ]}>
+                        {count}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
 
-              {/* Risk Level */}
-              <Text style={styles.sectionLabel}>Risk level?</Text>
-              <View style={styles.riskRow}>
-                {riskOptions.map((opt) => (
-                  <Pressable
-                    key={opt.id}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setRiskLevel(opt.id);
-                    }}
-                    style={[
-                      styles.riskOption,
-                      riskLevel === opt.id && {
-                        backgroundColor: RISK_THEME[opt.id].bg12,
-                        borderColor: RISK_THEME[opt.id].accent,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={opt.icon as any}
-                      size={20}
-                      color={riskLevel === opt.id ? RISK_THEME[opt.id].accent : colors.mutedForeground}
-                    />
-                    <Text style={[
-                      styles.riskLabel,
-                      riskLevel === opt.id && { color: RISK_THEME[opt.id].accent },
-                    ]}>
-                      {opt.label}
-                    </Text>
-                    <Text style={styles.riskDesc}>{opt.desc}</Text>
-                  </Pressable>
-                ))}
+              {/* Risk Level — Card */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionLabel}>Risk level?</Text>
+                <View style={styles.riskRow}>
+                  {riskOptions.map((opt) => (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setRiskLevel(opt.id);
+                      }}
+                      style={[
+                        styles.riskOption,
+                        riskLevel === opt.id && {
+                          backgroundColor: RISK_THEME[opt.id].bg12,
+                          borderColor: RISK_THEME[opt.id].accent,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={opt.icon as any}
+                        size={20}
+                        color={riskLevel === opt.id ? RISK_THEME[opt.id].accent : colors.mutedForeground}
+                      />
+                      <Text style={[
+                        styles.riskLabel,
+                        riskLevel === opt.id && { color: RISK_THEME[opt.id].accent },
+                      ]}>
+                        {opt.label}
+                      </Text>
+                      <Text style={styles.riskDesc}>{opt.desc}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
 
-              {/* Sportsbook */}
-              <Text style={styles.sectionLabel}>Sportsbook?</Text>
-              {availableBooks.length > 0 ? (
-                <View style={styles.booksRow}>
-                  {availableBooks.filter(b => b.canBuild).map((book) => {
-                    const isSelected = selectedBookmaker === book.name;
-                    const logo = BOOKMAKER_LOGOS[book.name];
-                    return (
-                      <Pressable
-                        key={book.name}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSelectedBookmaker(book.name);
-                        }}
-                        style={[
-                          styles.bookOption,
-                          isSelected && {
-                            backgroundColor: theme.bg12,
-                            borderColor: theme.accent,
-                          },
-                        ]}
-                      >
-                        {logo ? (
-                          <Image
-                            source={logo}
-                            style={styles.bookOptionLogo}
-                            contentFit="contain"
-                          />
-                        ) : (
+              {/* Sportsbook — Card */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionLabel}>Sportsbook?</Text>
+                {availableBooks.length > 0 ? (
+                  <View style={styles.booksRow}>
+                    {availableBooks.filter(b => b.canBuild).map((book) => {
+                      const isSelected = selectedBookmaker === book.name;
+                      const logo = BOOKMAKER_LOGOS[book.name];
+                      return (
+                        <Pressable
+                          key={book.name}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setSelectedBookmaker(book.name);
+                          }}
+                          style={[
+                            styles.bookOption,
+                            isSelected && {
+                              backgroundColor: theme.bg12,
+                              borderColor: theme.accent,
+                            },
+                          ]}
+                        >
+                          {logo ? (
+                            <Image
+                              source={logo}
+                              style={styles.bookOptionLogo}
+                              contentFit="contain"
+                            />
+                          ) : (
+                            <Text style={[
+                              styles.bookOptionName,
+                              isSelected && { color: theme.accent },
+                            ]}>
+                              {book.name}
+                            </Text>
+                          )}
                           <Text style={[
-                            styles.bookOptionName,
+                            styles.bookOptionCount,
                             isSelected && { color: theme.accent },
                           ]}>
-                            {book.name}
+                            {book.legCount} legs
                           </Text>
-                        )}
-                        <Text style={[
-                          styles.bookOptionCount,
-                          isSelected && { color: theme.accent },
-                        ]}>
-                          {book.legCount} legs
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.notEnoughText}>No sportsbooks available</Text>
-              )}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={styles.notEnoughText}>No sportsbooks available</Text>
+                )}
+              </View>
 
               {/* Generate Button */}
               <Pressable
@@ -778,16 +784,23 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     marginBottom: spacing[5],
   },
+  sectionCard: {
+    backgroundColor: glass.card.backgroundColor,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: glass.card.borderColor,
+    padding: spacing[4],
+    marginBottom: spacing[3],
+  },
   sectionLabel: {
     fontSize: typography.sizes.base,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
-    marginBottom: spacing[2],
+    marginBottom: spacing[3],
   },
   optionsRow: {
     flexDirection: "row",
     gap: spacing[2],
-    marginBottom: spacing[5],
   },
   countOption: {
     flex: 1,
@@ -809,7 +822,6 @@ const styles = StyleSheet.create({
   riskRow: {
     flexDirection: "row",
     gap: spacing[2],
-    marginBottom: spacing[5],
   },
   riskOption: {
     flex: 1,
@@ -839,7 +851,7 @@ const styles = StyleSheet.create({
   booksRow: {
     flexDirection: "row",
     gap: spacing[2],
-    marginBottom: spacing[5],
+    flexWrap: "wrap",
   },
   bookOption: {
     flex: 1,
@@ -877,6 +889,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     height: 56,
     borderRadius: borderRadius.full,
+    marginTop: spacing[1],
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -986,12 +999,12 @@ const styles = StyleSheet.create({
   },
   // Slip legs
   slipLeg: {
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    backgroundColor: glass.card.backgroundColor,
     borderRadius: borderRadius.xl,
     padding: spacing[3],
     marginBottom: spacing[2],
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.05)",
+    borderColor: glass.card.borderColor,
   },
   slipLegContent: {
     flexDirection: "row",

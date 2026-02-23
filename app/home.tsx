@@ -30,6 +30,7 @@ import { FloatingParticles } from "../components/ui/FloatingParticles";
 import { PageIndicator } from "../components/ui/PageIndicator";
 import { BoardView } from "../components/ui/BoardView";
 import { BuilderView } from "../components/ui/BuilderView";
+import { PicksView } from "../components/ui/PicksView";
 import { useCachedGames } from "./hooks/useCachedGames";
 import i18n from "../i18n";
 
@@ -38,18 +39,25 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RATING_SHOWN_KEY = "@rating_shown";
 
 type HomeParams = {
-  page?: "board" | "scan" | "builder";
+  page?: "board" | "picks" | "scan" | "builder" | "parlay";
 };
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<HomeParams>();
   const { isSubscribed, purchaseLoading } = useRevenueCatPurchases();
 
-  // Determine initial page based on params (0 = Board, 1 = Scan, 2 = Builder)
-  const initialPage = params.page === "board" ? 0 : params.page === "builder" ? 2 : 1;
+  // Determine initial page based on params (0 = Board, 1 = Picks, 2 = Scan, 3 = Parlay)
+  const initialPage = params.page === "board" ? 0 : params.page === "picks" ? 1 : (params.page === "builder" || params.page === "parlay") ? 3 : 2;
 
   // Page state for tab switching
   const [activePage, setActivePage] = useState(initialPage);
+
+  // Sync activePage when navigating back with page param (e.g., from player chart)
+  useEffect(() => {
+    if (params.page) {
+      setActivePage(initialPage);
+    }
+  }, [params.page]);
 
   // Single shared data fetch for Board + Builder tabs
   const { games: allGames, loading: gamesLoading, error: gamesError } = useCachedGames();
@@ -310,7 +318,11 @@ export default function HomeScreen() {
         </View>
 
         <View style={[styles.tabContent, activePage !== 1 && styles.hidden]}>
-          {/* Scan page — COMPLETELY UNCHANGED */}
+          <PicksView />
+        </View>
+
+        <View style={[styles.tabContent, activePage !== 2 && styles.hidden]}>
+          {/* Scan page — Camera + Gallery */}
           <View style={styles.bottomContainer}>
             {/* Scan a Slip — primary card */}
             <Animated.View style={getAnimatedStyle(2)}>
@@ -331,7 +343,7 @@ export default function HomeScreen() {
             >
               <View style={styles.actionCardLeft}>
                 <View style={[styles.actionIconWrap, styles.actionIconPrimary]}>
-                  <Ionicons name="scan" size={20} color={colors.primaryForeground} />
+                  <Ionicons name="scan" size={22} color={colors.primaryForeground} />
                 </View>
                 <View>
                   <Text style={[styles.actionCardTitle, styles.actionCardTitlePrimary]}>{i18n.t("imagePickerTakePhoto")}</Text>
@@ -361,7 +373,7 @@ export default function HomeScreen() {
             >
               <View style={styles.actionCardLeft}>
                 <View style={styles.actionIconWrap}>
-                  <Ionicons name="images-outline" size={20} color={colors.primary} />
+                  <Ionicons name="images-outline" size={22} color={colors.primary} />
                 </View>
                 <View>
                   <Text style={styles.actionCardTitle}>{i18n.t("imagePickerChooseFromLibrary")}</Text>
@@ -372,37 +384,10 @@ export default function HomeScreen() {
             </Pressable>
             </Animated.View>
 
-            {/* Build a Parlay — switches to Builder tab */}
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                if (!isSubscribed) {
-                  router.push("/paywall");
-                  return;
-                }
-                handlePageChange(2);
-              }}
-              style={({ pressed }) => [
-                styles.actionCard,
-                styles.actionCardGlass,
-                pressed && styles.actionCardGlassPressed,
-              ]}
-            >
-              <View style={styles.actionCardLeft}>
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="layers" size={20} color={colors.primary} />
-                </View>
-                <View>
-                  <Text style={styles.actionCardTitle}>Build a Parlay</Text>
-                  <Text style={styles.actionCardSub}>Pick legs, set risk, get your slip</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-            </Pressable>
           </View>
         </View>
 
-        <View style={[styles.tabContent, activePage !== 2 && styles.hidden]}>
+        <View style={[styles.tabContent, activePage !== 3 && styles.hidden]}>
           <BuilderView games={allGames} />
         </View>
 
@@ -457,7 +442,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    height: 68,
+    height: 80,
     borderRadius: borderRadius.xl,
     paddingHorizontal: spacing[4],
   },
@@ -485,8 +470,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionIconWrap: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: borderRadius.lg,
     backgroundColor: "rgba(0, 215, 215, 0.1)",
     alignItems: "center",

@@ -322,6 +322,7 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player }) => {
                         statType: prop.statType,
                         line: String(prop.line),
                         otherProps: JSON.stringify(others),
+                        from: "board",
                       },
                     });
                   }}

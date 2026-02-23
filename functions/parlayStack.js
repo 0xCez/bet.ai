@@ -28,6 +28,16 @@ const { calculateGreenScore } = require('./shared/greenScore');
 const GOBLIN_ODDS_THRESHOLD = -400;
 const GOBLIN_ODDS_FLOOR = -650;
 
+// Quality gates — same thresholds as EdgeBoard
+const MIN_GAMES = 5;
+const MIN_AVG_MINUTES = 20;
+
+function parseMinutes(minStr) {
+  if (!minStr || typeof minStr !== 'string') return 0;
+  const parts = minStr.split(':');
+  return (parseInt(parts[0]) || 0) + ((parseInt(parts[1]) || 0) / 60);
+}
+
 // Minimum signal thresholds for a valid parlay leg
 const MIN_L10_HIT_PCT = 60;   // For Over: ≥60%. For Under: ≤40% (i.e. 100-60)
 const MIN_SZN_HIT_PCT = 50;   // For Over: ≥50%. For Under: ≤50%
@@ -79,7 +89,12 @@ async function processParlayStack(eventId, sharedData) {
   for (const [mapKey, altLines] of altMap) {
     const [playerName, statType] = mapKey.split('|');
     const gameLogs = gameLogsMap[playerName];
-    if (!gameLogs || gameLogs.length < 5) continue; // Need sufficient data
+    if (!gameLogs || gameLogs.length < MIN_GAMES) continue; // Need sufficient data
+
+    // Quality gate: minimum minutes per game
+    const recentLogs = gameLogs.slice(0, 10);
+    const avgMin = recentLogs.reduce((s, g) => s + parseMinutes(g.min), 0) / recentLogs.length;
+    if (avgMin < MIN_AVG_MINUTES) continue;
 
     // L10 average for this stat
     const l10Avg = getL10Average(gameLogs, statType);
@@ -93,30 +108,60 @@ async function processParlayStack(eventId, sharedData) {
 
     // Filter alt lines to goblin-tier (odds between floor and ceiling)
     for (const alt of altLines) {
-      // Check Over side
-      if (alt.oddsOver != null && alt.oddsOver <= GOBLIN_ODDS_THRESHOLD && alt.oddsOver >= GOBLIN_ODDS_FLOOR) {
-        const leg = validateLeg({
-          playerName, statType, prediction: 'Over',
-          altLine: alt.line, altOdds: alt.oddsOver,
-          bookmaker: alt.bookmakerOver,
-          gameLogs, l10Avg, opponentDefense, opponentTeam,
-          team: isHome ? homeTeam : awayTeam,
-          isHome: !!isHome,
-        });
-        if (leg) { leg.playerId = playerIdMap[playerName] || null; legs.push(leg); }
+      // Collect all bookmaker odds for this alt line in goblin range
+      const overBooks = [];
+      const underBooks = [];
+      for (const bkEntry of (alt.allBookmakers || [])) {
+        if (bkEntry.over != null && bkEntry.over <= GOBLIN_ODDS_THRESHOLD && bkEntry.over >= GOBLIN_ODDS_FLOOR) {
+          overBooks.push({ bk: bkEntry.bk, odds: bkEntry.over });
+        }
+        if (bkEntry.under != null && bkEntry.under <= GOBLIN_ODDS_THRESHOLD && bkEntry.under >= GOBLIN_ODDS_FLOOR) {
+          underBooks.push({ bk: bkEntry.bk, odds: bkEntry.under });
+        }
       }
 
-      // Check Under side
-      if (alt.oddsUnder != null && alt.oddsUnder <= GOBLIN_ODDS_THRESHOLD && alt.oddsUnder >= GOBLIN_ODDS_FLOOR) {
+      // Fallback: if allBookmakers is empty, use legacy single-bookmaker fields
+      if (overBooks.length === 0 && alt.oddsOver != null && alt.oddsOver <= GOBLIN_ODDS_THRESHOLD && alt.oddsOver >= GOBLIN_ODDS_FLOOR) {
+        overBooks.push({ bk: alt.bookmakerOver, odds: alt.oddsOver });
+      }
+      if (underBooks.length === 0 && alt.oddsUnder != null && alt.oddsUnder <= GOBLIN_ODDS_THRESHOLD && alt.oddsUnder >= GOBLIN_ODDS_FLOOR) {
+        underBooks.push({ bk: alt.bookmakerUnder, odds: alt.oddsUnder });
+      }
+
+      // Check Over side — use best odds but carry all books
+      if (overBooks.length > 0) {
+        overBooks.sort((a, b) => b.odds - a.odds); // best (least negative) first
         const leg = validateLeg({
-          playerName, statType, prediction: 'Under',
-          altLine: alt.line, altOdds: alt.oddsUnder,
-          bookmaker: alt.bookmakerUnder,
+          playerName, statType, prediction: 'Over',
+          altLine: alt.line, altOdds: overBooks[0].odds,
+          bookmaker: overBooks[0].bk,
           gameLogs, l10Avg, opponentDefense, opponentTeam,
           team: isHome ? homeTeam : awayTeam,
           isHome: !!isHome,
         });
-        if (leg) { leg.playerId = playerIdMap[playerName] || null; legs.push(leg); }
+        if (leg) {
+          leg.playerId = playerIdMap[playerName] || null;
+          leg.allBookmakers = overBooks;
+          legs.push(leg);
+        }
+      }
+
+      // Check Under side — use best odds but carry all books
+      if (underBooks.length > 0) {
+        underBooks.sort((a, b) => b.odds - a.odds);
+        const leg = validateLeg({
+          playerName, statType, prediction: 'Under',
+          altLine: alt.line, altOdds: underBooks[0].odds,
+          bookmaker: underBooks[0].bk,
+          gameLogs, l10Avg, opponentDefense, opponentTeam,
+          team: isHome ? homeTeam : awayTeam,
+          isHome: !!isHome,
+        });
+        if (leg) {
+          leg.playerId = playerIdMap[playerName] || null;
+          leg.allBookmakers = underBooks;
+          legs.push(leg);
+        }
       }
     }
   }

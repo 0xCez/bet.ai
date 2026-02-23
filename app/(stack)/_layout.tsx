@@ -70,6 +70,15 @@ export default function StackLayout() {
           gestureDirection: "horizontal",
         }}
       />
+      <Stack.Screen
+        name="top-picks"
+        options={{
+          freezeOnBlur: true,
+          animation: "slide_from_right",
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
+        }}
+      />
     </Stack>
   );
 }

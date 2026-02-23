@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  SectionList,
   Pressable,
   Modal,
   Dimensions,
@@ -15,17 +14,26 @@ import { BlurView } from "expo-blur";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { CachedGame } from "./CachedGameCard";
-import { colors, spacing, borderRadius, typography } from "../../constants/designTokens";
+import { colors, spacing, borderRadius, typography, glass } from "../../constants/designTokens";
 import { getTeamAbbreviation, formatStatType, formatOdds, formatGameTime, BOOKMAKER_LOGOS } from "../../utils/formatters";
 import { getPlayerImage } from "../../utils/playerImages";
+import { SPORT_LIST, type SportId } from "../../config/sports";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const TILE_GAP = spacing[3]; // 12px
+const TILE_PADDING = spacing[4]; // 16px
+const TILE_WIDTH = (SCREEN_WIDTH - TILE_PADDING * 2 - TILE_GAP) / 2;
 
 // ── Types ──
 
 type ViewMode = "topPicks" | "byGame";
-type SportFilter = "all" | "nba" | "soccer";
 type TeamFilter = "all" | string;
+type SportFilter = SportId;
+
+const VIEW_MODE_OPTIONS: { id: ViewMode; label: string; icon: string }[] = [
+  { id: "topPicks", label: "Players", icon: "people" },
+  { id: "byGame", label: "Games", icon: "basketball" },
+];
 
 interface PickRow {
   key: string;
@@ -39,12 +47,16 @@ interface PickRow {
   oddsUnder?: number;
   bookmakerOver?: string;
   bookmakerUnder?: string;
+  allBks?: { bk: string; odds: number }[];
   l10Avg?: number;
   hitRates?: {
     l10?: { over: number; total: number; pct: number };
     season?: { over: number; total: number; pct: number };
   };
+  directionalHitRates?: { l10?: number | null; l20?: number | null; season?: number | null };
   greenScore?: number;
+  betScore?: number;
+  edge?: number;
   confidenceTier?: string;
   gameId: string;
   sport: string;
@@ -55,11 +67,37 @@ interface PickRow {
   team2Id?: string;
 }
 
-interface GameSection {
-  title: string;
-  gameTime: string | null;
-  data: PickRow[];
+interface GroupedPlayer {
+  key: string;
+  playerName: string;
+  team: string;
+  opponent: string;
+  gameId: string;
+  sport: string;
+  gameStartTime?: string;
+  team1: string;
+  team2: string;
+  bestProp: PickRow;
+  additionalCount: number;
+  allProps: PickRow[];
 }
+
+interface GameCardData {
+  key: string;
+  gameId: string;
+  team1: string;
+  team2: string;
+  gameTime: string | null;
+  players: GroupedPlayer[];
+}
+
+// ── Helpers ──
+
+const getScoreColor = (score: number): string => {
+  if (score >= 75) return colors.success;
+  if (score >= 60) return colors.primary;
+  return colors.mutedForeground;
+};
 
 // ── Props ──
 
@@ -72,19 +110,24 @@ interface BoardViewProps {
 // ── Component ──
 
 export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>("topPicks");
-  const [sportFilter, setSportFilter] = useState<SportFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("byGame");
+  const [sportFilter, setSportFilter] = useState<SportFilter>("nba");
   const [teamFilter, setTeamFilter] = useState<TeamFilter>("all");
   const [showTeamDropdown, setShowTeamDropdown] = useState(false);
+  const [showSportDropdown, setShowSportDropdown] = useState(false);
+  const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const [bookFilter, setBookFilter] = useState<string>("all");
+  const [showBookDropdown, setShowBookDropdown] = useState(false);
 
-  // ── Extract all picks from games (recycled from PlayerPropsCarousel logic) ──
-  const { allPicks, uniqueTeams } = useMemo(() => {
+  // ── Extract, filter, and group picks ──
+  const { groupedPlayers, uniqueTeams, uniqueBooks } = useMemo(() => {
     const picks: PickRow[] = [];
     const teamsSet = new Set<string>();
+    const booksSet = new Set<string>();
 
     games.forEach((game) => {
       // Sport filter
-      if (sportFilter !== "all" && game.sport !== sportFilter) return;
+      if (game.sport !== sportFilter) return;
 
       const mlProps = game.analysis?.mlPlayerProps;
       const topProps = mlProps?.edgeBoard?.topProps || mlProps?.topProps || [];
@@ -94,6 +137,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
 
         const isHomeTeam = prop.team === game.team1;
         const opponent = isHomeTeam ? game.team2 : game.team1;
+        const gs = prop.greenScore || 0;
 
         picks.push({
           key: `${game.id}-${prop.playerName}-${prop.statType}-${prop.line}`,
@@ -107,9 +151,13 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
           oddsUnder: prop.oddsUnder,
           bookmakerOver: prop.bookmakerOver,
           bookmakerUnder: prop.bookmakerUnder,
+          allBks: prop.allBks,
           l10Avg: prop.l10Avg,
           hitRates: prop.hitRates,
-          greenScore: prop.greenScore,
+          directionalHitRates: prop.directionalHitRates,
+          greenScore: gs,
+          betScore: prop.betScore,
+          edge: prop.edge,
           confidenceTier: prop.confidenceTier || prop.bettingValue || "medium",
           gameId: game.id,
           sport: game.sport,
@@ -121,58 +169,117 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
         });
 
         if (prop.team) teamsSet.add(prop.team);
+        // Collect all bookmakers from allBks array
+        if (prop.allBks) {
+          for (const b of prop.allBks) booksSet.add(b.bk);
+        }
+        // Fallback for old cached data without allBks
+        if (!prop.allBks || prop.allBks.length === 0) {
+          if (prop.bookmakerOver) booksSet.add(prop.bookmakerOver);
+          if (prop.bookmakerUnder) booksSet.add(prop.bookmakerUnder);
+        }
       });
     });
 
-    // Sort: green score desc → confidence tier → l10 hit rate
-    const tierOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
-    picks.sort((a, b) => {
-      const greenDiff = (b.greenScore || 0) - (a.greenScore || 0);
-      if (greenDiff !== 0) return greenDiff;
-      const tierDiff = (tierOrder[a.confidenceTier || "medium"] || 1) - (tierOrder[b.confidenceTier || "medium"] || 1);
-      if (tierDiff !== 0) return tierDiff;
-      return (b.hitRates?.l10?.pct || 0) - (a.hitRates?.l10?.pct || 0);
+    // Group by player + game
+    const playerMap = new Map<string, GroupedPlayer>();
+    picks.forEach((pick) => {
+      const groupKey = `${pick.playerName}-${pick.gameId}`;
+      if (!playerMap.has(groupKey)) {
+        playerMap.set(groupKey, {
+          key: groupKey,
+          playerName: pick.playerName,
+          team: pick.team,
+          opponent: pick.opponent,
+          gameId: pick.gameId,
+          sport: pick.sport,
+          gameStartTime: pick.gameStartTime,
+          team1: pick.team1,
+          team2: pick.team2,
+          bestProp: pick,
+          additionalCount: 0,
+          allProps: [pick],
+        });
+      } else {
+        const group = playerMap.get(groupKey)!;
+        group.allProps.push(pick);
+        group.additionalCount++;
+        if ((pick.greenScore || 0) > (group.bestProp.greenScore || 0)) {
+          group.bestProp = pick;
+        }
+      }
     });
 
-    return {
-      allPicks: picks,
-      uniqueTeams: Array.from(teamsSet).sort(),
+    // Sort by betScore (primary), then greenScore, then directional L10 hit rate
+    const dirL10 = (p: PickRow): number => {
+      if (p.directionalHitRates?.l10 != null) return p.directionalHitRates.l10;
+      const raw = p.hitRates?.l10?.pct;
+      if (raw == null) return 0;
+      return p.prediction === "over" ? raw : 100 - raw;
     };
+    const grouped = Array.from(playerMap.values()).sort((a, b) => {
+      const scoreDiff = (b.bestProp.betScore || 0) - (a.bestProp.betScore || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      const greenDiff = (b.bestProp.greenScore || 0) - (a.bestProp.greenScore || 0);
+      if (greenDiff !== 0) return greenDiff;
+      return dirL10(b.bestProp) - dirL10(a.bestProp);
+    });
+
+    return { groupedPlayers: grouped, uniqueTeams: Array.from(teamsSet).sort(), uniqueBooks: Array.from(booksSet).sort() };
   }, [games, sportFilter]);
 
-  // ── Team filter ──
-  const filteredPicks = useMemo(() => {
-    if (teamFilter === "all") return allPicks;
-    return allPicks.filter((p) => p.team === teamFilter);
-  }, [allPicks, teamFilter]);
-
-  // ── By Game sections ──
-  const gameSections = useMemo((): GameSection[] => {
-    const byGame = new Map<string, { picks: PickRow[], game: PickRow }>();
-    filteredPicks.forEach((pick) => {
-      if (!byGame.has(pick.gameId)) {
-        byGame.set(pick.gameId, { picks: [], game: pick });
-      }
-      byGame.get(pick.gameId)!.picks.push(pick);
-    });
-
-    const sections: GameSection[] = [];
-    for (const [, { picks, game }] of byGame) {
-      sections.push({
-        title: `${getTeamAbbreviation(game.team1)} vs ${getTeamAbbreviation(game.team2)}`,
-        gameTime: formatGameTime(game.gameStartTime),
-        data: picks,
+  // ── Team + bookmaker filter ──
+  const filteredPlayers = useMemo(() => {
+    let result = groupedPlayers;
+    if (teamFilter !== "all") {
+      result = result.filter((p) => p.team === teamFilter);
+    }
+    if (bookFilter !== "all") {
+      result = result.filter((p) => {
+        // Check allBks on any of the player's props
+        for (const prop of p.allProps) {
+          if (prop.allBks?.some(b => b.bk === bookFilter)) return true;
+        }
+        // Fallback for old cached data
+        const best = p.bestProp;
+        return best.bookmakerOver === bookFilter || best.bookmakerUnder === bookFilter;
       });
     }
-    // Sort by game time
-    sections.sort((a, b) => {
+    return result;
+  }, [groupedPlayers, teamFilter, bookFilter]);
+
+  // ── Game cards data (for Games mode) ──
+  const gameCards = useMemo((): GameCardData[] => {
+    const byGame = new Map<string, GameCardData>();
+    filteredPlayers.forEach((player) => {
+      if (!byGame.has(player.gameId)) {
+        byGame.set(player.gameId, {
+          key: player.gameId,
+          gameId: player.gameId,
+          team1: player.team1,
+          team2: player.team2,
+          gameTime: formatGameTime(player.gameStartTime),
+          players: [],
+        });
+      }
+      byGame.get(player.gameId)!.players.push(player);
+    });
+    const cards = Array.from(byGame.values());
+    cards.sort((a, b) => {
       if (!a.gameTime && !b.gameTime) return 0;
       if (!a.gameTime) return 1;
       if (!b.gameTime) return -1;
       return 0;
     });
-    return sections;
-  }, [filteredPicks]);
+    return cards;
+  }, [filteredPlayers]);
+
+  // ── Ensure even count for 2-col grid (pad with null) ──
+  const tilesData = useMemo(() => {
+    const data: (GroupedPlayer | null)[] = [...filteredPlayers];
+    if (data.length % 2 !== 0) data.push(null);
+    return data;
+  }, [filteredPlayers]);
 
   // ── Team options ──
   const teamOptions = useMemo(() => {
@@ -185,13 +292,15 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
   }, [uniqueTeams]);
 
   const currentTeamLabel = teamOptions.find((o) => o.id === teamFilter)?.label || "All Teams";
+  const currentSportLabel = SPORT_LIST.find((s) => s.id === sportFilter)?.label || "NBA";
+  const currentViewLabel = VIEW_MODE_OPTIONS.find((v) => v.id === viewMode)?.label || "Players";
 
   // ── Navigation ──
-  const handlePickPress = useCallback((pick: PickRow) => {
+  const handlePlayerPress = useCallback((player: GroupedPlayer) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Collect other props for same player in same game
-    const otherProps = filteredPicks
-      .filter((p) => p.playerName === pick.playerName && p.gameId === pick.gameId && p.key !== pick.key)
+    const best = player.bestProp;
+    const otherProps = player.allProps
+      .filter((p) => p.key !== best.key)
       .map((p) => JSON.stringify({
         statType: p.statType,
         line: p.line,
@@ -207,100 +316,246 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     router.push({
       pathname: "/player-prop-chart" as any,
       params: {
-        playerName: pick.playerName,
-        statType: pick.statType,
-        line: String(pick.line),
+        playerName: best.playerName,
+        statType: best.statType,
+        line: String(best.line),
         otherProps: JSON.stringify(otherProps),
+        from: "board",
       },
     });
-  }, [filteredPicks]);
+  }, []);
 
-  // ── Pick Row Renderer ──
-  const renderPickRow = useCallback(({ item }: { item: PickRow }) => {
-    const isOver = item.prediction === "over";
-    const odds = isOver ? item.oddsOver : item.oddsUnder;
-    const bookmaker = isOver ? item.bookmakerOver : item.bookmakerUnder;
+  // ═══════════════════════════════════════════════
+  // TOP MODE — 2-Column Player Tiles
+  // ═══════════════════════════════════════════════
+
+  const renderPlayerTile = useCallback(({ item }: { item: GroupedPlayer | null }) => {
+    if (!item) return <View style={{ width: TILE_WIDTH }} />;
+
+    const best = item.bestProp;
+    const isOver = best.prediction === "over";
+    // If filtering by bookmaker, show that book's odds; otherwise best odds
+    let odds = isOver ? best.oddsOver : best.oddsUnder;
+    let bookmaker = isOver ? best.bookmakerOver : best.bookmakerUnder;
+    if (bookFilter !== "all" && best.allBks) {
+      const match = best.allBks.find(b => b.bk === bookFilter);
+      if (match) { odds = match.odds; bookmaker = match.bk; }
+    }
     const bookLogo = bookmaker ? BOOKMAKER_LOGOS[bookmaker] : null;
-    const l10Pct = item.hitRates?.l10?.pct;
-    const greenDots = item.greenScore || 0;
+    // Directional L10: shows hit rate matching the prediction direction
+    const l10Pct = best.directionalHitRates?.l10
+      ?? (best.hitRates?.l10?.pct != null
+        ? (isOver ? best.hitRates.l10.pct : 100 - best.hitRates.l10.pct)
+        : null);
+    const score = best.betScore ?? 0;
+    const scoreColor = getScoreColor(score);
     const playerImage = getPlayerImage(item.playerName);
 
     return (
       <Pressable
-        onPress={() => handlePickPress(item)}
-        style={({ pressed }) => [styles.pickRow, pressed && styles.pickRowPressed]}
+        onPress={() => handlePlayerPress(item)}
+        style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
       >
         {/* Headshot */}
-        <View style={styles.headshotWrap}>
+        <View style={styles.tileHeadshotWrap}>
           {playerImage ? (
-            <ExpoImage source={playerImage} style={styles.headshot} contentFit="cover" />
+            <ExpoImage source={playerImage} style={styles.tileHeadshot} contentFit="cover" />
           ) : (
-            <View style={styles.headshotPlaceholder}>
-              <Text style={styles.initialsText}>
+            <View style={styles.tileHeadshotPlaceholder}>
+              <Text style={styles.tileInitials}>
                 {item.playerName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
               </Text>
             </View>
           )}
         </View>
 
-        {/* Center: Player + Prop */}
-        <View style={styles.pickCenter}>
-          <View style={styles.pickNameRow}>
-            <Text style={styles.pickPlayerName} numberOfLines={1}>{item.playerName}</Text>
-            <Text style={styles.pickTeamCode}>{getTeamAbbreviation(item.team)}</Text>
+        {/* Name + Team */}
+        <Text style={styles.tileName} numberOfLines={1}>{item.playerName}</Text>
+        <Text style={styles.tileMatchup} numberOfLines={1}>
+          {getTeamAbbreviation(item.team)} · vs {getTeamAbbreviation(item.opponent)}
+        </Text>
+
+        {/* Stat + Line + Odds + Book — all on one line */}
+        <View style={styles.tilePropRow}>
+          <Text style={styles.tileStatType}>{formatStatType(best.statType)}</Text>
+          <Text style={[styles.tileDirection, isOver ? styles.tileOver : styles.tileUnder]}>
+            {isOver ? "O" : "U"} {best.line}
+          </Text>
+          {odds != null && <Text style={styles.tileOdds}>{formatOdds(odds)}</Text>}
+          {bookLogo && <ExpoImage source={bookLogo} style={styles.tileBookLogo} contentFit="contain" />}
+        </View>
+
+        {/* Bottom: L10 + Bet Score */}
+        <View style={styles.tileBottomRow}>
+          {l10Pct != null && (
+            <Text style={styles.tileHitRate}>L10: {Math.round(l10Pct)}%</Text>
+          )}
+          {score > 0 && (
+            <View style={[styles.confidenceBadge, { backgroundColor: `${scoreColor}20` }]}>
+              <Text style={[styles.confidenceBadgeText, { color: scoreColor }]}>
+                {score}%
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* +N more */}
+        {item.additionalCount > 0 && (
+          <View style={styles.tileMoreBadge}>
+            <Text style={styles.tileMoreText}>+{item.additionalCount} more</Text>
           </View>
-          <View style={styles.pickPropRow}>
-            <Text style={styles.pickStatType}>{formatStatType(item.statType)}</Text>
-            <Text style={[styles.pickDirection, isOver ? styles.pickOver : styles.pickUnder]}>
-              {isOver ? "O" : "U"} {item.line}
-            </Text>
-            {odds != null && (
-              <Text style={styles.pickOdds}>{formatOdds(odds)}</Text>
-            )}
-            {bookLogo && (
-              <ExpoImage source={bookLogo} style={styles.pickBookLogo} contentFit="contain" />
-            )}
-          </View>
-          <View style={styles.pickMetaRow}>
-            <Text style={styles.pickMatchup}>
-              vs {getTeamAbbreviation(item.opponent)}
-              {item.gameStartTime ? ` · ${formatGameTime(item.gameStartTime)}` : ""}
-            </Text>
-            <View style={styles.pickSignals}>
-              {l10Pct != null && (
-                <Text style={[styles.pickHitRate, l10Pct >= 60 ? styles.hitGreen : l10Pct < 40 ? styles.hitRed : null]}>
-                  L10: {l10Pct}%
-                </Text>
-              )}
-              {greenDots > 0 && (
-                <View style={styles.greenDotsRow}>
-                  {Array.from({ length: Math.min(greenDots, 5) }).map((_, i) => (
-                    <View key={i} style={styles.greenDot} />
-                  ))}
+        )}
+      </Pressable>
+    );
+  }, [handlePlayerPress]);
+
+  // ═══════════════════════════════════════════════
+  // GAMES MODE — Game Cards with Player Rows
+  // ═══════════════════════════════════════════════
+
+  const renderGameCard = useCallback(({ item: game }: { item: GameCardData }) => (
+    <View style={styles.gameCard}>
+      {/* Game Header */}
+      <View style={styles.gameHeader}>
+        <View style={styles.gameHeaderLeft}>
+          <Ionicons name="basketball" size={16} color={colors.primary} />
+          <Text style={styles.gameHeaderTitle}>
+            {getTeamAbbreviation(game.team1)} vs {getTeamAbbreviation(game.team2)}
+          </Text>
+        </View>
+        {game.gameTime && (
+          <Text style={styles.gameHeaderTime}>{game.gameTime}</Text>
+        )}
+      </View>
+
+      {/* Player Rows Inside Card */}
+      {game.players.map((player, idx) => {
+        const best = player.bestProp;
+        const isOver = best.prediction === "over";
+        let odds = isOver ? best.oddsOver : best.oddsUnder;
+        let bookmaker = isOver ? best.bookmakerOver : best.bookmakerUnder;
+        if (bookFilter !== "all" && best.allBks) {
+          const match = best.allBks.find(b => b.bk === bookFilter);
+          if (match) { odds = match.odds; bookmaker = match.bk; }
+        }
+        const bookLogo = bookmaker ? BOOKMAKER_LOGOS[bookmaker] : null;
+        // Directional L10: shows hit rate matching the prediction direction
+        const l10Pct = best.directionalHitRates?.l10
+          ?? (best.hitRates?.l10?.pct != null
+            ? (isOver ? best.hitRates.l10.pct : 100 - best.hitRates.l10.pct)
+            : null);
+        const score = best.betScore ?? 0;
+        const scoreColor = getScoreColor(score);
+        const playerImage = getPlayerImage(player.playerName);
+
+        return (
+          <Pressable
+            key={player.key}
+            onPress={() => handlePlayerPress(player)}
+            style={({ pressed }) => [
+              styles.gamePlayerRow,
+              pressed && styles.gamePlayerRowPressed,
+              idx < game.players.length - 1 && styles.gamePlayerRowDivider,
+            ]}
+          >
+            {/* Headshot */}
+            <View style={styles.gameHeadshotWrap}>
+              {playerImage ? (
+                <ExpoImage source={playerImage} style={styles.gameHeadshot} contentFit="cover" />
+              ) : (
+                <View style={styles.gameHeadshotPlaceholder}>
+                  <Text style={styles.gameInitials}>
+                    {player.playerName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                  </Text>
                 </View>
               )}
             </View>
-          </View>
-        </View>
-      </Pressable>
-    );
-  }, [handlePickPress]);
 
-  // ── Section Header (By Game mode) ──
-  const renderSectionHeader = useCallback(({ section }: { section: GameSection }) => (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{section.title}</Text>
-      {section.gameTime && (
-        <Text style={styles.sectionTime}>{section.gameTime}</Text>
-      )}
+            {/* Info */}
+            <View style={styles.gamePlayerInfo}>
+              <View style={styles.gamePlayerNameRow}>
+                <Text style={styles.gamePlayerName} numberOfLines={1}>{player.playerName}</Text>
+                <Text style={styles.gamePlayerTeam}>{getTeamAbbreviation(player.team)}</Text>
+                {player.additionalCount > 0 && (
+                  <View style={styles.moreBadge}>
+                    <Text style={styles.moreBadgeText}>+{player.additionalCount}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.gamePlayerPropRow}>
+                <Text style={styles.gameStatType}>{formatStatType(best.statType)}</Text>
+                <Text style={[styles.gameDirection, isOver ? styles.pickOver : styles.pickUnder]}>
+                  {isOver ? "O" : "U"} {best.line}
+                </Text>
+                {odds != null && <Text style={styles.gameOdds}>{formatOdds(odds)}</Text>}
+                {bookLogo && <ExpoImage source={bookLogo} style={styles.gameBookLogo} contentFit="contain" />}
+              </View>
+            </View>
+
+            {/* Right: Signals */}
+            <View style={styles.gameSignals}>
+              {l10Pct != null && (
+                <Text style={styles.gameHitRate}>L10: {Math.round(l10Pct)}%</Text>
+              )}
+              {score > 0 && (
+                <View style={[styles.confidenceBadge, { backgroundColor: `${scoreColor}20` }]}>
+                  <Text style={[styles.confidenceBadgeText, { color: scoreColor }]}>
+                    {score}%
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Pressable>
+        );
+      })}
     </View>
-  ), []);
+  ), [handlePlayerPress]);
 
-  // ── Header ──
+  // ═══════════════════════════════════════════════
+  // HEADER
+  // ═══════════════════════════════════════════════
+
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.headerTop}>
+      <View style={styles.titleRow}>
         <Text style={styles.title}>Today's Picks</Text>
+      </View>
+      <View style={styles.headerFilters}>
+        {/* Sport dropdown chip */}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowSportDropdown(true);
+          }}
+          style={({ pressed }) => [styles.filterChip, pressed && styles.filterChipPressed]}
+        >
+          <Ionicons
+            name={SPORT_LIST.find((s) => s.id === sportFilter)?.icon as any || "basketball"}
+            size={12}
+            color={colors.primary}
+          />
+          <Text style={styles.filterChipText}>{currentSportLabel}</Text>
+          <Ionicons name="chevron-down" size={12} color={colors.mutedForeground} />
+        </Pressable>
+
+        {/* View mode dropdown chip */}
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowViewDropdown(true);
+          }}
+          style={({ pressed }) => [styles.filterChip, pressed && styles.filterChipPressed]}
+        >
+          <Ionicons
+            name={VIEW_MODE_OPTIONS.find((v) => v.id === viewMode)?.icon as any || "people"}
+            size={12}
+            color={colors.primary}
+          />
+          <Text style={styles.filterChipText}>{currentViewLabel}</Text>
+          <Ionicons name="chevron-down" size={12} color={colors.mutedForeground} />
+        </Pressable>
+
+        {/* Team dropdown chip */}
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -308,75 +563,119 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
           }}
           style={({ pressed }) => [styles.filterChip, pressed && styles.filterChipPressed]}
         >
-          <Ionicons name="people" size={13} color={colors.primary} />
           <Text style={styles.filterChipText}>{currentTeamLabel}</Text>
-          <Ionicons name="chevron-down" size={13} color={colors.mutedForeground} />
+          <Ionicons name="chevron-down" size={12} color={colors.mutedForeground} />
         </Pressable>
-      </View>
 
-      {/* Sport chips */}
-      <View style={styles.sportChips}>
-        {(["all", "nba", "soccer"] as SportFilter[]).map((sport) => (
+        {/* Bookmaker dropdown chip */}
+        {uniqueBooks.length > 0 && (
           <Pressable
-            key={sport}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setSportFilter(sport);
-              setTeamFilter("all");
+              setShowBookDropdown(true);
             }}
-            style={[styles.sportChip, sportFilter === sport && styles.sportChipActive]}
+            style={({ pressed }) => [styles.filterChip, pressed && styles.filterChipPressed]}
           >
-            <Ionicons
-              name={sport === "all" ? "trophy" : sport === "nba" ? "basketball" : "football"}
-              size={14}
-              color={sportFilter === sport ? colors.background : colors.mutedForeground}
-            />
-            <Text style={[styles.sportChipText, sportFilter === sport && styles.sportChipTextActive]}>
-              {sport === "all" ? "All" : sport.toUpperCase()}
-            </Text>
+            <Text style={styles.filterChipText}>{bookFilter === "all" ? "All Books" : bookFilter}</Text>
+            <Ionicons name="chevron-down" size={12} color={colors.mutedForeground} />
           </Pressable>
-        ))}
-      </View>
-
-      {/* View mode toggle */}
-      <View style={styles.modeToggle}>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setViewMode("topPicks");
-          }}
-          style={[styles.modeTab, viewMode === "topPicks" && styles.modeTabActive]}
-        >
-          <Ionicons
-            name="flame"
-            size={14}
-            color={viewMode === "topPicks" ? colors.background : colors.mutedForeground}
-          />
-          <Text style={[styles.modeTabText, viewMode === "topPicks" && styles.modeTabTextActive]}>
-            Top Picks
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setViewMode("byGame");
-          }}
-          style={[styles.modeTab, viewMode === "byGame" && styles.modeTabActive]}
-        >
-          <Ionicons
-            name="basketball"
-            size={14}
-            color={viewMode === "byGame" ? colors.background : colors.mutedForeground}
-          />
-          <Text style={[styles.modeTabText, viewMode === "byGame" && styles.modeTabTextActive]}>
-            By Game
-          </Text>
-        </Pressable>
+        )}
       </View>
     </View>
   );
 
-  // ── Team Dropdown ──
+  // ═══════════════════════════════════════════════
+  // SPORT DROPDOWN
+  // ═══════════════════════════════════════════════
+
+  const renderSportDropdown = () => (
+    <Modal visible={showSportDropdown} transparent animationType="fade" onRequestClose={() => setShowSportDropdown(false)}>
+      <Pressable style={styles.dropdownOverlay} onPress={() => setShowSportDropdown(false)}>
+        <View style={styles.dropdownContainer}>
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.dropdownContent}>
+            <Text style={styles.dropdownTitle}>Select Sport</Text>
+            {SPORT_LIST.map((sport) => (
+              <Pressable
+                key={sport.id}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSportFilter(sport.id);
+                  setTeamFilter("all");
+                  setShowSportDropdown(false);
+                }}
+                style={({ pressed }) => [
+                  styles.dropdownOption,
+                  sportFilter === sport.id && styles.dropdownOptionActive,
+                  pressed && styles.dropdownOptionPressed,
+                ]}
+              >
+                <Ionicons
+                  name={sport.icon as any}
+                  size={18}
+                  color={sportFilter === sport.id ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[styles.dropdownOptionText, sportFilter === sport.id && styles.dropdownOptionTextActive]}>
+                  {sport.label}
+                </Text>
+                {!sport.available && (
+                  <Text style={styles.dropdownSoonBadge}>Soon</Text>
+                )}
+                {sportFilter === sport.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  // ═══════════════════════════════════════════════
+  // VIEW MODE DROPDOWN
+  // ═══════════════════════════════════════════════
+
+  const renderViewDropdown = () => (
+    <Modal visible={showViewDropdown} transparent animationType="fade" onRequestClose={() => setShowViewDropdown(false)}>
+      <Pressable style={styles.dropdownOverlay} onPress={() => setShowViewDropdown(false)}>
+        <View style={styles.dropdownContainer}>
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.dropdownContent}>
+            <Text style={styles.dropdownTitle}>View Mode</Text>
+            {VIEW_MODE_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.id}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setViewMode(opt.id);
+                  setShowViewDropdown(false);
+                }}
+                style={({ pressed }) => [
+                  styles.dropdownOption,
+                  viewMode === opt.id && styles.dropdownOptionActive,
+                  pressed && styles.dropdownOptionPressed,
+                ]}
+              >
+                <Ionicons
+                  name={opt.icon as any}
+                  size={18}
+                  color={viewMode === opt.id ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[styles.dropdownOptionText, viewMode === opt.id && styles.dropdownOptionTextActive]}>
+                  {opt.label}
+                </Text>
+                {viewMode === opt.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  // ═══════════════════════════════════════════════
+  // TEAM DROPDOWN
+  // ═══════════════════════════════════════════════
+
   const renderTeamDropdown = () => (
     <Modal visible={showTeamDropdown} transparent animationType="fade" onRequestClose={() => setShowTeamDropdown(false)}>
       <Pressable style={styles.dropdownOverlay} onPress={() => setShowTeamDropdown(false)}>
@@ -420,7 +719,62 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     </Modal>
   );
 
-  // ── Loading ──
+  const bookOptions = useMemo(() => {
+    const opts: { id: string; label: string }[] = [{ id: "all", label: "All Books" }];
+    uniqueBooks.forEach((bk) => opts.push({ id: bk, label: bk }));
+    return opts;
+  }, [uniqueBooks]);
+
+  const renderBookDropdown = () => (
+    <Modal visible={showBookDropdown} transparent animationType="fade" onRequestClose={() => setShowBookDropdown(false)}>
+      <Pressable style={styles.dropdownOverlay} onPress={() => setShowBookDropdown(false)}>
+        <View style={styles.dropdownContainer}>
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.dropdownContent}>
+            <Text style={styles.dropdownTitle}>Select Bookmaker</Text>
+            <FlatList
+              data={bookOptions}
+              keyExtractor={(item) => item.id}
+              style={styles.dropdownScroll}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item: option }) => {
+                const logo = option.id !== "all" ? BOOKMAKER_LOGOS[option.id] : null;
+                return (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setBookFilter(option.id);
+                      setShowBookDropdown(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.dropdownOption,
+                      bookFilter === option.id && styles.dropdownOptionActive,
+                      pressed && styles.dropdownOptionPressed,
+                    ]}
+                  >
+                    {logo ? (
+                      <ExpoImage source={logo} style={{ width: 18, height: 18 }} contentFit="contain" />
+                    ) : (
+                      <Ionicons name="book" size={18} color={bookFilter === option.id ? colors.primary : colors.mutedForeground} />
+                    )}
+                    <Text style={[styles.dropdownOptionText, bookFilter === option.id && styles.dropdownOptionTextActive]}>
+                      {option.label}
+                    </Text>
+                    {bookFilter === option.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+
+  // ═══════════════════════════════════════════════
+  // STATES: Loading / Error / Empty
+  // ═══════════════════════════════════════════════
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -432,7 +786,6 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     );
   }
 
-  // ── Error ──
   if (error) {
     return (
       <View style={styles.container}>
@@ -444,12 +797,31 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     );
   }
 
-  // ── Empty ──
-  if (filteredPicks.length === 0) {
+  // Check if selected sport is unavailable
+  const selectedSport = SPORT_LIST.find((s) => s.id === sportFilter);
+  if (selectedSport && !selectedSport.available) {
     return (
       <View style={styles.container}>
+        {renderSportDropdown()}
+        {renderViewDropdown()}
+        {renderHeader()}
+        <View style={styles.emptyContainer}>
+          <Ionicons name={selectedSport.icon as any} size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
+          <Text style={styles.emptyText}>{selectedSport.label} Coming Soon</Text>
+          <Text style={styles.emptySubtext}>Player props for {selectedSport.label.toLowerCase()} are in development</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (filteredPlayers.length === 0) {
+    return (
+      <View style={styles.container}>
+        {renderSportDropdown()}
+        {renderViewDropdown()}
         {renderHeader()}
         {renderTeamDropdown()}
+        {renderBookDropdown()}
         <View style={styles.emptyContainer}>
           <Ionicons name="analytics-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
           <Text style={styles.emptyText}>
@@ -461,94 +833,81 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     );
   }
 
-  // ── Main Render ──
+  // ═══════════════════════════════════════════════
+  // MAIN RENDER
+  // ═══════════════════════════════════════════════
+
   return (
     <View style={styles.container}>
+      {renderSportDropdown()}
+      {renderViewDropdown()}
       {renderTeamDropdown()}
+        {renderBookDropdown()}
 
       {viewMode === "topPicks" ? (
         <FlatList
-          data={filteredPicks}
-          keyExtractor={(item) => item.key}
-          renderItem={renderPickRow}
+          key="tiles-grid"
+          data={tilesData}
+          keyExtractor={(item, index) => item?.key || `pad-${index}`}
+          renderItem={renderPlayerTile as any}
+          numColumns={2}
+          columnWrapperStyle={styles.tileRow}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          getItemLayout={(_, index) => ({
-            length: 80,
-            offset: 80 * index,
-            index,
-          })}
         />
       ) : (
-        <SectionList
-          sections={gameSections}
+        <FlatList
+          key="games-list"
+          data={gameCards}
           keyExtractor={(item) => item.key}
-          renderItem={renderPickRow}
-          renderSectionHeader={renderSectionHeader as any}
+          renderItem={renderGameCard}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
         />
       )}
     </View>
   );
 };
 
-// ── Styles ──
+// ═══════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════
 
-const StyleSheet_create = StyleSheet.create;
-const styles = StyleSheet_create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  listContent: {
+    paddingBottom: spacing[10],
+  },
+
+  // ── Header ──
   header: {
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: TILE_PADDING,
     paddingBottom: spacing[3],
   },
-  headerTop: {
+  headerFilters: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    marginTop: spacing[2],
+  },
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: spacing[3],
   },
   title: {
     color: colors.foreground,
-    fontSize: typography.sizes["2xl"],
+    fontSize: typography.sizes.xl,
     fontFamily: typography.fontFamily.bold,
   },
-  // Sport chips
-  sportChips: {
-    flexDirection: "row",
-    gap: spacing[2],
-    marginBottom: spacing[3],
-  },
-  sportChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[1],
-    paddingVertical: spacing[1] + 2,
-    paddingHorizontal: spacing[3],
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.secondary,
-  },
-  sportChipActive: {
-    backgroundColor: colors.primary,
-  },
-  sportChipText: {
-    fontSize: 12,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.mutedForeground,
-  },
-  sportChipTextActive: {
-    color: colors.background,
-  },
-  // Filter chip
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[1],
+    gap: 4,
     paddingVertical: spacing[1],
     paddingHorizontal: spacing[2] + 2,
     backgroundColor: colors.rgba.primary15,
@@ -556,186 +915,266 @@ const styles = StyleSheet_create({
     borderWidth: 1,
     borderColor: colors.rgba.primary30,
   },
-  filterChipPressed: {
-    opacity: 0.7,
-  },
+  filterChipPressed: { opacity: 0.7 },
   filterChipText: {
     color: colors.foreground,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: typography.fontFamily.medium,
   },
-  // Mode toggle
-  modeToggle: {
-    flexDirection: "row",
-    backgroundColor: colors.secondary,
-    borderRadius: borderRadius.full,
-    padding: 3,
+
+  // ══════════════════════════════════════
+  // TOP MODE — Player Tiles (2-col grid)
+  // ══════════════════════════════════════
+
+  tileRow: {
+    paddingHorizontal: TILE_PADDING,
+    gap: TILE_GAP,
+    marginBottom: TILE_GAP,
   },
-  modeTab: {
-    flex: 1,
-    flexDirection: "row",
+  tile: {
+    width: TILE_WIDTH,
+    backgroundColor: glass.card.backgroundColor,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.08)",
+    padding: spacing[3],
     alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: spacing[1] + 2,
-    borderRadius: borderRadius.full,
   },
-  modeTabActive: {
-    backgroundColor: colors.primary,
+  tilePressed: {
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
   },
-  modeTabText: {
-    fontSize: 12,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.mutedForeground,
-  },
-  modeTabTextActive: {
-    color: colors.background,
-  },
-  // Pick row
-  listContent: {
-    paddingBottom: spacing[10],
-  },
-  pickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    gap: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.04)",
-  },
-  pickRowPressed: {
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-  },
-  headshotWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  tileHeadshotWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     overflow: "hidden",
     backgroundColor: "rgba(255, 255, 255, 0.06)",
+    marginBottom: spacing[2],
   },
-  headshot: {
-    width: 40,
-    height: 40,
+  tileHeadshot: {
+    width: 48,
+    height: 48,
   },
-  headshotPlaceholder: {
-    width: 40,
-    height: 40,
+  tileHeadshotPlaceholder: {
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
-  initialsText: {
-    fontSize: 14,
+  tileInitials: {
+    fontSize: 16,
     fontFamily: typography.fontFamily.bold,
     color: colors.mutedForeground,
   },
-  pickCenter: {
-    flex: 1,
-    gap: 2,
-  },
-  pickNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[2],
-  },
-  pickPlayerName: {
-    fontSize: typography.sizes.base,
+  tileName: {
+    fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
-    flexShrink: 1,
+    textAlign: "center",
+    marginBottom: 2,
   },
-  pickTeamCode: {
+  tileMatchup: {
     fontSize: 11,
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
+    textAlign: "center",
+    marginBottom: spacing[2],
   },
-  pickPropRow: {
+  tilePropRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[2],
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 4,
+    marginBottom: spacing[2],
   },
-  pickStatType: {
+  tileStatType: {
     fontSize: 13,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
-  pickDirection: {
+  tileDirection: {
     fontSize: 13,
     fontFamily: typography.fontFamily.semibold,
   },
-  pickOver: {
-    color: colors.success,
-  },
-  pickUnder: {
-    color: "#FF6B6B",
-  },
-  pickOdds: {
+  tileOver: { color: colors.success },
+  tileUnder: { color: "#FF6B6B" },
+  // tileOddsRow removed — merged into tilePropRow
+  tileOdds: {
     fontSize: 12,
     fontFamily: typography.fontFamily.bold,
     color: colors.mutedForeground,
   },
-  pickBookLogo: {
-    width: 20,
-    height: 20,
+  tileBookLogo: {
+    width: 18,
+    height: 18,
   },
-  pickMetaRow: {
+  tileBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  tileHitRate: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.success,
+  },
+  tileMoreBadge: {
+    marginTop: spacing[1],
+  },
+  tileMoreText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.primary,
+  },
+
+  // ══════════════════════════════════════
+  // GAMES MODE — Game Cards
+  // ══════════════════════════════════════
+
+  gameCard: {
+    marginHorizontal: TILE_PADDING,
+    marginBottom: TILE_GAP,
+    backgroundColor: glass.card.backgroundColor,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.08)",
+    overflow: "hidden",
+  },
+  gameHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2] + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.06)",
   },
-  pickMatchup: {
-    fontSize: 11,
-    fontFamily: typography.fontFamily.medium,
-    color: colors.mutedForeground,
-  },
-  pickSignals: {
+  gameHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
   },
-  pickHitRate: {
-    fontSize: 11,
+  gameHeaderTitle: {
+    fontSize: typography.sizes.sm,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
-  hitGreen: {
-    color: colors.success,
-  },
-  hitRed: {
-    color: "#FF6B6B",
-  },
-  greenDotsRow: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  greenDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
-  },
-  // Section header (By Game mode)
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2] + 2,
-    backgroundColor: "rgba(255, 255, 255, 0.03)",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.06)",
-  },
-  sectionTitle: {
-    fontSize: typography.sizes.base,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
-  },
-  sectionTime: {
+  gameHeaderTime: {
     fontSize: 12,
     fontFamily: typography.fontFamily.medium,
     color: colors.primary,
   },
-  // Dropdown
+
+  // Player rows inside game card
+  gamePlayerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2] + 2,
+    gap: spacing[2],
+  },
+  gamePlayerRowPressed: {
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+  },
+  gamePlayerRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.04)",
+  },
+  gameHeadshotWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  gameHeadshot: { width: 36, height: 36 },
+  gameHeadshotPlaceholder: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gameInitials: {
+    fontSize: 13,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+  },
+  gamePlayerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  gamePlayerNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  gamePlayerName: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.foreground,
+    flexShrink: 1,
+  },
+  gamePlayerTeam: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+  },
+  gamePlayerPropRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  gameStatType: {
+    fontSize: 12,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.foreground,
+  },
+  gameDirection: {
+    fontSize: 12,
+    fontFamily: typography.fontFamily.semibold,
+  },
+  pickOver: { color: colors.success },
+  pickUnder: { color: "#FF6B6B" },
+  gameOdds: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.mutedForeground,
+  },
+  gameBookLogo: { width: 18, height: 18 },
+  gameSignals: {
+    alignItems: "flex-end",
+    gap: spacing[1],
+  },
+  gameHitRate: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.success,
+  },
+
+  // ── Shared ──
+  moreBadge: {
+    backgroundColor: colors.rgba.primary15,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: borderRadius.full,
+  },
+  moreBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.bold,
+    color: colors.primary,
+  },
+  confidenceBadge: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  confidenceBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamily.bold,
+  },
+
+  // ── Dropdown ──
   dropdownOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -751,9 +1190,7 @@ const styles = StyleSheet_create({
     borderWidth: 1,
     borderColor: colors.rgba.primary30,
   },
-  dropdownContent: {
-    padding: spacing[4],
-  },
+  dropdownContent: { padding: spacing[4] },
   dropdownTitle: {
     color: colors.mutedForeground,
     fontSize: typography.sizes.sm,
@@ -761,9 +1198,7 @@ const styles = StyleSheet_create({
     marginBottom: spacing[3],
     textAlign: "center",
   },
-  dropdownScroll: {
-    maxHeight: 300,
-  },
+  dropdownScroll: { maxHeight: 300 },
   dropdownOption: {
     flexDirection: "row",
     alignItems: "center",
@@ -772,11 +1207,17 @@ const styles = StyleSheet_create({
     paddingHorizontal: spacing[3],
     borderRadius: borderRadius.lg,
   },
-  dropdownOptionActive: {
-    backgroundColor: colors.rgba.primary15,
-  },
-  dropdownOptionPressed: {
-    opacity: 0.7,
+  dropdownOptionActive: { backgroundColor: colors.rgba.primary15 },
+  dropdownOptionPressed: { opacity: 0.7 },
+  dropdownSoonBadge: {
+    fontSize: 9,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+    opacity: 0.6,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
   },
   dropdownOptionText: {
     flex: 1,
@@ -784,10 +1225,9 @@ const styles = StyleSheet_create({
     fontSize: typography.sizes.base,
     fontFamily: typography.fontFamily.medium,
   },
-  dropdownOptionTextActive: {
-    color: colors.foreground,
-  },
-  // Empty
+  dropdownOptionTextActive: { color: colors.foreground },
+
+  // ── Empty ──
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",

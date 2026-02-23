@@ -12,8 +12,9 @@ interface PageIndicatorProps {
 
 const pages = [
   { id: 0, label: "Board", icon: "grid" as const },
-  { id: 1, label: "Scan", icon: "scan" as const },
-  { id: 2, label: "Builder", icon: "layers" as const },
+  { id: 1, label: "Picks", icon: "trophy" as const },
+  { id: 2, label: "Scan", icon: "scan" as const },
+  { id: 3, label: "Parlay", icon: "layers" as const },
 ];
 
 export const PageIndicator: React.FC<PageIndicatorProps> = ({
@@ -39,8 +40,8 @@ export const PageIndicator: React.FC<PageIndicatorProps> = ({
   };
 
   const translateX = slideAnim.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: [0, 108, 216], // Width of one tab + gap
+    inputRange: [0, 1, 2, 3],
+    outputRange: [0, TAB_WIDTH + TAB_GAP, (TAB_WIDTH + TAB_GAP) * 2, (TAB_WIDTH + TAB_GAP) * 3],
   });
 
   return (
@@ -86,8 +87,8 @@ export const PageIndicator: React.FC<PageIndicatorProps> = ({
   );
 };
 
-const TAB_WIDTH = 100;
-const TAB_GAP = 8;
+const TAB_WIDTH = 80;
+const TAB_GAP = 6;
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -125,7 +126,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.mutedForeground,
-    fontSize: typography.sizes.sm,
+    fontSize: typography.sizes.xs,
     fontFamily: typography.fontFamily.medium,
   },
   labelActive: {

@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from "react-native";
 import { collection, query, where, getDocsFromServer } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { CachedGame } from "../../components/ui/CachedGameCard";
+import type { SportId } from "../../config/sports";
 
 interface UseCachedGamesResult {
   games: CachedGame[];
@@ -75,7 +76,7 @@ export const useCachedGames = (): UseCachedGamesResult => {
 
         cachedGames.push({
           id: doc.id,
-          sport: data.sport as "nba" | "soccer",
+          sport: data.sport as SportId,
           team1: team1Name,
           team2: team2Name,
           team1Id: data.team1Id,

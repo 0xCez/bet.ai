@@ -110,6 +110,7 @@ function getTrend(gameLogs, statType) {
  * @returns {{ l5, l10, l20, season }} each with { over, total, pct }
  */
 function calculateExtendedHitRates(gameLogs, statType, line) {
+  let l3Over = 0, l3Total = 0;
   let l5Over = 0, l5Total = 0;
   let l10Over = 0, l10Total = 0;
   let l20Over = 0, l20Total = 0;
@@ -124,11 +125,13 @@ function calculateExtendedHitRates(gameLogs, statType, line) {
     if (i < 20) { l20Total++; if (hit) l20Over++; }
     if (i < 10) { l10Total++; if (hit) l10Over++; }
     if (i < 5)  { l5Total++;  if (hit) l5Over++;  }
+    if (i < 3)  { l3Total++;  if (hit) l3Over++;  }
   }
 
   const pct = (over, total) => total > 0 ? Math.round((over / total) * 100) : 0;
 
   return {
+    l3:     { over: l3Over,     total: l3Total,     pct: pct(l3Over, l3Total) },
     l5:     { over: l5Over,     total: l5Total,     pct: pct(l5Over, l5Total) },
     l10:    { over: l10Over,    total: l10Total,    pct: pct(l10Over, l10Total) },
     l20:    { over: l20Over,    total: l20Total,    pct: pct(l20Over, l20Total) },

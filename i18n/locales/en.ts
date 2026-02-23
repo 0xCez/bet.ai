@@ -12,13 +12,13 @@ export default {
   onboardingSlide3Title2: "prop predictions.",
   onboardingSlide3Description: "Our ML model analyzes player stats, matchups, and trends to surface high-confidence props.",
 
-  onboardingSlide4Title: "Get instant sharp",
-  onboardingSlide4Title2: "plays on every bet.",
-  onboardingSlide4Description: "Detailed market analysis: Sharp vs Public money, Odds movement, and more.",
+  onboardingSlide4Title: "Top picks, ranked",
+  onboardingSlide4Title2: "by real edge.",
+  onboardingSlide4Description: "Our best props across every game — sorted by hit rate, EV, and matchup signals.",
 
-  onboardingSlide5Title: "Every detail matters,",
-  onboardingSlide5Title2: "see what others miss.",
-  onboardingSlide5Description: "Injuries, weather, momentum... See game-changing factors others overlook.",
+  onboardingSlide5Title: "Build parlays that",
+  onboardingSlide5Title2: "actually make sense.",
+  onboardingSlide5Description: "Pre-built LOCK, STEADY, and SNIPER slips for every bookmaker — all signal-validated.",
 
   onboardingSlide6Title: "Debate your picks",
   onboardingSlide6Title2: "with our expert, 24/7.",
