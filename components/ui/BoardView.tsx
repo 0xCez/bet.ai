@@ -629,78 +629,74 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
     searchInputRef.current?.blur();
   }, []);
 
-  const renderSearchBar = () => (
-    <View style={styles.searchContainer}>
-      <View style={[styles.searchInputWrapper, isSearchActive && styles.searchInputWrapperActive]}>
-        <Ionicons name="search" size={16} color={isSearchActive ? colors.primary : colors.mutedForeground} />
-        <TextInput
-          ref={searchInputRef}
-          style={styles.searchInput}
-          placeholder="Search player..."
-          placeholderTextColor={colors.mutedForeground}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onFocus={() => setSearchFocused(true)}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="words"
-        />
-        {isSearchActive && (
-          <Pressable onPress={dismissSearch} hitSlop={8}>
-            <Text style={styles.searchCancelText}>Cancel</Text>
-          </Pressable>
-        )}
-      </View>
-      {searchFocused && searchResults.length > 0 && (
-        <Animated.View style={[styles.searchResults, {
-          opacity: searchResultsAnim,
-          transform: [{ translateY: searchResultsAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
-        }]}>
-          {searchResults.map((result, index) => {
-            const abbrev = result.teamCode || getTeamAbbreviation(result.team);
-            const localImage = getPlayerImage(result.playerName, abbrev);
-            const hasRemoteHeadshot = !!result.headshotUrl;
-            return (
-              <Pressable
-                key={`${result.playerName}-${index}`}
-                style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
-                onPress={() => handleSearchSelect(result.playerName)}
-              >
-                {hasRemoteHeadshot ? (
-                  <ExpoImage source={{ uri: result.headshotUrl! }} style={styles.searchResultAvatar} contentFit="cover" />
-                ) : localImage ? (
-                  <Image source={localImage} style={styles.searchResultAvatar} />
-                ) : (
-                  <View style={styles.searchResultAvatarPlaceholder}>
-                    <Ionicons name="person" size={14} color={colors.mutedForeground} />
-                  </View>
-                )}
-                <View style={styles.searchResultInfo}>
-                  <Text style={styles.searchResultName} numberOfLines={1}>{result.playerName}</Text>
-                  <Text style={styles.searchResultTeam}>
-                    {abbrev}{result.ppg != null ? ` · ${result.ppg} PPG` : ""}{result.propsCount > 0 ? ` · ${result.propsCount} prop${result.propsCount !== 1 ? "s" : ""}` : ""}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-              </Pressable>
-            );
-          })}
-        </Animated.View>
-      )}
-      {isSearchActive && searchQuery.length >= 2 && searchResults.length === 0 && (
-        <View style={styles.searchNoResults}>
-          <Text style={styles.searchNoResultsText}>No players found</Text>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderHeader = () => (
+  const headerElement = useMemo(() => (
     <View style={styles.header}>
       <Animated.View style={[styles.titleRow, { opacity: contentFade }]}>
         <Text style={styles.title}>Today's Picks</Text>
       </Animated.View>
-      {renderSearchBar()}
+      <View style={styles.searchContainer}>
+        <View style={[styles.searchInputWrapper, isSearchActive && styles.searchInputWrapperActive]}>
+          <Ionicons name="search" size={16} color={isSearchActive ? colors.primary : colors.mutedForeground} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search player..."
+            placeholderTextColor={colors.mutedForeground}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="words"
+          />
+          {isSearchActive && (
+            <Pressable onPress={dismissSearch} hitSlop={8}>
+              <Text style={styles.searchCancelText}>Cancel</Text>
+            </Pressable>
+          )}
+        </View>
+        {searchFocused && searchResults.length > 0 && (
+          <Animated.View style={[styles.searchResults, {
+            opacity: searchResultsAnim,
+            transform: [{ translateY: searchResultsAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
+          }]}>
+            {searchResults.map((result, index) => {
+              const abbrev = result.teamCode || getTeamAbbreviation(result.team);
+              const localImage = getPlayerImage(result.playerName, abbrev);
+              const hasRemoteHeadshot = !!result.headshotUrl;
+              return (
+                <Pressable
+                  key={`${result.playerName}-${index}`}
+                  style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
+                  onPress={() => handleSearchSelect(result.playerName)}
+                >
+                  {hasRemoteHeadshot ? (
+                    <ExpoImage source={{ uri: result.headshotUrl! }} style={styles.searchResultAvatar} contentFit="cover" />
+                  ) : localImage ? (
+                    <Image source={localImage} style={styles.searchResultAvatar} />
+                  ) : (
+                    <View style={styles.searchResultAvatarPlaceholder}>
+                      <Ionicons name="person" size={14} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <View style={styles.searchResultInfo}>
+                    <Text style={styles.searchResultName} numberOfLines={1}>{result.playerName}</Text>
+                    <Text style={styles.searchResultTeam}>
+                      {abbrev}{result.ppg != null ? ` · ${result.ppg} PPG` : ""}{result.propsCount > 0 ? ` · ${result.propsCount} prop${result.propsCount !== 1 ? "s" : ""}` : ""}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+                </Pressable>
+              );
+            })}
+          </Animated.View>
+        )}
+        {isSearchActive && searchQuery.length >= 2 && searchResults.length === 0 && (
+          <View style={styles.searchNoResults}>
+            <Text style={styles.searchNoResultsText}>No players found</Text>
+          </View>
+        )}
+      </View>
       {!isSearchActive && <View style={styles.headerFilters}>
         {/* Sport dropdown chip */}
         <Pressable
@@ -763,7 +759,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
         )}
       </View>}
     </View>
-  );
+  ), [searchQuery, searchFocused, isSearchActive, searchResults, sportFilter, viewMode, currentSportLabel, currentViewLabel, currentTeamLabel, bookFilter, uniqueBooks.length, contentFade, searchResultsAnim, dismissSearch, handleSearchSelect]);
 
   // ═══════════════════════════════════════════════
   // SPORT DROPDOWN
@@ -959,7 +955,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
   if (loading) {
     return (
       <View style={styles.container}>
-        {renderHeader()}
+        {headerElement}
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Loading picks...</Text>
         </View>
@@ -970,7 +966,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
   if (error) {
     return (
       <View style={styles.container}>
-        {renderHeader()}
+        {headerElement}
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Couldn't load picks right now</Text>
         </View>
@@ -985,7 +981,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
       <View style={styles.container}>
         {renderSportDropdown()}
         {renderViewDropdown()}
-        {renderHeader()}
+        {headerElement}
         <View style={styles.emptyContainer}>
           <Ionicons name={selectedSport.icon as any} size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />
           <Text style={styles.emptyText}>{selectedSport.label} Coming Soon</Text>
@@ -1000,7 +996,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
       <View style={styles.container}>
         {renderSportDropdown()}
         {renderViewDropdown()}
-        {renderHeader()}
+        {headerElement}
         {renderTeamDropdown()}
         {renderBookDropdown()}
         <View style={styles.emptyContainer}>
@@ -1033,7 +1029,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
           renderItem={renderPlayerTile as any}
           numColumns={2}
           columnWrapperStyle={styles.tileRow}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={headerElement}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -1045,7 +1041,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
           data={isSearchActive ? [] : gameCards}
           keyExtractor={(item: any) => item.key}
           renderItem={renderGameCard}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={headerElement}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
