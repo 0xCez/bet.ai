@@ -325,6 +325,7 @@ export default function PlayerPropChartScreen() {
     statType?: string;
     line?: string;
     from?: string;
+    originTab?: string;
   }>();
 
   const [data, setData] = useState<ChartData | null>(null);
@@ -396,14 +397,19 @@ export default function PlayerPropChartScreen() {
         showBack
         onBackPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          if (params.from) {
-            // Navigate back to the specific tab the user came from
-            const page = params.from === "picks" ? "picks"
-              : params.from === "parlay" || params.from === "builder" ? "parlay"
+          if (params.from === "profile") {
+            if (router.canGoBack()) { router.back(); return; }
+            const page = params.originTab === "picks" ? "picks"
+              : params.originTab === "parlay" || params.originTab === "builder" ? "parlay"
+              : params.originTab === "scan" ? "scan"
               : "board";
             router.replace({ pathname: "/home" as any, params: { page } });
-          } else if (router.canGoBack()) {
-            router.back();
+          } else if (params.from) {
+            const page = params.from === "picks" ? "picks"
+              : params.from === "parlay" || params.from === "builder" ? "parlay"
+              : params.from === "scan" ? "scan"
+              : "board";
+            router.replace({ pathname: "/home" as any, params: { page } });
           } else {
             router.replace({ pathname: "/home" as any, params: { page: "board" } });
           }

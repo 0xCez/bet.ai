@@ -63,9 +63,10 @@ const SOCCER_LEAGUES = [
   { key: 'soccer_france_ligue_one', name: 'Ligue 1', limit: 1 }
 ];
 
-// Post-game buffer: keep analysis available for 4 hours after game starts
-// This allows users to still view analysis during/shortly after the game
-const POST_GAME_BUFFER_MS = 4 * 60 * 60 * 1000; // 4 hours
+// Post-game buffer: keep full analysis in live cache for 7 days after game starts.
+// Creators need recent games for replay content (scan a game from yesterday/this week).
+// After 7 days, archiveExpiredGames() moves them to permanent gameArchive.
+const POST_GAME_BUFFER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
  * Check if a game is already cached and still valid
@@ -1719,11 +1720,13 @@ async function writeLeaderboardAndSlips() {
     const data = doc.data();
     const ml = data.analysis?.mlPlayerProps || {};
 
+    const gameTime = data.gameStartTime || null;
+
     const topProps = ml.edgeBoard?.topProps || ml.topProps || [];
-    for (const p of topProps) edgeProps.push(mapEdgeProp(p));
+    for (const p of topProps) { const m = mapEdgeProp(p); m.gameTime = gameTime; edgeProps.push(m); }
 
     const legs = ml.parlayStack?.legs || [];
-    for (const p of legs) stackLegs.push(mapStackLeg(p));
+    for (const p of legs) { const m = mapStackLeg(p); m.gameTime = gameTime; stackLegs.push(m); }
   }
 
   // Leaderboard: edge sorted by betScore, stack sorted by parlayEdge

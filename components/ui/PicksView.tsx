@@ -17,6 +17,31 @@ import { db } from "../../firebaseConfig";
 import { colors, spacing, borderRadius, typography, glass } from "../../constants/designTokens";
 import { formatStatType, formatOdds, BOOKMAKER_LOGOS } from "../../utils/formatters";
 import { getPlayerImage } from "../../utils/playerImages";
+import { getNBATeamLogo } from "../../utils/teamLogos";
+
+const NBA_TEAM_COLORS: Record<string, string> = {
+  ATL: "#E03A3E", BOS: "#007A33", BKN: "#FFFFFF", CHA: "#1D1160",
+  CHI: "#CE1141", CLE: "#6F263D", DAL: "#00538C", DEN: "#0E2240",
+  DET: "#C8102E", GSW: "#1D428A", HOU: "#CE1141", IND: "#002D62",
+  LAC: "#C8102E", LAL: "#552583", MEM: "#5D76A9", MIA: "#98002E",
+  MIL: "#00471B", MIN: "#0C2340", NOP: "#0C2340", NYK: "#F58426",
+  OKC: "#007AC1", ORL: "#0077C0", PHI: "#006BB6", PHX: "#E56020",
+  POR: "#E03A3E", SAC: "#5A2D81", SAS: "#C4CED4", TOR: "#CE1141",
+  UTA: "#002B5C", WAS: "#002B5C",
+};
+
+const TEAM_CODE_TO_NAME: Record<string, string> = {
+  ATL: "Atlanta Hawks", BOS: "Boston Celtics", BKN: "Brooklyn Nets",
+  CHA: "Charlotte Hornets", CHI: "Chicago Bulls", CLE: "Cleveland Cavaliers",
+  DAL: "Dallas Mavericks", DEN: "Denver Nuggets", DET: "Detroit Pistons",
+  GSW: "Golden State Warriors", HOU: "Houston Rockets", IND: "Indiana Pacers",
+  LAC: "LA Clippers", LAL: "Los Angeles Lakers", MEM: "Memphis Grizzlies",
+  MIA: "Miami Heat", MIL: "Milwaukee Bucks", MIN: "Minnesota Timberwolves",
+  NOP: "New Orleans Pelicans", NYK: "New York Knicks", OKC: "Oklahoma City Thunder",
+  ORL: "Orlando Magic", PHI: "Philadelphia 76ers", PHX: "Phoenix Suns",
+  POR: "Portland Trail Blazers", SAC: "Sacramento Kings", SAS: "San Antonio Spurs",
+  TOR: "Toronto Raptors", UTA: "Utah Jazz", WAS: "Washington Wizards",
+};
 
 // ── Types ──
 
@@ -44,6 +69,7 @@ interface LeaderboardProp {
   betScore?: number;
   edge?: number;
   headshotUrl?: string;
+  gameTime?: string;
 }
 
 // ── Component ──
@@ -82,11 +108,12 @@ export function PicksView() {
   const handlePropPress = useCallback((prop: LeaderboardProp) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
-      pathname: "/player-prop-chart" as any,
+      pathname: "/player-profile" as any,
       params: {
         playerName: prop.name,
         statType: prop.statType || prop.stat,
         line: String(prop.line),
+        initialView: "props",
         from: "picks",
       },
     });
@@ -99,6 +126,9 @@ export function PicksView() {
     const bookLogo = item.bk ? BOOKMAKER_LOGOS[item.bk] : null;
     const playerImage = getPlayerImage(item.name);
     const dirColor = isOver ? colors.success : "#FF6B6B";
+    const teamFullName = TEAM_CODE_TO_NAME[item.teamCode];
+    const teamLogo = teamFullName ? getNBATeamLogo(teamFullName) : null;
+    const teamColor = NBA_TEAM_COLORS[item.teamCode] || colors.mutedForeground;
 
     // Directional L10/SZN (for Under: invert raw hit rate)
     const rawL10 = item.dirL10 ?? (item.l10 != null ? (isOver ? item.l10 : 100 - item.l10) : null);
@@ -119,89 +149,98 @@ export function PicksView() {
         onPress={() => handlePropPress(item)}
         style={({ pressed }) => [styles.propCard, pressed && styles.propCardPressed]}
       >
-        {/* Left accent bar */}
-        <View style={[styles.accentBar, { backgroundColor: dirColor }]} />
-
         <View style={styles.cardBody}>
-          {/* Top row: headshot + name/team + bookie */}
-          <View style={styles.topRow}>
-            <View style={[styles.headshotRing, { borderColor: `${dirColor}40` }]}>
-              {playerImage ? (
-                <ExpoImage source={playerImage} style={styles.headshot} contentFit="cover" />
-              ) : item.headshotUrl ? (
-                <ExpoImage source={{ uri: item.headshotUrl }} style={styles.headshot} contentFit="cover" />
-              ) : (
-                <View style={styles.headshotPlaceholder}>
-                  <Text style={styles.initials}>
-                    {item.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                  </Text>
+          {/* Header: headshot + name/team + direction arrow + line */}
+          <View style={styles.headerRow}>
+            <View style={styles.headshotWrapper}>
+              <View style={[styles.headshotBox, { borderColor: teamColor }]}>
+                {playerImage ? (
+                  <ExpoImage source={playerImage} style={styles.headshot} contentFit="cover" />
+                ) : item.headshotUrl ? (
+                  <ExpoImage source={{ uri: item.headshotUrl }} style={styles.headshot} contentFit="cover" />
+                ) : (
+                  <View style={styles.headshotPlaceholder}>
+                    <Text style={styles.initials}>
+                      {item.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {teamLogo && (
+                <View style={styles.teamLogoBadge}>
+                  <ExpoImage source={teamLogo} style={styles.teamLogoImg} contentFit="contain" />
                 </View>
               )}
             </View>
 
             <View style={styles.nameCol}>
               <Text style={styles.playerName} numberOfLines={1}>{item.name}</Text>
-              <Text style={styles.teamText}>{item.teamCode}{item.defTeam ? ` vs ${item.defTeam}` : ""}</Text>
-            </View>
-
-            {/* Bookie logo + odds */}
-            <View style={styles.bookCol}>
-              {bookLogo && (
-                <ExpoImage source={bookLogo} style={styles.bookLogo} contentFit="contain" />
-              )}
-              {item.odds != null && (
-                <Text style={styles.bookLine}>{formatOdds(item.odds)}</Text>
-              )}
-            </View>
-          </View>
-
-          {/* Middle row: direction pill + stat + odds */}
-          <View style={styles.middleRow}>
-            <View style={[styles.dirPill, { backgroundColor: `${dirColor}15` }]}>
-              <Text style={[styles.dirPillText, { color: dirColor }]}>
-                {isOver ? "OVER" : "UNDER"}
+              <Text style={styles.teamText}>
+                {item.teamCode}{item.defTeam ? ` vs ${item.defTeam}` : ""}
               </Text>
             </View>
-            <Text style={styles.statLine}>
-              {formatStatType(item.statType || item.stat)} {item.line}
-            </Text>
-            <View style={styles.bottomSpacer} />
-            <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+
+            <View style={styles.pickCol}>
+              <Ionicons
+                name={isOver ? "arrow-up" : "arrow-down"}
+                size={18}
+                color={dirColor}
+              />
+              <View style={styles.pickTextCol}>
+                <Text style={styles.pickLine}>{item.line} {formatStatType(item.statType || item.stat)}</Text>
+              </View>
+            </View>
           </View>
 
-          {/* Bottom row: metric chips */}
-          <View style={styles.metricsRow}>
-            {rawL10 != null && (
-              <View style={styles.metricChip}>
-                <Text style={styles.metricLabel}>L10</Text>
-                <Text style={[styles.metricValue, { color: rawL10 >= 60 ? colors.success : rawL10 >= 50 ? colors.foreground : "#FF6B6B" }]}>
-                  {Math.round(rawL10)}%
-                </Text>
+          {/* Divider */}
+          <View style={styles.rowDivider} />
+
+          {/* Four-column stats row */}
+          <View style={styles.columnsRow}>
+            {/* EV */}
+            <View style={styles.statCol}>
+              <Text style={styles.colLabel}>EV</Text>
+              <Text style={[styles.colValue, { color: ev != null && ev >= 0 ? colors.success : ev != null ? "#FF6B6B" : colors.mutedForeground }]}>
+                {ev != null ? `${ev >= 0 ? "+" : ""}${ev}%` : "—"}
+              </Text>
+            </View>
+
+            <View style={styles.colDivider} />
+
+            {/* ODDS */}
+            <View style={styles.statCol}>
+              <View style={styles.oddsColHeader}>
+                {bookLogo && (
+                  <ExpoImage source={bookLogo} style={styles.bookLogoSmall} contentFit="contain" />
+                )}
+                <Text style={styles.colLabel}>ODDS</Text>
               </View>
-            )}
-            {rawSzn != null && (
-              <View style={styles.metricChip}>
-                <Text style={styles.metricLabel}>SZN</Text>
-                <Text style={[styles.metricValue, { color: rawSzn >= 60 ? colors.success : rawSzn >= 50 ? colors.foreground : "#FF6B6B" }]}>
-                  {Math.round(rawSzn)}%
-                </Text>
-              </View>
-            )}
-            {item.avg != null && (
-              <View style={styles.metricChip}>
-                <Text style={styles.metricLabel}>AVG</Text>
-                <Text style={styles.metricValue}>{item.avg}</Text>
-              </View>
-            )}
-            {ev != null && (
-              <View style={[styles.metricChip, ev >= 0 && styles.metricChipPositive]}>
-                <Text style={styles.metricLabel}>EV</Text>
-                <Text style={[styles.metricValue, { color: ev >= 0 ? colors.success : "#FF6B6B" }]}>
-                  {ev >= 0 ? "+" : ""}{ev}%
-                </Text>
-              </View>
-            )}
+              <Text style={styles.colValue}>
+                {item.odds != null ? formatOdds(item.odds) : "—"}
+              </Text>
+            </View>
+
+            <View style={styles.colDivider} />
+
+            {/* L10 */}
+            <View style={styles.statCol}>
+              <Text style={styles.colLabel}>L10</Text>
+              <Text style={[styles.colValue, { color: rawL10 != null && rawL10 >= 60 ? colors.success : rawL10 != null && rawL10 < 50 ? "#FF6B6B" : colors.foreground }]}>
+                {rawL10 != null ? `${Math.round(rawL10)}%` : "—"}
+              </Text>
+            </View>
+
+            <View style={styles.colDivider} />
+
+            {/* AVG */}
+            <View style={styles.statCol}>
+              <Text style={styles.colLabel}>AVG</Text>
+              <Text style={styles.colValue}>
+                {item.avg != null ? String(item.avg) : "—"}
+              </Text>
+            </View>
           </View>
+
         </View>
       </Pressable>
     );
@@ -304,7 +343,6 @@ const styles = StyleSheet.create({
 
   // Card
   propCard: {
-    flexDirection: "row",
     backgroundColor: glass.card.backgroundColor,
     borderWidth: glass.card.borderWidth,
     borderColor: glass.card.borderColor,
@@ -316,137 +354,136 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
   },
-  accentBar: {
-    width: 3,
-  },
   cardBody: {
-    flex: 1,
     padding: spacing[3],
-    gap: spacing[2],
+    gap: spacing[3],
   },
 
-  // Top row
-  topRow: {
+  // Header row
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
   },
-  headshotRing: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 2,
+  headshotWrapper: {
+    width: 48,
+    height: 48,
+  },
+  headshotBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: colors.secondary,
+    borderWidth: 0.5,
+    borderColor: colors.mutedForeground,
+  },
+  teamLogoBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -4,
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: colors.rgba.borderGlass,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  teamLogoImg: {
+    width: 15,
+    height: 15,
   },
   headshot: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
   },
   headshotPlaceholder: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
   initials: {
-    fontSize: typography.sizes.xs,
+    fontSize: 12,
     fontFamily: typography.fontFamily.bold,
     color: colors.mutedForeground,
   },
   nameCol: {
     flex: 1,
-    gap: 1,
+    gap: 2,
   },
   playerName: {
-    fontSize: typography.sizes.sm,
+    fontSize: 16,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
   teamText: {
-    fontSize: typography.sizes.xs,
+    fontSize: 12,
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
   },
 
-  // Bookie column (top-right)
-  bookCol: {
-    alignItems: "center",
-    gap: 2,
-  },
-  bookLogo: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-  },
-  bookLine: {
-    fontSize: typography.sizes.xs,
-    fontFamily: typography.fontFamily.bold,
-    color: colors.foreground,
-  },
-
-  // Middle row
-  middleRow: {
+  // Pick column (right side — direction arrow + line)
+  pickCol: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[2],
+    gap: 4,
   },
-  dirPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
+  pickTextCol: {
+    alignItems: "flex-end",
   },
-  dirPillText: {
-    fontSize: 10,
+  pickLine: {
+    fontSize: 16,
     fontFamily: typography.fontFamily.bold,
-    letterSpacing: 0.5,
-  },
-  statLine: {
-    fontSize: typography.sizes.xs,
-    fontFamily: typography.fontFamily.semibold,
     color: colors.foreground,
   },
-  oddsText: {
-    fontSize: typography.sizes.xs,
-    fontFamily: typography.fontFamily.medium,
-    color: colors.mutedForeground,
+
+  // Horizontal divider
+  rowDivider: {
+    height: 1,
+    backgroundColor: colors.rgba.borderGlass,
   },
-  bottomSpacer: {
+
+  // Three-column stats
+  columnsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statCol: {
     flex: 1,
-  },
-
-  // Metrics row
-  metricsRow: {
-    flexDirection: "row",
-    gap: spacing[2],
-  },
-  metricChip: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    backgroundColor: `${colors.secondary}80`,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: borderRadius.sm,
+    gap: 4,
   },
-  metricChipPositive: {
-    backgroundColor: "rgba(34,197,94,0.1)",
-  },
-  metricLabel: {
-    fontSize: 9,
+  colLabel: {
+    fontSize: 10,
     fontFamily: typography.fontFamily.medium,
     color: colors.mutedForeground,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
-  metricValue: {
-    fontSize: 11,
+  colValue: {
+    fontSize: 16,
     fontFamily: typography.fontFamily.bold,
     color: colors.foreground,
   },
+  colDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.rgba.borderGlass,
+  },
+  oddsColHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  bookLogoSmall: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+  },
+
 
   // Empty
   emptyText: {

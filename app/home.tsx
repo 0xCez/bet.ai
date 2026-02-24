@@ -32,6 +32,7 @@ import { BoardView } from "../components/ui/BoardView";
 import { BuilderView } from "../components/ui/BuilderView";
 import { PicksView } from "../components/ui/PicksView";
 import { useCachedGames } from "./hooks/useCachedGames";
+import { usePlayerDirectory } from "./hooks/usePlayerDirectory";
 import i18n from "../i18n";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -61,6 +62,7 @@ export default function HomeScreen() {
 
   // Single shared data fetch for Board + Builder tabs
   const { games: allGames, loading: gamesLoading, error: gamesError } = useCachedGames();
+  const { players: directoryPlayers } = usePlayerDirectory();
 
   // Staggered animation values (4 elements: top bar, orb, scan button, gallery button)
   const cardAnimations = useRef(
@@ -314,7 +316,7 @@ export default function HomeScreen() {
 
         {/* Tab Content — all tabs stay mounted, hidden via display */}
         <View style={[styles.tabContent, activePage !== 0 && styles.hidden]}>
-          <BoardView games={allGames} loading={gamesLoading} error={gamesError} />
+          <BoardView games={allGames} loading={gamesLoading} error={gamesError} directoryPlayers={directoryPlayers} />
         </View>
 
         <View style={[styles.tabContent, activePage !== 1 && styles.hidden]}>

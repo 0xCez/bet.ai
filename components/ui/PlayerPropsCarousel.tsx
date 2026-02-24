@@ -18,6 +18,7 @@ import { PlayerPropCard, PlayerPropCardSkeleton, EnrichedPlayerProp, PlayerWithP
 import { ParlayLegCard, ParlayLegCardSkeleton, ParlayLeg, PARLAY_CARD_WIDTH } from "./ParlayLegCard";
 import { colors, spacing, typography, borderRadius } from "../../constants/designTokens";
 import { useCachedGames } from "../../app/hooks/useCachedGames";
+import { getTeamAbbreviation } from "../../utils/formatters";
 
 type TeamFilter = "all" | string;
 type PropsMode = "picks" | "parlays";
@@ -327,6 +328,7 @@ export const PlayerPropsCarousel: React.FC = () => {
     return (
       <View style={styles.container}>
         {renderHeader()}
+
         {renderDropdown()}
         <View style={styles.scrollContent}>
           <View style={styles.cardWrapper}>
@@ -342,6 +344,7 @@ export const PlayerPropsCarousel: React.FC = () => {
     return (
       <View style={styles.container}>
         {renderHeader()}
+
         {renderDropdown()}
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Couldn't load props right now</Text>
@@ -355,6 +358,7 @@ export const PlayerPropsCarousel: React.FC = () => {
     return (
       <View style={styles.container}>
         {renderHeader()}
+
         {renderDropdown()}
         <View style={styles.emptyContainer}>
           <Ionicons name="analytics-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: spacing[2] }} />

@@ -9,9 +9,10 @@ interface TopBarProps {
   showBack?: boolean;
   title?: string;
   onBackPress?: () => void;
+  rightElement?: React.ReactNode;
 }
 
-export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
+export function TopBar({ showBack = true, title, onBackPress, rightElement }: TopBarProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -37,14 +38,10 @@ export function TopBar({ showBack = true, title, onBackPress }: TopBarProps) {
       )}
 
       <View style={styles.logoContainer}>
-        {title ? (
-          <Text style={styles.title}>{title}</Text>
-        ) : (
-          <Logo size="small" />
-        )}
+        <Logo size="small" />
       </View>
 
-      <View style={styles.placeholder} />
+      {rightElement || <View style={styles.placeholder} />}
     </View>
   );
 }
