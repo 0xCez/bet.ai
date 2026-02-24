@@ -79,6 +79,16 @@ export default function StackLayout() {
           gestureDirection: "horizontal",
         }}
       />
+      <Stack.Screen
+        name="player-profile"
+        options={{
+          freezeOnBlur: true,
+          animation: "slide_from_right",
+          animationDuration: 250,
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
+        }}
+      />
     </Stack>
   );
 }

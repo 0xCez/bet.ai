@@ -10,6 +10,10 @@ import { getPlayerImage } from "../../utils/playerImages";
 import { openBookmakerLink } from "../../utils/bookmakerLinks";
 import { getTeamAbbreviation, formatStatType, formatGameTime, BOOKMAKER_LOGOS } from "../../utils/formatters";
 
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const HORIZONTAL_PADDING = spacing[6];
+export const PLAYER_CARD_WIDTH = SCREEN_WIDTH - HORIZONTAL_PADDING * 2;
+
 // Player prop data structure from ML predictions
 export interface PlayerProp {
   playerName: string;
@@ -316,12 +320,12 @@ export const PlayerPropCard: React.FC<PlayerPropCardProps> = ({ player }) => {
                         greenScore: p.greenScore,
                       }));
                     router.push({
-                      pathname: "/player-prop-chart" as any,
+                      pathname: "/player-profile" as any,
                       params: {
                         playerName: prop.playerName,
                         statType: prop.statType,
                         line: String(prop.line),
-                        otherProps: JSON.stringify(others),
+                        initialView: "props",
                         from: "board",
                       },
                     });

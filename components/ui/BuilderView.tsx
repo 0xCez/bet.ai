@@ -184,11 +184,12 @@ function SuggestedParlays() {
     const legStat = leg.statType || leg.stat || "";
     const legLine = leg.line ?? leg.altLine;
     router.push({
-      pathname: "/player-prop-chart" as any,
+      pathname: "/player-profile" as any,
       params: {
         playerName: legName,
         statType: legStat,
         line: String(legLine ?? ""),
+        initialView: "props",
         from: "parlay",
       },
     });

@@ -1,21 +1,16 @@
 {
   "teams": {
-    "Los Angeles Lakers": {
-      "code": "LAL",
+    "Atlanta Hawks": {
+      "code": "ATL",
       "players": [
-        { "name": "LeBron James", "apiSportsId": 265 },
-        { "name": "Anthony Davis", "apiSportsId": 132 },
-        { "name": "Austin Reaves", "apiSportsId": 2571 },
-        { "name": "D'Angelo Russell", "apiSportsId": 120 }
-      ]
-    },
-    "Golden State Warriors": {
-      "code": "GSW",
-      "players": [
-        { "name": "Stephen Curry", "apiSportsId": 124 },
-        { "name": "Jonathan Kuminga", "apiSportsId": 2884 },
-        { "name": "Andrew Wiggins", "apiSportsId": 27 },
-        { "name": "Draymond Green", "apiSportsId": 128 }
+        { "name": "Jalen Johnson" },
+        { "name": "Dyson Daniels" },
+        { "name": "Zaccharie Risacher" },
+        { "name": "CJ McCollum" },
+        { "name": "Onyeka Okongwu" },
+        { "name": "Jonathan Kuminga" },
+        { "name": "Buddy Hield" },
+        { "name": "Nickeil Alexander-Walker" }
       ]
     },
     "Boston Celtics": {
@@ -24,214 +19,24 @@
         { "name": "Jayson Tatum", "apiSportsId": 890 },
         { "name": "Jaylen Brown", "apiSportsId": 368 },
         { "name": "Derrick White", "apiSportsId": 674 },
-        { "name": "Kristaps Porzingis", "apiSportsId": 96 }
-      ]
-    },
-    "Miami Heat": {
-      "code": "MIA",
-      "players": [
-        { "name": "Jimmy Butler", "apiSportsId": 163 },
-        { "name": "Bam Adebayo", "apiSportsId": 881 },
-        { "name": "Tyler Herro", "apiSportsId": 2422 },
-        { "name": "Terry Rozier", "apiSportsId": 260 }
-      ]
-    },
-    "Milwaukee Bucks": {
-      "code": "MIL",
-      "players": [
-        { "name": "Giannis Antetokounmpo", "apiSportsId": 133 },
-        { "name": "Damian Lillard", "apiSportsId": 236 },
-        { "name": "Khris Middleton", "apiSportsId": 245 },
-        { "name": "Brook Lopez", "apiSportsId": 212 }
-      ]
-    },
-    "Philadelphia 76ers": {
-      "code": "PHI",
-      "players": [
-        { "name": "Joel Embiid", "apiSportsId": 52 },
-        { "name": "Tyrese Maxey", "apiSportsId": 2578 },
-        { "name": "Paul George", "apiSportsId": 169 },
-        { "name": "Kelly Oubre Jr.", "apiSportsId": 262 }
-      ]
-    },
-    "Phoenix Suns": {
-      "code": "PHX",
-      "players": [
-        { "name": "Kevin Durant", "apiSportsId": 170 },
-        { "name": "Devin Booker", "apiSportsId": 85 },
-        { "name": "Bradley Beal", "apiSportsId": 239 },
-        { "name": "Jusuf Nurkic", "apiSportsId": 42 }
-      ]
-    },
-    "Dallas Mavericks": {
-      "code": "DAL",
-      "players": [
-        { "name": "Luka Doncic", "apiSportsId": 2427 },
-        { "name": "Kyrie Irving", "apiSportsId": 235 },
-        { "name": "Klay Thompson", "apiSportsId": 129 },
-        { "name": "Daniel Gafford", "apiSportsId": 2421 }
-      ]
-    },
-    "New York Knicks": {
-      "code": "NYK",
-      "players": [
-        { "name": "Jalen Brunson", "apiSportsId": 2568 },
-        { "name": "Karl-Anthony Towns", "apiSportsId": 38 },
-        { "name": "Mikal Bridges", "apiSportsId": 2565 },
-        { "name": "Josh Hart", "apiSportsId": 892 }
-      ]
-    },
-    "Denver Nuggets": {
-      "code": "DEN",
-      "players": [
-        { "name": "Nikola Jokic", "apiSportsId": 32 },
-        { "name": "Jamal Murray", "apiSportsId": 367 },
-        { "name": "Michael Porter Jr.", "apiSportsId": 2423 },
-        { "name": "Aaron Gordon", "apiSportsId": 51 }
+        { "name": "Nikola Vucevic", "apiSportsId": 211 },
+        { "name": "Payton Pritchard" },
+        { "name": "Sam Hauser" },
+        { "name": "Baylor Scheierman" },
+        { "name": "Neemias Queta" }
       ]
     },
     "Brooklyn Nets": {
       "code": "BKN",
       "players": [
-        { "name": "Cam Thomas", "apiSportsId": 2887 },
-        { "name": "Dennis Schroder", "apiSportsId": 100 },
-        { "name": "Cameron Johnson", "apiSportsId": 2418 },
-        { "name": "Nic Claxton", "apiSportsId": 2420 }
-      ]
-    },
-    "Chicago Bulls": {
-      "code": "CHI",
-      "players": [
-        { "name": "Zach LaVine", "apiSportsId": 53 },
-        { "name": "Nikola Vucevic", "apiSportsId": 211 },
-        { "name": "Coby White", "apiSportsId": 2419 },
-        { "name": "Ayo Dosunmu", "apiSportsId": 2891 }
-      ]
-    },
-    "Cleveland Cavaliers": {
-      "code": "CLE",
-      "players": [
-        { "name": "Donovan Mitchell", "apiSportsId": 2566 },
-        { "name": "Darius Garland", "apiSportsId": 2580 },
-        { "name": "Evan Mobley", "apiSportsId": 2893 },
-        { "name": "Jarrett Allen", "apiSportsId": 889 }
-      ]
-    },
-    "Los Angeles Clippers": {
-      "code": "LAC",
-      "players": [
-        { "name": "James Harden", "apiSportsId": 192 },
-        { "name": "Kawhi Leonard", "apiSportsId": 238 },
-        { "name": "Norman Powell", "apiSportsId": 59 },
-        { "name": "Ivica Zubac", "apiSportsId": 879 }
-      ]
-    },
-    "Memphis Grizzlies": {
-      "code": "MEM",
-      "players": [
-        { "name": "Ja Morant", "apiSportsId": 2417 },
-        { "name": "Desmond Bane", "apiSportsId": 2886 },
-        { "name": "Jaren Jackson Jr.", "apiSportsId": 2569 },
-        { "name": "Marcus Smart", "apiSportsId": 254 }
-      ]
-    },
-    "Atlanta Hawks": {
-      "code": "ATL",
-      "players": [
-        { "name": "Trae Young", "apiSportsId": 2425 },
-        { "name": "Dejounte Murray", "apiSportsId": 365 },
-        { "name": "Clint Capela", "apiSportsId": 20 },
-        { "name": "Bogdan Bogdanovic", "apiSportsId": 662 }
-      ]
-    },
-    "Sacramento Kings": {
-      "code": "SAC",
-      "players": [
-        { "name": "De'Aaron Fox", "apiSportsId": 891 },
-        { "name": "Domantas Sabonis", "apiSportsId": 364 },
-        { "name": "DeMar DeRozan", "apiSportsId": 175 },
-        { "name": "Keegan Murray", "apiSportsId": 3527 }
-      ]
-    },
-    "New Orleans Pelicans": {
-      "code": "NOP",
-      "players": [
-        { "name": "Zion Williamson", "apiSportsId": 2426 },
-        { "name": "Brandon Ingram", "apiSportsId": 366 },
-        { "name": "CJ McCollum", "apiSportsId": 243 },
-        { "name": "Herb Jones", "apiSportsId": 2892 }
-      ]
-    },
-    "Minnesota Timberwolves": {
-      "code": "MIN",
-      "players": [
-        { "name": "Anthony Edwards", "apiSportsId": 2577 },
-        { "name": "Rudy Gobert", "apiSportsId": 187 },
-        { "name": "Julius Randle", "apiSportsId": 50 },
-        { "name": "Mike Conley", "apiSportsId": 204 }
-      ]
-    },
-    "Oklahoma City Thunder": {
-      "code": "OKC",
-      "players": [
-        { "name": "Shai Gilgeous-Alexander", "apiSportsId": 2567 },
-        { "name": "Chet Holmgren", "apiSportsId": 3533 },
-        { "name": "Jalen Williams", "apiSportsId": 3528 },
-        { "name": "Luguentz Dort", "apiSportsId": 2429 }
-      ]
-    },
-    "Portland Trail Blazers": {
-      "code": "POR",
-      "players": [
-        { "name": "Anfernee Simons", "apiSportsId": 2570 },
-        { "name": "Jerami Grant", "apiSportsId": 48 },
-        { "name": "Deandre Ayton", "apiSportsId": 2424 },
-        { "name": "Shaedon Sharpe", "apiSportsId": 3529 }
-      ]
-    },
-    "Toronto Raptors": {
-      "code": "TOR",
-      "players": [
-        { "name": "Scottie Barnes", "apiSportsId": 2890 },
-        { "name": "RJ Barrett", "apiSportsId": 2428 },
-        { "name": "Jakob Poeltl", "apiSportsId": 369 },
-        { "name": "Gradey Dick", "apiSportsId": 3776 }
-      ]
-    },
-    "Utah Jazz": {
-      "code": "UTA",
-      "players": [
-        { "name": "Lauri Markkanen", "apiSportsId": 894 },
-        { "name": "Collin Sexton", "apiSportsId": 2572 },
-        { "name": "Walker Kessler", "apiSportsId": 3532 },
-        { "name": "Jordan Clarkson", "apiSportsId": 49 }
-      ]
-    },
-    "San Antonio Spurs": {
-      "code": "SAS",
-      "players": [
-        { "name": "Victor Wembanyama", "apiSportsId": 3534 },
-        { "name": "Devin Vassell", "apiSportsId": 2579 },
-        { "name": "Keldon Johnson", "apiSportsId": 2416 },
-        { "name": "Jeremy Sochan", "apiSportsId": 3530 }
-      ]
-    },
-    "Houston Rockets": {
-      "code": "HOU",
-      "players": [
-        { "name": "Alperen Sengun", "apiSportsId": 2894 },
-        { "name": "Jalen Green", "apiSportsId": 2888 },
-        { "name": "Fred VanVleet", "apiSportsId": 258 },
-        { "name": "Jabari Smith Jr.", "apiSportsId": 3526 }
-      ]
-    },
-    "Indiana Pacers": {
-      "code": "IND",
-      "players": [
-        { "name": "Tyrese Haliburton", "apiSportsId": 2576 },
-        { "name": "Pascal Siakam", "apiSportsId": 370 },
-        { "name": "Myles Turner", "apiSportsId": 57 },
-        { "name": "Bennedict Mathurin", "apiSportsId": 3531 }
+        { "name": "Michael Porter Jr.", "apiSportsId": 2423 },
+        { "name": "Nic Claxton", "apiSportsId": 2420 },
+        { "name": "Ziaire Williams" },
+        { "name": "Noah Clowney" },
+        { "name": "Egor Demin" },
+        { "name": "Terance Mann" },
+        { "name": "Ochai Agbaji" },
+        { "name": "Jalen Wilson" }
       ]
     },
     "Charlotte Hornets": {
@@ -240,7 +45,232 @@
         { "name": "LaMelo Ball", "apiSportsId": 2575 },
         { "name": "Brandon Miller", "apiSportsId": 3777 },
         { "name": "Miles Bridges", "apiSportsId": 2573 },
-        { "name": "Mark Williams", "apiSportsId": 3525 }
+        { "name": "Coby White", "apiSportsId": 2419 },
+        { "name": "Tre Mann" },
+        { "name": "Liam McNeeley" },
+        { "name": "Kon Knueppel" },
+        { "name": "Grant Williams" }
+      ]
+    },
+    "Chicago Bulls": {
+      "code": "CHI",
+      "players": [
+        { "name": "Anfernee Simons", "apiSportsId": 2570 },
+        { "name": "Josh Giddey" },
+        { "name": "Jaden Ivey", "apiSportsId": 3523 },
+        { "name": "Matas Buzelis" },
+        { "name": "Rob Dillingham" },
+        { "name": "Patrick Williams" },
+        { "name": "Collin Sexton", "apiSportsId": 2572 },
+        { "name": "Nick Richards" }
+      ]
+    },
+    "Cleveland Cavaliers": {
+      "code": "CLE",
+      "players": [
+        { "name": "Donovan Mitchell", "apiSportsId": 2566 },
+        { "name": "James Harden", "apiSportsId": 192 },
+        { "name": "Evan Mobley", "apiSportsId": 2893 },
+        { "name": "Jarrett Allen", "apiSportsId": 889 },
+        { "name": "Max Strus" },
+        { "name": "Dennis Schroder", "apiSportsId": 100 },
+        { "name": "Larry Nance Jr." },
+        { "name": "Jaylon Tyson" }
+      ]
+    },
+    "Dallas Mavericks": {
+      "code": "DAL",
+      "players": [
+        { "name": "Kyrie Irving", "apiSportsId": 235 },
+        { "name": "Cooper Flagg" },
+        { "name": "Klay Thompson", "apiSportsId": 129 },
+        { "name": "P.J. Washington" },
+        { "name": "Dereck Lively II" },
+        { "name": "Daniel Gafford", "apiSportsId": 2421 },
+        { "name": "Naji Marshall" },
+        { "name": "Caleb Martin" }
+      ]
+    },
+    "Denver Nuggets": {
+      "code": "DEN",
+      "players": [
+        { "name": "Nikola Jokic", "apiSportsId": 32 },
+        { "name": "Jamal Murray", "apiSportsId": 367 },
+        { "name": "Aaron Gordon", "apiSportsId": 51 },
+        { "name": "Cameron Johnson", "apiSportsId": 2418 },
+        { "name": "Christian Braun" },
+        { "name": "Jonas Valanciunas", "apiSportsId": 240 },
+        { "name": "Peyton Watson" },
+        { "name": "DaRon Holmes II" }
+      ]
+    },
+    "Detroit Pistons": {
+      "code": "DET",
+      "players": [
+        { "name": "Cade Cunningham", "apiSportsId": 2883 },
+        { "name": "Jalen Duren", "apiSportsId": 3522 },
+        { "name": "Tobias Harris", "apiSportsId": 226 },
+        { "name": "Ausar Thompson" },
+        { "name": "Kevin Huerter" },
+        { "name": "Ronald Holland II" },
+        { "name": "Caris LeVert" },
+        { "name": "Isaiah Stewart" }
+      ]
+    },
+    "Golden State Warriors": {
+      "code": "GSW",
+      "players": [
+        { "name": "Stephen Curry", "apiSportsId": 124 },
+        { "name": "Jimmy Butler", "apiSportsId": 163 },
+        { "name": "Kristaps Porzingis", "apiSportsId": 96 },
+        { "name": "Draymond Green", "apiSportsId": 128 },
+        { "name": "Brandin Podziemski" },
+        { "name": "Gary Payton II" },
+        { "name": "Moses Moody" },
+        { "name": "De'Anthony Melton" }
+      ]
+    },
+    "Houston Rockets": {
+      "code": "HOU",
+      "players": [
+        { "name": "Kevin Durant", "apiSportsId": 170 },
+        { "name": "Alperen Sengun", "apiSportsId": 2894 },
+        { "name": "Fred VanVleet", "apiSportsId": 258 },
+        { "name": "Jabari Smith Jr.", "apiSportsId": 3526 },
+        { "name": "Amen Thompson" },
+        { "name": "Reed Sheppard" },
+        { "name": "Tari Eason" },
+        { "name": "Dorian Finney-Smith" }
+      ]
+    },
+    "Indiana Pacers": {
+      "code": "IND",
+      "players": [
+        { "name": "Tyrese Haliburton", "apiSportsId": 2576 },
+        { "name": "Pascal Siakam", "apiSportsId": 370 },
+        { "name": "Ivica Zubac", "apiSportsId": 879 },
+        { "name": "Andrew Nembhard" },
+        { "name": "Ben Sheppard" },
+        { "name": "Obi Toppin" },
+        { "name": "T.J. McConnell" },
+        { "name": "Jarace Walker" }
+      ]
+    },
+    "Los Angeles Clippers": {
+      "code": "LAC",
+      "players": [
+        { "name": "Darius Garland", "apiSportsId": 2580 },
+        { "name": "Bradley Beal", "apiSportsId": 239 },
+        { "name": "Kawhi Leonard", "apiSportsId": 238 },
+        { "name": "John Collins" },
+        { "name": "Brook Lopez", "apiSportsId": 212 },
+        { "name": "Bogdan Bogdanovic", "apiSportsId": 662 },
+        { "name": "Derrick Jones Jr." },
+        { "name": "Nicolas Batum" }
+      ]
+    },
+    "Los Angeles Lakers": {
+      "code": "LAL",
+      "players": [
+        { "name": "LeBron James", "apiSportsId": 265 },
+        { "name": "Luka Doncic", "apiSportsId": 2427 },
+        { "name": "Austin Reaves", "apiSportsId": 2571 },
+        { "name": "Rui Hachimura" },
+        { "name": "Deandre Ayton", "apiSportsId": 2424 },
+        { "name": "Dalton Knecht" },
+        { "name": "Marcus Smart", "apiSportsId": 254 },
+        { "name": "Jarred Vanderbilt" }
+      ]
+    },
+    "Memphis Grizzlies": {
+      "code": "MEM",
+      "players": [
+        { "name": "Ja Morant", "apiSportsId": 2417 },
+        { "name": "Zach Edey" },
+        { "name": "Jaylen Wells" },
+        { "name": "Santi Aldama" },
+        { "name": "Kentavious Caldwell-Pope" },
+        { "name": "Brandon Clarke" },
+        { "name": "Taylor Hendricks" },
+        { "name": "GG Jackson" }
+      ]
+    },
+    "Miami Heat": {
+      "code": "MIA",
+      "players": [
+        { "name": "Tyler Herro", "apiSportsId": 2422 },
+        { "name": "Bam Adebayo", "apiSportsId": 881 },
+        { "name": "Terry Rozier", "apiSportsId": 260 },
+        { "name": "Jaime Jaquez Jr." },
+        { "name": "Norman Powell", "apiSportsId": 59 },
+        { "name": "Andrew Wiggins", "apiSportsId": 27 },
+        { "name": "Kel'el Ware" },
+        { "name": "Nikola Jovic" }
+      ]
+    },
+    "Milwaukee Bucks": {
+      "code": "MIL",
+      "players": [
+        { "name": "Giannis Antetokounmpo", "apiSportsId": 133 },
+        { "name": "Cam Thomas", "apiSportsId": 2887 },
+        { "name": "Kyle Kuzma", "apiSportsId": 893 },
+        { "name": "Myles Turner", "apiSportsId": 57 },
+        { "name": "Bobby Portis" },
+        { "name": "Gary Trent Jr." },
+        { "name": "AJ Green" },
+        { "name": "Andre Jackson Jr." }
+      ]
+    },
+    "Minnesota Timberwolves": {
+      "code": "MIN",
+      "players": [
+        { "name": "Anthony Edwards", "apiSportsId": 2577 },
+        { "name": "Julius Randle", "apiSportsId": 50 },
+        { "name": "Rudy Gobert", "apiSportsId": 187 },
+        { "name": "Jaden McDaniels" },
+        { "name": "Mike Conley", "apiSportsId": 204 },
+        { "name": "Donte DiVincenzo" },
+        { "name": "Naz Reid" },
+        { "name": "Ayo Dosunmu", "apiSportsId": 2891 }
+      ]
+    },
+    "New Orleans Pelicans": {
+      "code": "NOP",
+      "players": [
+        { "name": "Zion Williamson", "apiSportsId": 2426 },
+        { "name": "Dejounte Murray", "apiSportsId": 365 },
+        { "name": "Trey Murphy III" },
+        { "name": "Herbert Jones", "apiSportsId": 2892 },
+        { "name": "Jordan Hawkins" },
+        { "name": "Yves Missi" },
+        { "name": "Jordan Poole", "apiSportsId": 2415 },
+        { "name": "Trey Alexander" }
+      ]
+    },
+    "New York Knicks": {
+      "code": "NYK",
+      "players": [
+        { "name": "Jalen Brunson", "apiSportsId": 2568 },
+        { "name": "Karl-Anthony Towns", "apiSportsId": 38 },
+        { "name": "Mikal Bridges", "apiSportsId": 2565 },
+        { "name": "OG Anunoby" },
+        { "name": "Josh Hart", "apiSportsId": 892 },
+        { "name": "Miles McBride" },
+        { "name": "Mitchell Robinson" },
+        { "name": "Jeremy Sochan", "apiSportsId": 3530 }
+      ]
+    },
+    "Oklahoma City Thunder": {
+      "code": "OKC",
+      "players": [
+        { "name": "Shai Gilgeous-Alexander", "apiSportsId": 2567 },
+        { "name": "Jalen Williams", "apiSportsId": 3528 },
+        { "name": "Chet Holmgren", "apiSportsId": 3533 },
+        { "name": "Isaiah Hartenstein" },
+        { "name": "Alex Caruso" },
+        { "name": "Luguentz Dort", "apiSportsId": 2429 },
+        { "name": "Jared McCain" },
+        { "name": "Cason Wallace" }
       ]
     },
     "Orlando Magic": {
@@ -248,26 +278,116 @@
       "players": [
         { "name": "Paolo Banchero", "apiSportsId": 3524 },
         { "name": "Franz Wagner", "apiSportsId": 2889 },
+        { "name": "Desmond Bane", "apiSportsId": 2886 },
         { "name": "Jalen Suggs", "apiSportsId": 2885 },
-        { "name": "Wendell Carter Jr.", "apiSportsId": 2574 }
+        { "name": "Wendell Carter Jr.", "apiSportsId": 2574 },
+        { "name": "Anthony Black" },
+        { "name": "Tristan da Silva" },
+        { "name": "Jonathan Isaac" }
+      ]
+    },
+    "Philadelphia 76ers": {
+      "code": "PHI",
+      "players": [
+        { "name": "Joel Embiid", "apiSportsId": 52 },
+        { "name": "Tyrese Maxey", "apiSportsId": 2578 },
+        { "name": "Paul George", "apiSportsId": 169 },
+        { "name": "Kelly Oubre Jr.", "apiSportsId": 262 },
+        { "name": "Andre Drummond" },
+        { "name": "Quentin Grimes" },
+        { "name": "Kyle Lowry" },
+        { "name": "Johni Broome" }
+      ]
+    },
+    "Phoenix Suns": {
+      "code": "PHX",
+      "players": [
+        { "name": "Devin Booker", "apiSportsId": 85 },
+        { "name": "Jalen Green", "apiSportsId": 2888 },
+        { "name": "Dillon Brooks" },
+        { "name": "Mark Williams", "apiSportsId": 3525 },
+        { "name": "Grayson Allen" },
+        { "name": "Ryan Dunn" },
+        { "name": "Royce O'Neale" },
+        { "name": "Cole Anthony" }
+      ]
+    },
+    "Portland Trail Blazers": {
+      "code": "POR",
+      "players": [
+        { "name": "Damian Lillard", "apiSportsId": 236 },
+        { "name": "Jrue Holiday" },
+        { "name": "Jerami Grant", "apiSportsId": 48 },
+        { "name": "Shaedon Sharpe", "apiSportsId": 3529 },
+        { "name": "Donovan Clingan" },
+        { "name": "Deni Avdija" },
+        { "name": "Scoot Henderson" },
+        { "name": "Robert Williams III" }
+      ]
+    },
+    "Sacramento Kings": {
+      "code": "SAC",
+      "players": [
+        { "name": "Domantas Sabonis", "apiSportsId": 364 },
+        { "name": "DeMar DeRozan", "apiSportsId": 175 },
+        { "name": "Zach LaVine", "apiSportsId": 53 },
+        { "name": "Keegan Murray", "apiSportsId": 3527 },
+        { "name": "Malik Monk" },
+        { "name": "De'Andre Hunter" },
+        { "name": "Devin Carter" },
+        { "name": "Russell Westbrook" }
+      ]
+    },
+    "San Antonio Spurs": {
+      "code": "SAS",
+      "players": [
+        { "name": "Victor Wembanyama", "apiSportsId": 3534 },
+        { "name": "De'Aaron Fox", "apiSportsId": 891 },
+        { "name": "Devin Vassell", "apiSportsId": 2579 },
+        { "name": "Stephon Castle" },
+        { "name": "Harrison Barnes" },
+        { "name": "Keldon Johnson", "apiSportsId": 2416 },
+        { "name": "Dylan Harper" },
+        { "name": "Julian Champagnie" }
+      ]
+    },
+    "Toronto Raptors": {
+      "code": "TOR",
+      "players": [
+        { "name": "Scottie Barnes", "apiSportsId": 2890 },
+        { "name": "RJ Barrett", "apiSportsId": 2428 },
+        { "name": "Brandon Ingram", "apiSportsId": 366 },
+        { "name": "Immanuel Quickley" },
+        { "name": "Jakob Poeltl", "apiSportsId": 369 },
+        { "name": "Gradey Dick", "apiSportsId": 3776 },
+        { "name": "Jamal Shead" },
+        { "name": "Ja'Kobe Walter" }
+      ]
+    },
+    "Utah Jazz": {
+      "code": "UTA",
+      "players": [
+        { "name": "Lauri Markkanen", "apiSportsId": 894 },
+        { "name": "Jaren Jackson Jr.", "apiSportsId": 2569 },
+        { "name": "Keyonte George" },
+        { "name": "Walker Kessler", "apiSportsId": 3532 },
+        { "name": "Ace Bailey" },
+        { "name": "Brice Sensabaugh" },
+        { "name": "Cody Williams" },
+        { "name": "John Konchar" }
       ]
     },
     "Washington Wizards": {
       "code": "WAS",
       "players": [
-        { "name": "Jordan Poole", "apiSportsId": 2415 },
-        { "name": "Kyle Kuzma", "apiSportsId": 893 },
-        { "name": "Jonas Valanciunas", "apiSportsId": 240 },
-        { "name": "Bilal Coulibaly", "apiSportsId": 3778 }
-      ]
-    },
-    "Detroit Pistons": {
-      "code": "DET",
-      "players": [
-        { "name": "Cade Cunningham", "apiSportsId": 2883 },
-        { "name": "Jaden Ivey", "apiSportsId": 3523 },
-        { "name": "Jalen Duren", "apiSportsId": 3522 },
-        { "name": "Tobias Harris", "apiSportsId": 226 }
+        { "name": "Bilal Coulibaly", "apiSportsId": 3778 },
+        { "name": "Alex Sarr" },
+        { "name": "Tre Johnson" },
+        { "name": "Bub Carrington" },
+        { "name": "Cam Whitmore" },
+        { "name": "Kyshawn George" },
+        { "name": "Jaden Hardy" },
+        { "name": "Sharife Cooper" }
       ]
     }
   }

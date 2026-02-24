@@ -31,6 +31,12 @@ service cloud.firestore {
       allow write: if false; // Only Cloud Functions can write to cache
     }
 
+    // NBA player directory - readable by authenticated users, writable by server only
+    match /nbaPlayerDirectory/{playerId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Cloud Functions can write
+    }
+
     // Demo analyses - readable by anyone (for onboarding demo), writable by server only
     match /demoAnalysis/{userId}/analyses/{analysisId} {
       allow read: if true; // Allow unauthenticated users to read demo content

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,10 @@ import {
   Pressable,
   Modal,
   Dimensions,
+  TextInput,
+  Image,
+  Animated,
+  Keyboard,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -101,15 +105,26 @@ const getScoreColor = (score: number): string => {
 
 // ── Props ──
 
+interface DirectoryPlayer {
+  name: string;
+  team: string;
+  teamCode: string;
+  position: string | null;
+  headshotUrl: string | null;
+  averages: { ppg?: number; rpg?: number; apg?: number };
+  gamesPlayed: number;
+}
+
 interface BoardViewProps {
   games: CachedGame[];
   loading: boolean;
   error: string | null;
+  directoryPlayers?: DirectoryPlayer[];
 }
 
 // ── Component ──
 
-export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) => {
+export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, directoryPlayers = [] }) => {
   const [viewMode, setViewMode] = useState<ViewMode>("byGame");
   const [sportFilter, setSportFilter] = useState<SportFilter>("nba");
   const [teamFilter, setTeamFilter] = useState<TeamFilter>("all");
@@ -118,6 +133,11 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [bookFilter, setBookFilter] = useState<string>("all");
   const [showBookDropdown, setShowBookDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const contentFade = useRef(new Animated.Value(1)).current;
+  const searchResultsAnim = useRef(new Animated.Value(0)).current;
 
   // ── Extract, filter, and group picks ──
   const { groupedPlayers, uniqueTeams, uniqueBooks } = useMemo(() => {
@@ -248,6 +268,93 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
     return result;
   }, [groupedPlayers, teamFilter, bookFilter]);
 
+  // ── Searchable player list ──
+  // Uses the full 240-player directory when available, falls back to cached games
+  const searchablePlayers = useMemo(() => {
+    if (directoryPlayers.length > 0) {
+      // Count active props per player from cached games
+      const propsMap = new Map<string, number>();
+      for (const p of groupedPlayers) {
+        const key = p.playerName.toLowerCase();
+        propsMap.set(key, (propsMap.get(key) || 0) + p.allProps.length);
+      }
+      return directoryPlayers.map((dp) => ({
+        playerName: dp.name,
+        team: dp.team,
+        teamCode: dp.teamCode,
+        headshotUrl: dp.headshotUrl,
+        ppg: dp.averages?.ppg,
+        propsCount: propsMap.get(dp.name.toLowerCase()) || 0,
+      }));
+    }
+    // Fallback: extract from cached games
+    const seen = new Map<string, { playerName: string; team: string; teamCode: string; headshotUrl: string | null; ppg: number | undefined; propsCount: number }>();
+    for (const p of groupedPlayers) {
+      const key = p.playerName.toLowerCase();
+      if (!seen.has(key)) {
+        seen.set(key, { playerName: p.playerName, team: p.team, teamCode: getTeamAbbreviation(p.team), headshotUrl: null, ppg: undefined, propsCount: p.allProps.length });
+      } else {
+        seen.get(key)!.propsCount += p.allProps.length;
+      }
+    }
+    return Array.from(seen.values());
+  }, [directoryPlayers, groupedPlayers]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return searchablePlayers
+      .filter((p) => p.playerName.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [searchQuery, searchablePlayers]);
+
+  // Animate content fade when search is active
+  const isSearchActive = searchFocused || searchQuery.length > 0;
+  useEffect(() => {
+    Animated.timing(contentFade, {
+      toValue: isSearchActive ? 0.15 : 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [isSearchActive]);
+
+  // Animate search results dropdown
+  useEffect(() => {
+    const showResults = searchFocused && searchResults.length > 0;
+    Animated.spring(searchResultsAnim, {
+      toValue: showResults ? 1 : 0,
+      damping: 20,
+      stiffness: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [searchFocused, searchResults.length]);
+
+  const handleSearchSelect = useCallback((playerName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Keyboard.dismiss();
+    setSearchQuery("");
+    setSearchFocused(false);
+
+    // Always go to unified player profile — defaults to Props view if player has props
+    const playerGroup = groupedPlayers.find(
+      (p) => p.playerName.toLowerCase() === playerName.toLowerCase()
+    );
+    router.push({
+      pathname: "/player-profile" as any,
+      params: {
+        playerName,
+        from: "board",
+        ...(playerGroup ? {
+          initialView: "props",
+          statType: playerGroup.bestProp.statType,
+          line: String(playerGroup.bestProp.line),
+        } : {
+          initialView: "stats",
+        }),
+      },
+    });
+  }, [groupedPlayers]);
+
   // ── Game cards data (for Games mode) ──
   const gameCards = useMemo((): GameCardData[] => {
     const byGame = new Map<string, GameCardData>();
@@ -314,12 +421,12 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
       }));
 
     router.push({
-      pathname: "/player-prop-chart" as any,
+      pathname: "/player-profile" as any,
       params: {
         playerName: best.playerName,
         statType: best.statType,
         line: String(best.line),
-        otherProps: JSON.stringify(otherProps),
+        initialView: "props",
         from: "board",
       },
     });
@@ -515,12 +622,86 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
   // HEADER
   // ═══════════════════════════════════════════════
 
+  const dismissSearch = useCallback(() => {
+    Keyboard.dismiss();
+    setSearchQuery("");
+    setSearchFocused(false);
+    searchInputRef.current?.blur();
+  }, []);
+
+  const renderSearchBar = () => (
+    <View style={styles.searchContainer}>
+      <View style={[styles.searchInputWrapper, isSearchActive && styles.searchInputWrapperActive]}>
+        <Ionicons name="search" size={16} color={isSearchActive ? colors.primary : colors.mutedForeground} />
+        <TextInput
+          ref={searchInputRef}
+          style={styles.searchInput}
+          placeholder="Search player..."
+          placeholderTextColor={colors.mutedForeground}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFocus={() => setSearchFocused(true)}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="words"
+        />
+        {isSearchActive && (
+          <Pressable onPress={dismissSearch} hitSlop={8}>
+            <Text style={styles.searchCancelText}>Cancel</Text>
+          </Pressable>
+        )}
+      </View>
+      {searchFocused && searchResults.length > 0 && (
+        <Animated.View style={[styles.searchResults, {
+          opacity: searchResultsAnim,
+          transform: [{ translateY: searchResultsAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
+        }]}>
+          {searchResults.map((result, index) => {
+            const abbrev = result.teamCode || getTeamAbbreviation(result.team);
+            const localImage = getPlayerImage(result.playerName, abbrev);
+            const hasRemoteHeadshot = !!result.headshotUrl;
+            return (
+              <Pressable
+                key={`${result.playerName}-${index}`}
+                style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
+                onPress={() => handleSearchSelect(result.playerName)}
+              >
+                {hasRemoteHeadshot ? (
+                  <ExpoImage source={{ uri: result.headshotUrl! }} style={styles.searchResultAvatar} contentFit="cover" />
+                ) : localImage ? (
+                  <Image source={localImage} style={styles.searchResultAvatar} />
+                ) : (
+                  <View style={styles.searchResultAvatarPlaceholder}>
+                    <Ionicons name="person" size={14} color={colors.mutedForeground} />
+                  </View>
+                )}
+                <View style={styles.searchResultInfo}>
+                  <Text style={styles.searchResultName} numberOfLines={1}>{result.playerName}</Text>
+                  <Text style={styles.searchResultTeam}>
+                    {abbrev}{result.ppg != null ? ` · ${result.ppg} PPG` : ""}{result.propsCount > 0 ? ` · ${result.propsCount} prop${result.propsCount !== 1 ? "s" : ""}` : ""}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+              </Pressable>
+            );
+          })}
+        </Animated.View>
+      )}
+      {isSearchActive && searchQuery.length >= 2 && searchResults.length === 0 && (
+        <View style={styles.searchNoResults}>
+          <Text style={styles.searchNoResultsText}>No players found</Text>
+        </View>
+      )}
+    </View>
+  );
+
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.titleRow}>
+      <Animated.View style={[styles.titleRow, { opacity: contentFade }]}>
         <Text style={styles.title}>Today's Picks</Text>
-      </View>
-      <View style={styles.headerFilters}>
+      </Animated.View>
+      {renderSearchBar()}
+      {!isSearchActive && <View style={styles.headerFilters}>
         {/* Sport dropdown chip */}
         <Pressable
           onPress={() => {
@@ -580,7 +761,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
             <Ionicons name="chevron-down" size={12} color={colors.mutedForeground} />
           </Pressable>
         )}
-      </View>
+      </View>}
     </View>
   );
 
@@ -845,26 +1026,30 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error }) =
         {renderBookDropdown()}
 
       {viewMode === "topPicks" ? (
-        <FlatList
+        <Animated.FlatList
           key="tiles-grid"
-          data={tilesData}
-          keyExtractor={(item, index) => item?.key || `pad-${index}`}
+          data={isSearchActive ? [] : tilesData}
+          keyExtractor={(item: any, index: number) => item?.key || `pad-${index}`}
           renderItem={renderPlayerTile as any}
           numColumns={2}
           columnWrapperStyle={styles.tileRow}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         />
       ) : (
-        <FlatList
+        <Animated.FlatList
           key="games-list"
-          data={gameCards}
-          keyExtractor={(item) => item.key}
+          data={isSearchActive ? [] : gameCards}
+          keyExtractor={(item: any) => item.key}
           renderItem={renderGameCard}
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         />
       )}
     </View>
@@ -904,6 +1089,103 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xl,
     fontFamily: typography.fontFamily.bold,
   },
+  // ── Search Bar ──
+  searchContainer: {
+    marginTop: spacing[2],
+    marginBottom: spacing[1],
+    zIndex: 10,
+  },
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    height: 40,
+    paddingHorizontal: spacing[3],
+    backgroundColor: "rgba(22, 26, 34, 0.85)",
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+  },
+  searchInputWrapperActive: {
+    borderColor: "rgba(0, 215, 215, 0.35)",
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+  },
+  searchCancelText: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.primary,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.foreground,
+    paddingVertical: 0,
+  },
+  searchResults: {
+    marginTop: spacing[1],
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    overflow: "hidden",
+  },
+  searchResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing[2] + 2,
+    paddingHorizontal: spacing[3],
+    gap: spacing[2] + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  searchResultRowPressed: {
+    backgroundColor: "rgba(0, 215, 215, 0.06)",
+  },
+  searchNoResults: {
+    marginTop: spacing[1],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[3],
+    backgroundColor: "rgba(22, 26, 34, 0.95)",
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    alignItems: "center",
+  },
+  searchNoResultsText: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.mutedForeground,
+  },
+  searchResultAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.secondary,
+  },
+  searchResultAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchResultInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  searchResultName: {
+    fontSize: typography.sizes.sm,
+    fontFamily: typography.fontFamily.semibold,
+    color: colors.foreground,
+  },
+  searchResultTeam: {
+    fontSize: 11,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.mutedForeground,
+  },
+
   filterChip: {
     flexDirection: "row",
     alignItems: "center",

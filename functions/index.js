@@ -44,6 +44,16 @@ exports.getParlayStackLegs = getParlayStackLegsHTTP;
 const { getPlayerPropChart } = require('./playerPropChart');
 exports.getPlayerPropChart = getPlayerPropChart;
 
+// Player Search — full player profile for search feature
+const { getPlayerSearch } = require('./playerSearch');
+exports.getPlayerSearch = getPlayerSearch;
+
+// Player Directory — daily sync + app read endpoint
+const { syncPlayerDirectory, syncPlayerDirectoryScheduled, getPlayerDirectory } = require('./syncPlayerDirectory');
+exports.syncPlayerDirectory = syncPlayerDirectory;
+exports.syncPlayerDirectoryScheduled = syncPlayerDirectoryScheduled;
+exports.getPlayerDirectory = getPlayerDirectory;
+
 // ML Feedback Loop - Track prediction results and export for retraining
 const { trackPredictionResults } = require('./trackPredictionResults');
 exports.trackPredictionResults = trackPredictionResults;
