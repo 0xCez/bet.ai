@@ -138,6 +138,9 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
   const searchInputRef = useRef<TextInput>(null);
   const contentFade = useRef(new Animated.Value(1)).current;
   const searchResultsAnim = useRef(new Animated.Value(0)).current;
+  const searchExpandAnim = useRef(new Animated.Value(0)).current;
+  const listFadeAnim = useRef(new Animated.Value(1)).current;
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // ── Extract, filter, and group picks ──
   const { groupedPlayers, uniqueTeams, uniqueBooks } = useMemo(() => {
@@ -622,21 +625,82 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
   // HEADER
   // ═══════════════════════════════════════════════
 
-  const dismissSearch = useCallback(() => {
+  const closeSearch = useCallback(() => {
     Keyboard.dismiss();
     setSearchQuery("");
     setSearchFocused(false);
     searchInputRef.current?.blur();
-  }, []);
+    listFadeAnim.setValue(0);
+    Animated.timing(searchExpandAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: false,
+    }).start(() => {
+      setSearchOpen(false);
+    });
+  }, [searchExpandAnim, listFadeAnim]);
+
+  // Animate list back in after search closes and list re-mounts
+  useEffect(() => {
+    if (!searchOpen) {
+      Animated.spring(listFadeAnim, {
+        toValue: 1,
+        damping: 18,
+        stiffness: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [searchOpen]);
+
+  const toggleSearch = useCallback(() => {
+    if (searchOpen) {
+      closeSearch();
+    } else {
+      listFadeAnim.setValue(0);
+      setSearchOpen(true);
+      Animated.timing(searchExpandAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: false,
+      }).start(() => {
+        searchInputRef.current?.focus();
+      });
+    }
+  }, [searchOpen, searchExpandAnim, listFadeAnim, closeSearch]);
+
+  const dismissSearch = closeSearch;
+
+  const searchBarHeight = searchExpandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 52],
+  });
+  const searchBarOpacity = searchExpandAnim.interpolate({
+    inputRange: [0, 0.4, 1],
+    outputRange: [0, 0, 1],
+  });
 
   const headerElement = useMemo(() => (
     <View style={styles.header}>
-      <Animated.View style={[styles.titleRow, { opacity: contentFade }]}>
-        <Text style={styles.title}>Today's Picks</Text>
-      </Animated.View>
-      <View style={styles.searchContainer}>
-        <View style={[styles.searchInputWrapper, isSearchActive && styles.searchInputWrapperActive]}>
-          <Ionicons name="search" size={16} color={isSearchActive ? colors.primary : colors.mutedForeground} />
+      <View style={styles.titleRow}>
+        <Animated.View style={{ opacity: contentFade }}>
+          <Text style={styles.title}>Today's Picks</Text>
+        </Animated.View>
+        <Pressable
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            toggleSearch();
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.searchToggleBtn, searchOpen && styles.searchToggleBtnActive, pressed && { opacity: 0.7 }]}
+        >
+          <Ionicons name={searchOpen ? "close" : "search"} size={20} color={searchOpen ? colors.primary : colors.mutedForeground} />
+        </Pressable>
+      </View>
+
+      {/* Expandable search panel */}
+      <Animated.View style={{ height: searchBarHeight, opacity: searchBarOpacity, overflow: "hidden" }}>
+        <View style={[styles.searchInputWrapper, styles.searchInputWrapperActive, { marginTop: spacing[2] }]}>
+          <Ionicons name="search" size={16} color={colors.primary} />
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
@@ -649,55 +713,58 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
             autoCorrect={false}
             autoCapitalize="words"
           />
-          {isSearchActive && (
+          {searchQuery.length > 0 && (
             <Pressable onPress={dismissSearch} hitSlop={8}>
-              <Text style={styles.searchCancelText}>Cancel</Text>
+              <Text style={styles.searchCancelText}>Clear</Text>
             </Pressable>
           )}
         </View>
-        {searchFocused && searchResults.length > 0 && (
-          <Animated.View style={[styles.searchResults, {
-            opacity: searchResultsAnim,
-            transform: [{ translateY: searchResultsAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
-          }]}>
-            {searchResults.map((result, index) => {
-              const abbrev = result.teamCode || getTeamAbbreviation(result.team);
-              const localImage = getPlayerImage(result.playerName, abbrev);
-              const hasRemoteHeadshot = !!result.headshotUrl;
-              return (
-                <Pressable
-                  key={`${result.playerName}-${index}`}
-                  style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
-                  onPress={() => handleSearchSelect(result.playerName)}
-                >
-                  {hasRemoteHeadshot ? (
-                    <ExpoImage source={{ uri: result.headshotUrl! }} style={styles.searchResultAvatar} contentFit="cover" />
-                  ) : localImage ? (
-                    <Image source={localImage} style={styles.searchResultAvatar} />
-                  ) : (
-                    <View style={styles.searchResultAvatarPlaceholder}>
-                      <Ionicons name="person" size={14} color={colors.mutedForeground} />
-                    </View>
-                  )}
-                  <View style={styles.searchResultInfo}>
-                    <Text style={styles.searchResultName} numberOfLines={1}>{result.playerName}</Text>
-                    <Text style={styles.searchResultTeam}>
-                      {abbrev}{result.ppg != null ? ` · ${result.ppg} PPG` : ""}{result.propsCount > 0 ? ` · ${result.propsCount} prop${result.propsCount !== 1 ? "s" : ""}` : ""}
-                    </Text>
+      </Animated.View>
+
+      {/* Search results dropdown */}
+      {searchOpen && searchFocused && searchResults.length > 0 && (
+        <Animated.View style={[styles.searchResults, {
+          opacity: searchResultsAnim,
+          transform: [{ translateY: searchResultsAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
+        }]}>
+          {searchResults.map((result, index) => {
+            const abbrev = result.teamCode || getTeamAbbreviation(result.team);
+            const localImage = getPlayerImage(result.playerName, abbrev);
+            const hasRemoteHeadshot = !!result.headshotUrl;
+            return (
+              <Pressable
+                key={`${result.playerName}-${index}`}
+                style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
+                onPress={() => handleSearchSelect(result.playerName)}
+              >
+                {hasRemoteHeadshot ? (
+                  <ExpoImage source={{ uri: result.headshotUrl! }} style={styles.searchResultAvatar} contentFit="cover" />
+                ) : localImage ? (
+                  <Image source={localImage} style={styles.searchResultAvatar} />
+                ) : (
+                  <View style={styles.searchResultAvatarPlaceholder}>
+                    <Ionicons name="person" size={14} color={colors.mutedForeground} />
                   </View>
-                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
-                </Pressable>
-              );
-            })}
-          </Animated.View>
-        )}
-        {isSearchActive && searchQuery.length >= 2 && searchResults.length === 0 && (
-          <View style={styles.searchNoResults}>
-            <Text style={styles.searchNoResultsText}>No players found</Text>
-          </View>
-        )}
-      </View>
-      {!isSearchActive && <View style={styles.headerFilters}>
+                )}
+                <View style={styles.searchResultInfo}>
+                  <Text style={styles.searchResultName} numberOfLines={1}>{result.playerName}</Text>
+                  <Text style={styles.searchResultTeam}>
+                    {abbrev}{result.ppg != null ? ` · ${result.ppg} PPG` : ""}{result.propsCount > 0 ? ` · ${result.propsCount} prop${result.propsCount !== 1 ? "s" : ""}` : ""}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+              </Pressable>
+            );
+          })}
+        </Animated.View>
+      )}
+      {searchOpen && isSearchActive && searchQuery.length >= 2 && searchResults.length === 0 && (
+        <View style={styles.searchNoResults}>
+          <Text style={styles.searchNoResultsText}>No players found</Text>
+        </View>
+      )}
+
+      {!searchOpen && <View style={styles.headerFilters}>
         {/* Sport dropdown chip */}
         <Pressable
           onPress={() => {
@@ -759,7 +826,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
         )}
       </View>}
     </View>
-  ), [searchQuery, searchFocused, isSearchActive, searchResults, sportFilter, viewMode, currentSportLabel, currentViewLabel, currentTeamLabel, bookFilter, uniqueBooks.length, contentFade, searchResultsAnim, dismissSearch, handleSearchSelect]);
+  ), [searchQuery, searchFocused, isSearchActive, searchOpen, searchResults, sportFilter, viewMode, currentSportLabel, currentViewLabel, currentTeamLabel, bookFilter, uniqueBooks.length, contentFade, searchExpandAnim, searchBarHeight, searchBarOpacity, searchResultsAnim, toggleSearch, dismissSearch, handleSearchSelect]);
 
   // ═══════════════════════════════════════════════
   // SPORT DROPDOWN
@@ -1021,32 +1088,36 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
       {renderTeamDropdown()}
         {renderBookDropdown()}
 
-      {viewMode === "topPicks" ? (
-        <Animated.FlatList
-          key="tiles-grid"
-          data={isSearchActive ? [] : tilesData}
-          keyExtractor={(item: any, index: number) => item?.key || `pad-${index}`}
-          renderItem={renderPlayerTile as any}
-          numColumns={2}
-          columnWrapperStyle={styles.tileRow}
-          ListHeaderComponent={headerElement}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
-      ) : (
-        <Animated.FlatList
-          key="games-list"
-          data={isSearchActive ? [] : gameCards}
-          keyExtractor={(item: any) => item.key}
-          renderItem={renderGameCard}
-          ListHeaderComponent={headerElement}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
+      {headerElement}
+
+      {!searchOpen && (
+        <Animated.View style={{ flex: 1, opacity: listFadeAnim, transform: [{ translateY: listFadeAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }}>
+          {viewMode === "topPicks" ? (
+            <FlatList
+              key="tiles-grid"
+              data={tilesData}
+              keyExtractor={(item: any, index: number) => item?.key || `pad-${index}`}
+              renderItem={renderPlayerTile as any}
+              numColumns={2}
+              columnWrapperStyle={styles.tileRow}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            />
+          ) : (
+            <FlatList
+              key="games-list"
+              data={gameCards}
+              keyExtractor={(item: any) => item.key}
+              renderItem={renderGameCard}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            />
+          )}
+        </Animated.View>
       )}
     </View>
   );
@@ -1085,12 +1156,22 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xl,
     fontFamily: typography.fontFamily.bold,
   },
-  // ── Search Bar ──
-  searchContainer: {
-    marginTop: spacing[2],
-    marginBottom: spacing[1],
-    zIndex: 10,
+  // ── Search Toggle Button ──
+  searchToggleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(22, 26, 34, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 215, 215, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  searchToggleBtnActive: {
+    borderColor: "rgba(0, 215, 215, 0.35)",
+    backgroundColor: "rgba(0, 215, 215, 0.1)",
+  },
+  // ── Search Bar ──
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",

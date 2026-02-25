@@ -17,7 +17,8 @@
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Bet.AI needs access to your camera to scan physical bet slips, allowing you to quickly import bet details without manual entry. For example, you can point your camera at a printed ticket to automatically add the bet for AI analysis.",
-        "NSPhotoLibraryUsageDescription": "Bet.AI needs access to your photo library so you can select images of bet slips (like screenshots) for analysis. For example, you can choose a saved image of an online bet slip to import its details into the app."
+        "NSPhotoLibraryUsageDescription": "Bet.AI needs access to your photo library so you can select images of bet slips (like screenshots) for analysis. For example, you can choose a saved image of an online bet slip to import its details into the app.",
+        "UIBackgroundModes": ["remote-notification"]
       },
       "appleTeamId": "GQ534WU43T"
     },
@@ -65,7 +66,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0D0F14"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

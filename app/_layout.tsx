@@ -20,6 +20,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { RevenueCatProvider } from "./providers/RevenueCatProvider";
 import { DemoTooltipProvider } from "../contexts/DemoTooltipContext";
 import { DemoTooltipRenderer } from "../components/ui/DemoTooltip";
+import { useNotifications } from "./hooks/useNotifications";
 // TODO: Image transition - commented out for now, will finish later
 // import { ImageTransitionProvider } from "../contexts/ImageTransitionContext";
 // import { TransitionImageOverlay } from "../components/ui/TransitionImageOverlay";
@@ -35,6 +36,9 @@ export default function RootLayout() {
     "Aeonik-RegularItalic": require("../assets/fonts/Aeonik-RegularItalic.otf"),
     "Aeonik-Black": require("../assets/fonts/Aeonik-Black.ttf"),
   });
+
+  // Initialize push notifications
+  useNotifications();
 
   // Initialize i18n with the device locale
   useEffect(() => {

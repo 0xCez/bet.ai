@@ -247,8 +247,8 @@ exports.syncPlayerDirectoryScheduled = onSchedule({
 exports.syncPlayerDirectory = onRequest({
   timeoutSeconds: 540,
   memory: '512MiB',
-  cors: true,
   secrets: ['API_SPORTS_KEY'],
+  cors: true,
 }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(204).send('');

@@ -127,6 +127,8 @@ type TeamStatsParams = {
   analysisId?: string;
   selectedTeam?: string;
   isDemo?: string;
+  fromCache?: string;
+  cachedGameId?: string;
 };
 
 // Helper function to calculate recent form from string
@@ -257,9 +259,13 @@ export default function TeamStatsNFLNew() {
       cachedTeamResult = null;
     }
 
-    // If analysisId exists (history/demo), load from Firestore instead of API
-    if (params.analysisId) {
-      loadTeamStatsFromFirestore();
+    // If analysisId exists (history/demo/cached), load from Firestore instead of API
+    if (params.analysisId || params.cachedGameId) {
+      if (params.fromCache === "true" || params.cachedGameId) {
+        loadTeamStatsFromCache();
+      } else {
+        loadTeamStatsFromFirestore();
+      }
       return;
     }
 
@@ -323,6 +329,52 @@ export default function TeamStatsNFLNew() {
     } catch (err) {
       console.error("Error loading team stats from Firestore:", err);
       setError("Team stats unavailable for this analysis.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load team stats from pre-cached games (matchAnalysisCache or gameArchive)
+  const loadTeamStatsFromCache = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const cacheId = params.cachedGameId || params.analysisId;
+      if (!cacheId) {
+        throw new Error("Cache ID missing");
+      }
+
+      // Try matchAnalysisCache first, then gameArchive (for expired/past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
+
+      if (!docSnap.exists()) {
+        throw new Error("Cached analysis not found");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis || {};
+
+      if (cachedAnalysis?.teamStats) {
+        const teamData: TeamStatsResult = {
+          sport: data.sport || cachedAnalysis.sport,
+          teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
+          teamStats: cachedAnalysis.teamStats,
+          timestamp: data.timestamp || new Date().toISOString(),
+        };
+
+        setTeamResult(teamData);
+        cachedTeamResult = teamData;
+        console.log("Loaded team stats from pre-cached game");
+      } else {
+        throw new Error("No team stats data in pre-cached analysis");
+      }
+    } catch (err) {
+      console.error("Error loading team stats from cache:", err);
+      setError("Team stats unavailable for this cached game.");
     } finally {
       setIsLoading(false);
     }
@@ -780,6 +832,8 @@ export default function TeamStatsNFLNew() {
           team2Logo: params.team2Logo,
           analysisId: params.analysisId,
           isDemo: params.isDemo === "true",
+          fromCache: params.fromCache === "true",
+          cachedGameId: params.cachedGameId,
         }}
         isSubscribed={isSubscribed}
       />

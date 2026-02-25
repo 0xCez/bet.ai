@@ -195,8 +195,8 @@ function buildGameLogEntries(gameLogs, statType, line, schedule, prediction = 'o
 exports.getPlayerSearch = onRequest({
   timeoutSeconds: 30,
   memory: '256MiB',
-  cors: true,
   secrets: ['API_SPORTS_KEY'],
+  cors: true,
 }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET, POST');

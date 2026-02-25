@@ -236,8 +236,8 @@ export default function TeamStatsSoccerNew() {
     }
 
     // If analysisId exists (history/demo/cached), load from Firestore instead of API
-    if (params.analysisId) {
-      if (params.fromCache === "true") {
+    if (params.analysisId || params.cachedGameId) {
+      if (params.fromCache === "true" || params.cachedGameId) {
         loadTeamStatsFromCache();
       } else {
         loadTeamStatsFromFirestore();
@@ -305,22 +305,22 @@ export default function TeamStatsSoccerNew() {
     }
   };
 
-  // Load team stats from pre-cached games (matchAnalysisCache collection)
+  // Load team stats from pre-cached games (matchAnalysisCache or gameArchive)
   const loadTeamStatsFromCache = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      if (!params.analysisId) {
+      const cacheId = params.cachedGameId || params.analysisId;
+      if (!cacheId) {
         throw new Error("Cache ID missing");
       }
 
-      const { doc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("@/firebaseConfig");
-
-      // Pre-cached games are stored in matchAnalysisCache collection
-      const docRef = doc(db, "matchAnalysisCache", params.analysisId);
-      const docSnap = await getDoc(docRef);
+      // Try matchAnalysisCache first, then gameArchive (for expired/past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
 
       if (!docSnap.exists()) {
         throw new Error("Cached analysis not found");

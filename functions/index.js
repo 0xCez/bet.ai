@@ -60,9 +60,30 @@ exports.trackPredictionResults = trackPredictionResults;
 const { exportFeedbackCSV } = require('./exportFeedbackCSV');
 exports.exportFeedbackCSV = exportFeedbackCSV;
 
+// Push Notifications - token registration endpoint
+const { registerPushToken } = require('./notifications');
+exports.registerPushToken = registerPushToken;
+
 
 const ODDS_API_KEY = process.env.ODDS_API_KEY;
-const API_SPORTS_KEY = process.env.API_SPORTS_KEY;
+const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+
+let _apiSportsKey = process.env.API_SPORTS_KEY || null;
+async function getApiSportsKey() {
+  if (_apiSportsKey) return _apiSportsKey;
+  try {
+    const client = new SecretManagerServiceClient();
+    const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'betai-f9176';
+    const [version] = await client.accessSecretVersion({
+      name: `projects/${projectId}/secrets/API_SPORTS_KEY/versions/latest`,
+    });
+    _apiSportsKey = version.payload.data.toString('utf8').trim();
+    return _apiSportsKey;
+  } catch (err) {
+    console.error('Failed to load API_SPORTS_KEY from Secret Manager:', err.message);
+    return null;
+  }
+}
 const STATPAL_API_KEY = process.env.STATPAL_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
@@ -1141,9 +1162,13 @@ function getWinLossRecord(games, teamId, sport) {
 
 // Refactored generic function to get latest games for a given sport and team
 async function getLatest10Games(sport, teamId, team2Id = null) {
-    const currentYear = new Date().getFullYear();
+    const calendarYear = new Date().getFullYear();
+    const sportLower = sport.toLowerCase();
+    // NBA/NFL/NCAAF/Soccer seasons span two calendar years — use start year (e.g. 2025 for 2025-26)
+    // MLB uses calendar year
+    const currentYear = (sportLower === 'mlb') ? calendarYear : calendarYear - 1;
     const previousYear = currentYear - 1;
-    const API_KEY = API_SPORTS_KEY;
+    const API_KEY = await getApiSportsKey();
 
     // Configuration for different sports APIs
     const sportApiConfig = {
@@ -1479,7 +1504,7 @@ async function getHeadToHeadGames(sport, team1Id, team2Id) {
         return { h2hGames: [], h2hRecord: { record: "0-0", pattern: "No data" }, error: `Team IDs are missing for ${sport} H2H.` };
     }
 
-    const API_KEY = API_SPORTS_KEY; // Use the same API key
+    const API_KEY = await getApiSportsKey(); // Use the same API key
 
     // Configuration for different sports APIs (ensure NBA is configured)
     const sportApiConfig = {
@@ -1783,9 +1808,10 @@ async function soccerInjuries(teamId) {
         return { injuries: [], error: "Team ID is missing." };
     }
 
-    const currentYear = new Date().getFullYear();
+    // Soccer seasons span two calendar years — use start year (e.g. 2025 for 2025-26)
+    const currentYear = new Date().getFullYear() - 1;
     const previousYear = currentYear - 1;
-    const API_KEY = API_SPORTS_KEY;
+    const API_KEY = await getApiSportsKey();
 
     // --- Helper function to fetch injuries for a specific season ---
     async function fetchInjuriesForSeason(seasonToFetch) {
@@ -1894,7 +1920,7 @@ async function nflInjuries(teamId) {
         return { injuries: [], error: "Team ID is missing." };
     }
 
-    const API_KEY = API_SPORTS_KEY;
+    const API_KEY = await getApiSportsKey();
 
     try {
         const url = new URL("https://v1.american-football.api-sports.io/injuries");
@@ -2240,8 +2266,8 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
 
       // Force re-generation for all cache entries without proper language field
       if (!cachedData.language) {
-        console.log(`Cache has no language field for ${cacheKey}, treating as cache miss`);
-        return null;
+        console.log(`Cache has no language field for ${cacheKey}, will check pre-cache fallback`);
+        // Don't return null — fall through to name-based pre-cache fallback below
       }
 
       // Check if this is a pre-cached entry (has expiresAt field)
@@ -2251,6 +2277,8 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
           console.log(`✅ Pre-cache HIT for ${cacheKey}, expires: ${cachedData.expiresAt}`);
           const analysisData = cachedData.analysis;
           analysisData.language = cachedData.language;
+          analysisData.fromCache = true;
+          analysisData.cachedGameId = cacheKey;
           return analysisData;
         } else {
           console.log(`Pre-cache expired for ${cacheKey}, expiresAt: ${cachedData.expiresAt}`);
@@ -2266,8 +2294,8 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
         analysisData.language = cachedData.language;
         return analysisData;
       } else {
-        console.log(`Cache expired for ${cacheKey}, will update cache`);
-        return null;
+        console.log(`Cache expired for ${cacheKey}, will check pre-cache fallback`);
+        // Don't return null — fall through to name-based pre-cache fallback below
       }
     }
 
@@ -2293,6 +2321,8 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
             // Mark that this is English content served to a non-English user
             analysisData.language = 'en';
             analysisData.isEnglishFallback = true;
+            analysisData.fromCache = true;
+            analysisData.cachedGameId = englishCacheKey;
             return analysisData;
           } else {
             console.log(`English pre-cache expired for ${englishCacheKey}, expiresAt: ${cachedData.expiresAt}`);
@@ -2305,9 +2335,65 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
 
     console.log(`Cache miss for ${cacheKey}`);
 
-    // ── Fallback: check gameArchive for archived/past games ──
-    // Archived docs use different doc IDs (nba_{oddsApiEventId}) so we
-    // query by team names stored in analysis.teams.home / analysis.teams.away.
+    // Helper: check if two team names refer to the same team.
+    // Handles "Lakers" vs "Los Angeles Lakers", "Man City" vs "Manchester City", etc.
+    // Requires at least 4 chars to match via includes() to avoid false positives.
+    function teamsMatch(name1, name2) {
+      if (name1 === name2) return true;
+      if (name1.length < 4 || name2.length < 4) return false;
+      return name1.includes(name2) || name2.includes(name1);
+    }
+
+    // ── Fallback 1: check matchAnalysisCache by team names ──
+    // Pre-cached games use event-based doc IDs (nba_{oddsApiEventId}) which don't
+    // match the team-ID-based cache key. Search by preCached flag + team name match.
+    if (team1Name && team2Name && typeof team1Name === 'string' && typeof team2Name === 'string') {
+      console.log(`[checkCacheForMatch] Checking matchAnalysisCache by team names: ${team1Name} vs ${team2Name}`);
+      try {
+        const preCacheSnapshot = await db.collection('matchAnalysisCache')
+          .where('sport', '==', sport.toLowerCase())
+          .where('preCached', '==', true)
+          .get();
+
+        if (!preCacheSnapshot.empty) {
+          const t1 = team1Name.toLowerCase().trim();
+          const t2 = team2Name.toLowerCase().trim();
+
+          const matchingDocs = preCacheSnapshot.docs
+            .filter(doc => {
+              const data = doc.data();
+              const analysis = data.analysis;
+              if (!analysis || !analysis.teams) return false;
+              const home = (analysis.teams?.home || '').toLowerCase().trim();
+              const away = (analysis.teams?.away || '').toLowerCase().trim();
+              if (!home || !away) return false;
+              return (teamsMatch(home, t1) && teamsMatch(away, t2)) ||
+                     (teamsMatch(home, t2) && teamsMatch(away, t1));
+            })
+            .sort((a, b) => {
+              const aTime = a.data().gameStartTime || '0';
+              const bTime = b.data().gameStartTime || '0';
+              return bTime.localeCompare(aTime);
+            });
+
+          if (matchingDocs.length > 0) {
+            const cachedData = matchingDocs[0].data();
+            console.log(`✅ matchAnalysisCache HIT (by team names) for ${team1Name} vs ${team2Name} (doc: ${matchingDocs[0].id}, gameStart: ${cachedData.gameStartTime})`);
+            const analysisData = cachedData.analysis;
+            analysisData.language = cachedData.language || 'en';
+            analysisData.fromCache = true;
+            analysisData.cachedGameId = matchingDocs[0].id;
+            return analysisData;
+          }
+        }
+        console.log(`[checkCacheForMatch] No matching pre-cached game in matchAnalysisCache`);
+      } catch (preCacheError) {
+        console.error('[checkCacheForMatch] matchAnalysisCache name-based fallback error:', preCacheError.message);
+      }
+    }
+
+    // ── Fallback 2: check gameArchive for archived/past games ──
+    // Archived docs also use event-based doc IDs, so we query by team names.
     if (team1Name && team2Name && typeof team1Name === 'string' && typeof team2Name === 'string') {
       console.log(`[checkCacheForMatch] Checking gameArchive for archived game: ${team1Name} vs ${team2Name}`);
       try {
@@ -2319,21 +2405,11 @@ async function checkCacheForMatch(sport, team1Id, team2Id, locale = 'en', team1N
           const t1 = team1Name.toLowerCase().trim();
           const t2 = team2Name.toLowerCase().trim();
 
-          // Helper: check if two team names refer to the same team.
-          // Handles "Lakers" vs "Los Angeles Lakers", "Man City" vs "Manchester City", etc.
-          // Requires at least 4 chars to match via includes() to avoid false positives.
-          function teamsMatch(name1, name2) {
-            if (name1 === name2) return true;
-            if (name1.length < 4 || name2.length < 4) return false;
-            return name1.includes(name2) || name2.includes(name1);
-          }
-
           const matchingDocs = archiveSnapshot.docs
             .filter(doc => {
               const data = doc.data();
               const analysis = data.analysis;
-              // Skip shell docs that were archived before enrichment (no real data)
-              if (!analysis || !analysis.aiAnalysis) return false;
+              if (!analysis || !analysis.teams) return false;
               const home = (analysis.teams?.home || '').toLowerCase().trim();
               const away = (analysis.teams?.away || '').toLowerCase().trim();
               if (!home || !away) return false;
@@ -2941,7 +3017,7 @@ exports.cleanupCache = functions.https.onRequest(async (req, res) => {
 
 exports.populateMmaFighters = functions.https.onRequest(async (req, res) => {
   try {
-    const API_KEY = API_SPORTS_KEY;
+    const API_KEY = await getApiSportsKey();
     const categories = [
       "Bantamweight",
       "Catch Weight",
@@ -3040,7 +3116,7 @@ exports.populateMmaFighters = functions.https.onRequest(async (req, res) => {
 
 exports.populateSoccerTeams = functions.https.onRequest(async (req, res) => {
   try {
-    const API_KEY = API_SPORTS_KEY;
+    const API_KEY = await getApiSportsKey();
     const leagues = [61, 140, 71, 135, 78, 94, 88, 5, 15];
     const season = "2024";
 
@@ -4318,10 +4394,15 @@ async function getPlayerStatsDataTest(sport, team1Id, team2Id) {
 
 async function getTeamPlayerStatsTest(sport, teamId) {
   try {
-    const currentSeason = new Date().getFullYear();
+    // Sport-specific season logic:
+    // NBA/NFL/NCAAF/Soccer use start year of season (e.g. 2025 for 2025-26)
+    // MLB uses calendar year
+    const sportLower = sport.toLowerCase();
+    const currentYear = new Date().getFullYear();
+    const currentSeason = (sportLower === 'mlb') ? currentYear : currentYear - 1;
     let apiUrl;
 
-    switch (sport.toLowerCase()) {
+    switch (sportLower) {
       case 'nba':
         apiUrl = `https://v2.nba.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
         break;
@@ -4343,9 +4424,10 @@ async function getTeamPlayerStatsTest(sport, teamId) {
 
     console.log(`Fetching player stats from: ${apiUrl}`);
 
+    const apiKey = await getApiSportsKey();
     const response = await axios.get(apiUrl, {
       headers: {
-        "x-apisports-key": API_SPORTS_KEY
+        "x-apisports-key": apiKey
       }
     });
 
@@ -4496,7 +4578,7 @@ function getSoccerLeagueForTeam(teamId) {
 async function getSingleTeamStatsTest(sport, teamId) {
   try {
     const sportLower = sport.toLowerCase();
-    const currentSeason = sportLower === 'nba' ? 2024 : 2025; // Use 2024 for NBA, 2025 for others
+    const currentSeason = sportLower === 'nba' ? 2025 : 2025; // NBA 2025-26 season uses 2025
     let apiUrl;
 
     // Handle NFL/NCAAF
@@ -4525,12 +4607,10 @@ async function getSingleTeamStatsTest(sport, teamId) {
 
     console.log(`Fetching team stats from: ${apiUrl}`);
 
+    const apiKey = await getApiSportsKey();
     const response = await axios.get(apiUrl, {
-      headers: sport.toLowerCase() === 'nba' ? {
-        "x-rapidapi-host": "v2.nba.api-sports.io",
-        "x-rapidapi-key": API_SPORTS_KEY
-      } : {
-        "x-apisports-key": API_SPORTS_KEY
+      headers: {
+        "x-apisports-key": apiKey
       }
     });
 
@@ -6887,15 +6967,16 @@ async function getSingleTeamPlayerStats(sport, teamId) {
 // API-Sports Soccer Player Stats Function
 async function getAPISoccerPlayerStats(teamId) {
   try {
-    // Try 2024 season first, fallback to 2023 if no data with stats
-    let currentSeason = 2024;
+    // Try 2025 season first, fallback to 2024 if no data with stats
+    let currentSeason = 2025;
     let apiUrl = `https://v3.football.api-sports.io/players?season=${currentSeason}&team=${teamId}`;
 
     console.log(`Fetching soccer player stats from: ${apiUrl}`);
 
+    const apiKey = await getApiSportsKey();
     let response = await axios.get(apiUrl, {
       headers: {
-        "x-apisports-key": API_SPORTS_KEY
+        "x-apisports-key": apiKey
       }
     });
 
@@ -6912,15 +6993,15 @@ async function getAPISoccerPlayerStats(teamId) {
       (p.statistics[0].games?.appearences || 0) > 0
     );
 
-    // If 2024 has no stats, try 2023
+    // If 2025 has no stats, try 2024
     if (!hasStatsIn2024) {
-      console.log(`2024 season has no stats yet, trying 2023...`);
-      currentSeason = 2023;
+      console.log(`2025 season has no stats yet, trying 2024...`);
+      currentSeason = 2024;
       apiUrl = `https://v3.football.api-sports.io/players?season=${currentSeason}&team=${teamId}`;
 
       response = await axios.get(apiUrl, {
         headers: {
-          "x-apisports-key": API_SPORTS_KEY
+          "x-apisports-key": apiKey
         }
       });
 
@@ -7021,15 +7102,15 @@ function transformSoccerPlayerData(playersData) {
 // API-Sports NBA Player Stats Function
 async function getAPINBAPlayerStats(teamId) {
   try {
-    const currentSeason = 2024; // Use 2024 season for NBA
+    const currentSeason = 2025; // NBA 2025-26 season uses 2025
     const apiUrl = `https://v2.nba.api-sports.io/players/statistics?season=${currentSeason}&team=${teamId}`;
 
     console.log(`Fetching NBA player stats from: ${apiUrl}`);
 
+    const apiKey = await getApiSportsKey();
     const response = await axios.get(apiUrl, {
       headers: {
-        "x-rapidapi-host": "v2.nba.api-sports.io",
-        "x-rapidapi-key": API_SPORTS_KEY
+        "x-apisports-key": apiKey
       }
     });
 

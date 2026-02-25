@@ -150,9 +150,14 @@ export default function PlayerStatsNBA() {
       cachedPlayerResult = null;
     }
 
+    // Cached/archived game flow — load from matchAnalysisCache or gameArchive
+    if (params.fromCache === "true" || params.cachedGameId) {
+      loadPlayerStatsFromCache();
+      return;
+    }
+
     // History mode (analysisId without team params) - load from Firestore
-    // Demo mode has team params so it will fetch fresh from API below
-    if (params.analysisId && !params.team1 && params.fromCache !== "true") {
+    if (params.analysisId && !params.team1) {
       loadPlayerStatsFromFirestore();
       return;
     }
@@ -197,6 +202,54 @@ export default function PlayerStatsNBA() {
       animateIn();
     } catch (err: any) {
       console.error("Error fetching player stats:", err);
+      setError(err.message || "Failed to load player statistics");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load from pre-cached games (matchAnalysisCache or gameArchive)
+  const loadPlayerStatsFromCache = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const cacheId = params.cachedGameId || params.analysisId;
+      if (!cacheId) {
+        throw new Error("Cache ID missing");
+      }
+
+      // Try matchAnalysisCache first, then gameArchive (for expired/past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
+
+      if (!docSnap.exists()) {
+        throw new Error("Cached analysis not found");
+      }
+
+      const data = docSnap.data();
+      const cachedAnalysis = data.analysis || {};
+
+      if (cachedAnalysis?.playerStats) {
+        const playerData: PlayerStatsResult = {
+          sport: data.sport || params.sport || "nba",
+          teams: cachedAnalysis.teams || { home: params.team1, away: params.team2, logos: {} },
+          playerStats: cachedAnalysis.playerStats,
+          timestamp: data.timestamp || new Date().toISOString(),
+          teamIds: cachedAnalysis.playerStats.team1?.teamId && cachedAnalysis.playerStats.team2?.teamId ?
+            { team1Id: cachedAnalysis.playerStats.team1.teamId, team2Id: cachedAnalysis.playerStats.team2.teamId } :
+            { team1Id: 0, team2Id: 0 },
+        };
+        cachedPlayerResult = playerData;
+        setPlayerResult(playerData);
+        animateIn();
+      } else {
+        throw new Error("No player stats in cached analysis");
+      }
+    } catch (err: any) {
+      console.error("Error loading player stats from cache:", err);
       setError(err.message || "Failed to load player statistics");
     } finally {
       setIsLoading(false);
