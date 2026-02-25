@@ -300,8 +300,8 @@ export default function MarketIntelNew() {
     }
 
     // If analysisId exists (history/demo/cached), load from Firestore instead of API
-    if (params.analysisId) {
-      if (params.fromCache === "true") {
+    if (params.analysisId || params.cachedGameId) {
+      if (params.fromCache === "true" || params.cachedGameId) {
         loadMarketIntelFromCache();
       } else {
         loadMarketIntelFromFirestore();
@@ -381,19 +381,22 @@ export default function MarketIntelNew() {
     }
   };
 
-  // Load market intel from pre-cached games (matchAnalysisCache collection)
+  // Load market intel from pre-cached games (matchAnalysisCache or gameArchive)
   const loadMarketIntelFromCache = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      if (!params.analysisId) {
+      const cacheId = params.cachedGameId || params.analysisId;
+      if (!cacheId) {
         throw new Error("Cache ID missing");
       }
 
-      // Pre-cached games are stored in matchAnalysisCache collection
-      const docRef = doc(db, "matchAnalysisCache", params.analysisId);
-      const docSnap = await getDoc(docRef);
+      // Try matchAnalysisCache first, then gameArchive (for past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
 
       if (!docSnap.exists()) {
         throw new Error("Cached analysis not found");

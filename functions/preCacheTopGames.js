@@ -26,6 +26,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const axios = require("axios");
 require('dotenv').config();
+const { sendDailyPicksNotification } = require('./notifications');
 
 // Orchestrator: shared data fetch + both pipelines as library calls (no HTTP round-trips)
 const { refreshGameProps } = require('./refreshGameProps');
@@ -665,8 +666,8 @@ async function healWithBudget(refreshResult, startTime, pipeline = 'both') {
 exports.preCacheTopGames = onRequest({
   timeoutSeconds: 540,
   memory: '512MiB',
-  cors: true,
   secrets: ['API_SPORTS_KEY'],
+  cors: true,
 }, async (req, res) => {
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST');
@@ -1127,7 +1128,8 @@ exports.enrichAIDaily = onSchedule({
   schedule: '0 12 * * *', // 12 PM UTC = 7 AM ET
   timeZone: 'UTC',
   timeoutSeconds: 540,
-  memory: '512MiB'
+  memory: '512MiB',
+  secrets: ['API_SPORTS_KEY'],
 }, async () => {
   console.log('[enrichAIDaily] Starting...');
   const startTime = Date.now();
@@ -1188,10 +1190,17 @@ exports.refreshPropsScheduled2 = onSchedule({
 
     const result = await refreshAllCachedGames({ pipeline: 'both' });
     const healResult = await healWithBudget(result, startTime, 'both');
-    await writeLeaderboardAndSlips();
+    const leaderboard = await writeLeaderboardAndSlips();
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`[refreshPropsScheduled2] Done in ${duration}s — ${result.updated} updated, ${result.failed} failed`);
     if (healResult) console.log(`[refreshPropsScheduled2] Healed: ${healResult.totalHealed}, stillEmpty: ${healResult.totalStillEmpty}`);
+
+    // Send daily push notification (alternates between top pick and parlay)
+    try {
+      await sendDailyPicksNotification(leaderboard.edgeProps, leaderboard.parlaySlips);
+    } catch (notifErr) {
+      console.error('[refreshPropsScheduled2] Notification error (non-fatal):', notifErr.message);
+    }
   } catch (error) {
     console.error('[refreshPropsScheduled2] Fatal:', error);
     throw error;
@@ -1283,8 +1292,8 @@ exports.archiveExpiredGamesScheduled = onSchedule({
 exports.refreshProps = onRequest({
   timeoutSeconds: 540,
   memory: '1GiB',
-  cors: true,
   secrets: ['API_SPORTS_KEY'],
+  cors: true,
 }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'POST');
@@ -1447,7 +1456,7 @@ function mapEdgeProp(p) {
     avg: p.l10Avg,
     odds: isOver ? p.oddsOver : p.oddsUnder,
     bk: shortBook(isOver ? p.bookmakerOver : p.bookmakerUnder),
-    allBks: allBks.length > 0 ? allBks : undefined,
+    allBks: allBks.length > 0 ? allBks : null,
     l10: p.hitRates?.l10?.pct ?? null,
     szn: p.hitRates?.season?.pct ?? null,
     dirL10: p.directionalHitRates?.l10 ?? null,
@@ -1680,7 +1689,7 @@ function mapStackLeg(p) {
     trend: p.trend,
     odds: p.altOdds,
     bk: shortBook(p.bookmaker),
-    allBks: allBks.length > 0 ? allBks : undefined,
+    allBks: allBks.length > 0 ? allBks : null,
     l10: p.hitRates?.l10?.pct ?? null,
     szn: p.hitRates?.season?.pct ?? null,
     defRank: p.opponentDefense?.rank ?? null,
@@ -1762,13 +1771,68 @@ async function writeLeaderboardAndSlips() {
     });
   }
 
-  console.log(`[Leaderboard] Written: ${edgeProps.length} edge props, ${stackLegs.length} stack legs, ${parlaySlips.length} slips`);
-  return { edgeCount: edgeProps.length, stackCount: stackLegs.length, slipCount: parlaySlips.length };
+  // Picks history — dated snapshot, MERGE with existing (never lose picks from earlier refreshes)
+  const dateKey = now.toISOString().slice(0, 10); // "2026-02-24"
+  const pickKey = (p) => `${p.name}|${p.statType}|${p.line}|${p.dir}`;
+
+  // Read existing picksHistory for today (if any)
+  const existingPicksDoc = await db.collection('picksHistory').doc(dateKey).get();
+  const existingEdge = existingPicksDoc.exists ? (existingPicksDoc.data().edge || []) : [];
+  const existingStack = existingPicksDoc.exists ? (existingPicksDoc.data().stack || []) : [];
+
+  // Merge: fresh picks overwrite existing ones (by key), but existing ones for games
+  // no longer in the refresh window are KEPT, not dropped
+  const edgeMap = new Map();
+  for (const p of existingEdge) edgeMap.set(pickKey(p), p);
+  for (const p of edgeProps) edgeMap.set(pickKey(p), p); // fresh data wins
+  const mergedEdge = [...edgeMap.values()].sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
+
+  const stackMap = new Map();
+  for (const p of existingStack) stackMap.set(pickKey(p), p);
+  for (const p of stackLegs) stackMap.set(pickKey(p), p); // fresh data wins
+  const mergedStack = [...stackMap.values()].sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+  await db.collection('picksHistory').doc(dateKey).set({
+    edge: mergedEdge,
+    stack: mergedStack,
+    generatedAt: now.toISOString(),
+    date: dateKey,
+    resultsRecorded: false,
+  });
+
+  // Parlay history — same merge logic: keep existing slips, add/update new ones
+  const existingParlayDoc = await db.collection('parlayHistory').doc(dateKey).get();
+  const existingSlips = existingParlayDoc.exists ? (existingParlayDoc.data().slips || []) : [];
+
+  const slipKey = (s) => `${s.name}|${s.bk}`;
+  const slipMap = new Map();
+  for (const s of existingSlips) slipMap.set(slipKey(s), s);
+  for (const s of parlaySlips) slipMap.set(slipKey(s), s); // fresh data wins
+  const mergedSlips = [...slipMap.values()];
+
+  if (mergedSlips.length > 0) {
+    await db.collection('parlayHistory').doc(dateKey).set({
+      slips: mergedSlips,
+      generatedAt: now.toISOString(),
+      date: dateKey,
+      resultsRecorded: false,
+    });
+  }
+
+  console.log(`[Leaderboard] Written: ${edgeProps.length} edge props, ${stackLegs.length} stack legs, ${parlaySlips.length} slips (history: ${dateKey})`);
+  return {
+    edgeCount: edgeProps.length,
+    stackCount: stackLegs.length,
+    slipCount: parlaySlips.length,
+    edgeProps: edgeProps.slice(0, 15),
+    parlaySlips,
+  };
 }
 
 exports.getCheatsheetData = onRequest({
   timeoutSeconds: 60,
   memory: '256MiB',
+  secrets: ['API_SPORTS_KEY'],
   cors: true,
 }, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');

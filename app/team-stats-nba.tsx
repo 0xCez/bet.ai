@@ -233,8 +233,8 @@ export default function TeamStatsNBANew() {
     }
 
     // If analysisId exists (history/demo/cached), load from Firestore instead of API
-    if (params.analysisId) {
-      if (params.fromCache === "true") {
+    if (params.analysisId || params.cachedGameId) {
+      if (params.fromCache === "true" || params.cachedGameId) {
         loadTeamStatsFromCache();
       } else {
         loadTeamStatsFromFirestore();
@@ -280,7 +280,10 @@ export default function TeamStatsNBANew() {
       const data = docSnap.data();
       const cachedAnalysis = data.analysis;
 
-      if (cachedAnalysis?.teamStats) {
+      const ts = cachedAnalysis?.teamStats;
+      const hasValidStats = ts && (ts.team1?.stats || ts.team2?.stats);
+
+      if (hasValidStats) {
         const teamData: NBATeamStatsResult = {
           sport: data.sport || cachedAnalysis.sport,
           teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
@@ -295,32 +298,33 @@ export default function TeamStatsNBANew() {
         cachedTeamResult = teamData;
         console.log("✅ Loaded team stats from Firestore cache");
       } else {
-        throw new Error("No team stats data in cached analysis");
+        console.log("⚠️ Cached team stats broken/empty, fetching fresh from API");
+        getTeamStats();
       }
     } catch (err) {
       console.error("Error loading team stats from Firestore:", err);
-      setError("Team stats unavailable for this analysis.");
+      getTeamStats();
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Load team stats from pre-cached games (matchAnalysisCache collection)
+  // Load team stats from pre-cached games (matchAnalysisCache or gameArchive)
   const loadTeamStatsFromCache = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      if (!params.analysisId) {
+      const cacheId = params.cachedGameId || params.analysisId;
+      if (!cacheId) {
         throw new Error("Cache ID missing");
       }
 
-      const { doc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("@/firebaseConfig");
-
-      // Pre-cached games are stored in matchAnalysisCache collection
-      const docRef = doc(db, "matchAnalysisCache", params.analysisId);
-      const docSnap = await getDoc(docRef);
+      // Try matchAnalysisCache first, then gameArchive (for expired/past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
 
       if (!docSnap.exists()) {
         throw new Error("Cached analysis not found");
@@ -329,7 +333,10 @@ export default function TeamStatsNBANew() {
       const data = docSnap.data();
       const cachedAnalysis = data.analysis || {};
 
-      if (cachedAnalysis?.teamStats) {
+      const ts = cachedAnalysis?.teamStats;
+      const hasValidStats = ts && (ts.team1?.stats || ts.team2?.stats);
+
+      if (hasValidStats) {
         const teamData: NBATeamStatsResult = {
           sport: data.sport || cachedAnalysis.sport,
           teams: cachedAnalysis.teams || { home: params.team1 || "", away: params.team2 || "", logos: { home: "", away: "" } },
@@ -344,11 +351,12 @@ export default function TeamStatsNBANew() {
         cachedTeamResult = teamData;
         console.log("✅ Loaded team stats from pre-cached game");
       } else {
-        throw new Error("No team stats data in pre-cached analysis");
+        console.log("⚠️ Cached team stats broken/empty, fetching fresh from API");
+        getTeamStats();
       }
     } catch (err) {
       console.error("Error loading team stats from cache:", err);
-      setError("Team stats unavailable for this cached game.");
+      getTeamStats();
     } finally {
       setIsLoading(false);
     }

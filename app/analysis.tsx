@@ -264,12 +264,14 @@ export default function AnalysisScreen() {
   // Check if we're navigating with the same params
   // For demo mode, always force a fresh fetch to ensure we get the correct locale-specific content
   // Also compare cachedGameId for pre-cached games from the home carousel
+  // Also compare analysisData for Pre-loaded Flow (scan → premium-loader → single-prediction → analysis)
   const isSameAnalysis =
     params.isDemo !== "true" && // Skip cache for demo mode
     cachedParams?.analysisId === params.analysisId &&
     cachedParams?.imageUri === params.imageUri &&
     cachedParams?.cachedGameId === params.cachedGameId && // Compare cached game ID
-    cachedParams?.isDemo === params.isDemo;
+    cachedParams?.isDemo === params.isDemo &&
+    cachedParams?.imageUrl === params.imageUrl; // Compare imageUrl for Pre-loaded Flow scans
 
   // Cache params for future comparison
   if (!isSameAnalysis) {
@@ -292,6 +294,12 @@ export default function AnalysisScreen() {
   const [showUnlockMessage, setShowUnlockMessage] = useState(false);
   const hasInitializedRef = React.useRef(false);
   const hasAnalysisSaved = React.useRef(false);
+
+  // Reset refs when navigating to a different analysis (fixes stale data from previous scan)
+  if (!isSameAnalysis) {
+    hasInitializedRef.current = false;
+    hasAnalysisSaved.current = false;
+  }
 
   // Initialize state, potentially from cache
   const [isLoading, setIsLoading] = useState(
@@ -656,11 +664,14 @@ export default function AnalysisScreen() {
     setError(null);
     setDisplayImageUrl(null);
     try {
-      const docRef = doc(db, "matchAnalysisCache", cacheId);
-      const docSnap = await getDoc(docRef);
+      // Try matchAnalysisCache first, then gameArchive (for expired/past games)
+      let docSnap = await getDoc(doc(db, "matchAnalysisCache", cacheId));
+      if (!docSnap.exists()) {
+        docSnap = await getDoc(doc(db, "gameArchive", cacheId));
+      }
 
       if (!docSnap.exists()) {
-        console.error(`Cached game document not found: matchAnalysisCache/${cacheId}`);
+        console.error(`Cached game document not found in matchAnalysisCache or gameArchive: ${cacheId}`);
         setError("Cached game analysis not found.");
         setAnalysisResult(null);
         setIsLoading(false);
