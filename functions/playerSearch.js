@@ -226,18 +226,25 @@ exports.getPlayerSearch = onRequest({
     // Resolve headshot (ESPN gives us live data, directory is fallback)
     const espnData = await resolveEspnPlayer(playerName);
 
-    // 3. Get game logs — prefer directory (synced daily, always fresh), fall back to live API
+    // 3. Get game logs — prefer directory, then live API, then pipeline playerId
     let gameLogs = dirEntry?.gameLogs || [];
     if (gameLogs.length === 0) {
-      // Directory doesn't have logs yet — try live API as fallback
+      // Directory doesn't have logs — try live API
       const playerId = dirEntry?.apiSportsId || await resolvePlayerId(playerName);
       if (playerId) {
         gameLogs = await getGameLogs(playerId) || [];
       }
     }
+    if (gameLogs.length === 0 && edgeProps.length > 0 && edgeProps[0].playerId) {
+      // Live API failed — try the playerId from the EdgeBoard pipeline (may hit stale ml_cache)
+      console.log(`[playerSearch] Trying pipeline playerId: ${edgeProps[0].playerId}`);
+      gameLogs = await getGameLogs(edgeProps[0].playerId) || [];
+    }
 
-    // If still no game logs AND no directory, player doesn't exist in our system
-    if (gameLogs.length === 0 && !dirEntry) {
+    const hasGameLogs = gameLogs.length > 0;
+
+    // If no game logs AND no directory AND no props, player doesn't exist
+    if (!hasGameLogs && !dirEntry && edgeProps.length === 0 && stackLegs.length === 0) {
       return res.status(404).json({
         success: false,
         error: `Player not found: ${playerName}`,
@@ -286,13 +293,15 @@ exports.getPlayerSearch = onRequest({
       }
     }
 
-    // 4. Build availableStats from game logs (always present) + prop-derived stats
+    // 4. Build availableStats from game logs + prop-derived stats
     const statSet = new Set();
 
     // Core stats from game logs — include any with non-zero L10 average
-    for (const stat of CORE_STATS) {
-      const avg = getL10Average(gameLogs, stat);
-      if (avg != null && avg > 0) statSet.add(stat);
+    if (hasGameLogs) {
+      for (const stat of CORE_STATS) {
+        const avg = getL10Average(gameLogs, stat);
+        if (avg != null && avg > 0) statSet.add(stat);
+      }
     }
 
     // Merge in prop-derived stats (combo stats like PRA only appear when a prop exists)
@@ -327,39 +336,53 @@ exports.getPlayerSearch = onRequest({
       const stackLeg = stackLegs.find(p => p.statType === stat);
       const hasProp = !!(edgeProp || stackLeg);
 
-      const avg = getL10Average(gameLogs, stat);
+      const avg = hasGameLogs ? getL10Average(gameLogs, stat) : (edgeProp?.l10Avg ?? stackLeg?.l10Avg ?? null);
       const syntheticLine = avg != null ? Math.round(avg * 2) / 2 : 0;
       const line = edgeProp?.line ?? stackLeg?.altLine ?? syntheticLine;
       const prediction = (edgeProp?.prediction || stackLeg?.prediction || 'Over').toLowerCase();
       const isOver = prediction === 'over';
 
-      // Game log entries
-      const gameLogEntries = buildGameLogEntries(gameLogs, stat, line, schedule, prediction);
+      let gameLogEntries, hitRates;
 
-      // Hit rates
-      let l5Over = 0, l5Total = 0, l10Over = 0, l10Total = 0, l20Over = 0, l20Total = 0;
-      for (let i = 0; i < gameLogEntries.length; i++) {
-        const hit = gameLogEntries[i].hit;
-        if (i < 20) { l20Total++; if (hit) l20Over++; }
-        if (i < 10) { l10Total++; if (hit) l10Over++; }
-        if (i < 5)  { l5Total++;  if (hit) l5Over++;  }
+      if (hasGameLogs) {
+        // Normal path: build from raw game logs
+        gameLogEntries = buildGameLogEntries(gameLogs, stat, line, schedule, prediction);
+
+        let l5Over = 0, l5Total = 0, l10Over = 0, l10Total = 0, l20Over = 0, l20Total = 0;
+        for (let i = 0; i < gameLogEntries.length; i++) {
+          const hit = gameLogEntries[i].hit;
+          if (i < 20) { l20Total++; if (hit) l20Over++; }
+          if (i < 10) { l10Total++; if (hit) l10Over++; }
+          if (i < 5)  { l5Total++;  if (hit) l5Over++;  }
+        }
+        let seasonHit = 0, seasonTotal = 0;
+        for (const g of gameLogs) {
+          const val = getStatValue(g, stat);
+          if (val === null) continue;
+          seasonTotal++;
+          if (isOver ? val > line : val < line) seasonHit++;
+        }
+
+        hitRates = {
+          l5:     { over: l5Over,     total: l5Total,     pct: pct(l5Over, l5Total) },
+          l10:    { over: l10Over,    total: l10Total,    pct: pct(l10Over, l10Total) },
+          l20:    { over: l20Over,    total: l20Total,    pct: pct(l20Over, l20Total) },
+          season: { over: seasonHit,  total: seasonTotal, pct: pct(seasonHit, seasonTotal) },
+        };
+      } else {
+        // Fallback: use pipeline's pre-computed hit rates
+        console.log(`[playerSearch] No game logs for ${playerName}, using pipeline data for ${stat}`);
+        gameLogEntries = [];
+        const rawHR = edgeProp?.hitRates || stackLeg?.hitRates || {};
+        hitRates = {
+          l5:     { over: rawHR.l5?.over || 0,     total: rawHR.l5?.total || 0,     pct: rawHR.l5?.pct || 0 },
+          l10:    { over: rawHR.l10?.over || 0,    total: rawHR.l10?.total || 0,    pct: rawHR.l10?.pct || 0 },
+          l20:    { over: rawHR.l20?.over || 0,    total: rawHR.l20?.total || 0,    pct: rawHR.l20?.pct || 0 },
+          season: { over: rawHR.season?.over || 0, total: rawHR.season?.total || 0, pct: rawHR.season?.pct || 0 },
+        };
       }
-      let seasonHit = 0, seasonTotal = 0;
-      for (const g of gameLogs) {
-        const val = getStatValue(g, stat);
-        if (val === null) continue;
-        seasonTotal++;
-        if (isOver ? val > line : val < line) seasonHit++;
-      }
 
-      const hitRates = {
-        l5:     { over: l5Over,     total: l5Total,     pct: pct(l5Over, l5Total) },
-        l10:    { over: l10Over,    total: l10Total,    pct: pct(l10Over, l10Total) },
-        l20:    { over: l20Over,    total: l20Total,    pct: pct(l20Over, l20Total) },
-        season: { over: seasonHit,  total: seasonTotal, pct: pct(seasonHit, seasonTotal) },
-      };
-
-      // Defense context (reuses single oppStats fetch)
+      // Defense context (reuses single oppStats fetch, or fall back to pipeline data)
       let defense = null;
       if (opponentName && oppStats) {
         const oppDef = getOpponentStatForProp(oppStats, opponentName, stat);
@@ -379,6 +402,22 @@ exports.getPlayerSearch = onRequest({
           };
         }
       }
+      if (!defense && (edgeProp?.opponentDefense || stackLeg?.opponentDefense)) {
+        const rawDef = edgeProp?.opponentDefense || stackLeg?.opponentDefense;
+        const label = defenseLabel(rawDef.rank);
+        const supportsOver = rawDef.rank >= 19;
+        const supports = isOver ? supportsOver : !supportsOver;
+        defense = {
+          rank: rawDef.rank,
+          totalTeams: 30,
+          label,
+          allowed: rawDef.allowed,
+          stat: rawDef.stat,
+          opponentCode: teamCode(opponentName),
+          supports,
+          narrative: supports ? 'Supports' : 'Contradicts',
+        };
+      }
 
       // EV (only meaningful when real odds exist from props)
       const odds = isOver ? (edgeProp?.oddsOver ?? null) : (edgeProp?.oddsUnder ?? null);
@@ -395,6 +434,7 @@ exports.getPlayerSearch = onRequest({
         hitRates,
         defense,
         ev,
+        fromPipelineCache: !hasGameLogs,
       };
     }
 

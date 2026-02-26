@@ -55,8 +55,9 @@ exports.syncPlayerDirectoryScheduled = syncPlayerDirectoryScheduled;
 exports.getPlayerDirectory = getPlayerDirectory;
 
 // ML Feedback Loop - Track prediction results and export for retraining
-const { trackPredictionResults } = require('./trackPredictionResults');
+const { trackPredictionResults, resolvePicksHTTP } = require('./trackPredictionResults');
 exports.trackPredictionResults = trackPredictionResults;
+exports.resolvePicksHTTP = resolvePicksHTTP;
 const { exportFeedbackCSV } = require('./exportFeedbackCSV');
 exports.exportFeedbackCSV = exportFeedbackCSV;
 
