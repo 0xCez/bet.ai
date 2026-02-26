@@ -96,6 +96,7 @@ function extractStatESPN(playerEntry, propType) {
   if (!playerEntry) return null;
   const type = propType.toLowerCase().replace('player_', '');
 
+  // Single-stat map
   const map = {
     'points': 'pts', 'pts': 'pts',
     'rebounds': 'reb', 'reb': 'reb', 'totreb': 'reb',
@@ -104,7 +105,27 @@ function extractStatESPN(playerEntry, propType) {
     'blocks': 'blk', 'blk': 'blk',
     'turnovers': 'tov', 'tov': 'tov',
     'threes': 'tpm', 'three_pointers': 'tpm', '3pm': 'tpm', 'tpm': 'tpm',
+    'threepointersmade': 'tpm',
   };
+
+  // Combo stats: sum constituent parts
+  const combos = {
+    'points+rebounds':          ['pts', 'reb'],
+    'points+assists':           ['pts', 'ast'],
+    'rebounds+assists':         ['reb', 'ast'],
+    'points+rebounds+assists':  ['pts', 'reb', 'ast'],
+    'steals+blocks':            ['stl', 'blk'],
+    'blocks+steals':            ['stl', 'blk'],
+  };
+
+  if (combos[type]) {
+    let total = 0;
+    for (const k of combos[type]) {
+      if (playerEntry[k] == null) return null;
+      total += playerEntry[k];
+    }
+    return total;
+  }
 
   const key = map[type];
   return key ? (playerEntry[key] ?? null) : null;
@@ -354,3 +375,92 @@ async function resolveParlayHistory(db) {
     }
   }
 }
+
+// ──────────────────────────────────────────────────────────────
+// HTTP endpoint for on-demand resolution
+// ──────────────────────────────────────────────────────────────
+
+exports.resolvePicksHTTP = functions.https.onRequest(
+  { timeoutSeconds: 300, memory: '512MiB', cors: true },
+  async (req, res) => {
+    const dateStr = req.query.date || req.body?.date;
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return res.status(400).json({ error: 'Provide ?date=YYYY-MM-DD' });
+    }
+
+    console.log(`[resolvePicksHTTP] Resolving picks for ${dateStr}`);
+    const db = admin.firestore();
+
+    // Fetch ESPN box scores
+    const { finishedGames, playerStats } = await fetchGameStatsForDate(dateStr);
+    if (finishedGames.length === 0) {
+      return res.json({ date: dateStr, error: 'No finished games found for this date', games: 0 });
+    }
+
+    // Read picksHistory
+    const picksDoc = await db.collection('picksHistory').doc(dateStr).get();
+    if (!picksDoc.exists) {
+      return res.json({ date: dateStr, error: 'No picksHistory doc for this date', games: finishedGames.length });
+    }
+
+    const data = picksDoc.data();
+    const edge = data.edge || [];
+    const stack = data.stack || [];
+
+    // Resolve each pick
+    for (const pick of edge) resolvePick(pick, playerStats);
+    for (const pick of stack) resolvePick(pick, playerStats);
+
+    const allPicks = [...edge, ...stack];
+    const resolved = allPicks.filter(p => p.hit != null);
+    const hits = resolved.filter(p => p.hit === true);
+
+    // Build results tables
+    const edgeTable = edge.map(p => ({
+      name: p.name, stat: p.stat || p.statType, dir: p.dir,
+      line: p.line, avg: p.avg, actual: p.actualStat ?? 'N/A',
+      hit: p.hit === true ? 'HIT' : p.hit === false ? 'MISS' : (p.result || '?'),
+      source: p.source || '?', betScore: p.betScore,
+    }));
+    const stackTable = stack.map(p => ({
+      name: p.name, stat: p.stat || p.statType, dir: p.dir,
+      line: p.line, avg: p.avg, actual: p.actualStat ?? 'N/A',
+      hit: p.hit === true ? 'HIT' : p.hit === false ? 'MISS' : (p.result || '?'),
+    }));
+
+    // Persist if requested
+    const persist = req.query.persist === 'true' || req.body?.persist === true;
+    if (persist) {
+      const statsObj = {
+        total: allPicks.length,
+        resolved: resolved.length,
+        hits: hits.length,
+        hitRate: resolved.length > 0 ? hits.length / resolved.length : null,
+        edgeHits: edge.filter(p => p.hit === true).length,
+        edgeTotal: edge.filter(p => p.hit != null).length,
+        stackHits: stack.filter(p => p.hit === true).length,
+        stackTotal: stack.filter(p => p.hit != null).length,
+        gamesChecked: finishedGames.length,
+      };
+      await picksDoc.ref.update({ edge, stack, resultsRecorded: true, resolvedAt: new Date().toISOString(), stats: statsObj });
+    }
+
+    const edgeResolved = edge.filter(p => p.hit != null);
+    const edgeHits = edgeResolved.filter(p => p.hit === true);
+    const stackResolved = stack.filter(p => p.hit != null);
+    const stackHits = stackResolved.filter(p => p.hit === true);
+
+    res.json({
+      date: dateStr,
+      gamesChecked: finishedGames.length,
+      summary: {
+        edge: { total: edge.length, resolved: edgeResolved.length, hits: edgeHits.length, hitRate: edgeResolved.length > 0 ? `${((edgeHits.length / edgeResolved.length) * 100).toFixed(1)}%` : 'N/A' },
+        stack: { total: stack.length, resolved: stackResolved.length, hits: stackHits.length, hitRate: stackResolved.length > 0 ? `${((stackHits.length / stackResolved.length) * 100).toFixed(1)}%` : 'N/A' },
+        combined: { total: allPicks.length, resolved: resolved.length, hits: hits.length, hitRate: resolved.length > 0 ? `${((hits.length / resolved.length) * 100).toFixed(1)}%` : 'N/A' },
+      },
+      persisted: persist,
+      edge: edgeTable,
+      stack: stackTable,
+    });
+  }
+);

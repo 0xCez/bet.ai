@@ -23,10 +23,10 @@ const { calculateHitRates, getL10Average, getTrend } = require('./shared/hitRate
 const { calculateGreenScore } = require('./shared/greenScore');
 
 // Goblin threshold: only consider alt lines with odds between floor and ceiling.
-// Ceiling: ≤ -400 (anything lighter isn't goblin-tier)
-// Floor: ≥ -650 (anything heavier adds negligible parlay value — implied ~86.7%)
-const GOBLIN_ODDS_THRESHOLD = -400;
-const GOBLIN_ODDS_FLOOR = -650;
+// Ceiling: ≤ -300 (wider funnel, strict validation filters the bad ones)
+// Floor: ≥ -700 (slightly wider to catch edge cases near -650)
+const GOBLIN_ODDS_THRESHOLD = -300;
+const GOBLIN_ODDS_FLOOR = -700;
 
 // Quality gates — same thresholds as EdgeBoard
 const MIN_GAMES = 5;
@@ -39,9 +39,12 @@ function parseMinutes(minStr) {
 }
 
 // Minimum signal thresholds for a valid parlay leg
-const MIN_L10_HIT_PCT = 60;   // For Over: ≥60%. For Under: ≤40% (i.e. 100-60)
-const MIN_SZN_HIT_PCT = 50;   // For Over: ≥50%. For Under: ≤50%
-const MIN_AVG_MARGIN = 0.5;   // Avg must be at least this far past the alt line
+const MIN_L10_HIT_PCT = 70;   // For Over: ≥70%. For Under: ≤30% (i.e. 100-70)
+const MIN_SZN_HIT_PCT = 60;   // For Over: ≥60%. For Under: ≤40%
+const MIN_AVG_MARGIN = 1.5;   // Avg must be at least this far past the alt line
+
+// Stat types excluded from parlay stack (low reliability on alt lines)
+const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals']);
 
 /**
  * Convert American odds to implied probability (0-1).
@@ -90,6 +93,7 @@ async function processParlayStack(eventId, sharedData) {
     const [playerName, statType] = mapKey.split('|');
     const gameLogs = gameLogsMap[playerName];
     if (!gameLogs || gameLogs.length < MIN_GAMES) continue; // Need sufficient data
+    if (EXCLUDED_STAT_TYPES.has(statType.toLowerCase())) continue; // Skip low-reliability stats
 
     // Quality gate: minimum minutes per game
     const recentLogs = gameLogs.slice(0, 10);
@@ -171,10 +175,14 @@ async function processParlayStack(eventId, sharedData) {
   // A -420 leg with 90% hit rate (edge +9.2%) beats a -650 leg with 90% hit rate (edge +3.3%).
   legs.sort((a, b) => b.parlayEdge - a.parlayEdge);
 
+  // Filter out legs with negative edge (book has edge on us)
+  const edgeFilteredLegs = legs.filter(leg => leg.parlayEdge >= 0);
+  console.log(`[ParlayStack] ${legs.length} raw legs → ${edgeFilteredLegs.length} after parlayEdge ≥ 0 filter`);
+
   // Keep only the best-value leg per player-stat combo PER BOOKMAKER
   const seen = new Set();
   const dedupedLegs = [];
-  for (const leg of legs) {
+  for (const leg of edgeFilteredLegs) {
     const key = `${leg.playerName}|${leg.statType}|${leg.prediction}|${leg.bookmaker}`;
     if (!seen.has(key)) {
       seen.add(key);

@@ -679,17 +679,10 @@ exports.preCacheTopGames = onRequest({
     const forceRefresh = req.body?.forceRefresh === true;
 
     try {
-      // Force refresh: delete all NBA docs so discovery re-creates them
+      // forceRefresh = just log and continue — the refresh below will overwrite props with fresh data.
+      // NEVER delete anything here. Only archiveExpiredGames() removes docs (after 7-day buffer).
       if (forceRefresh) {
-        console.log('[preCacheTopGames] FORCE REFRESH — deleting all NBA cache docs');
-        const cacheRef = getDb().collection('matchAnalysisCache');
-        const snapshot = await cacheRef.where('sport', '==', 'nba').where('preCached', '==', true).get();
-        if (!snapshot.empty) {
-          const batch = getDb().batch();
-          snapshot.docs.forEach(doc => batch.delete(doc.ref));
-          await batch.commit();
-          console.log(`[preCacheTopGames] Deleted ${snapshot.size} NBA docs`);
-        }
+        console.log('[preCacheTopGames] FORCE REFRESH — will re-fetch all props (no deletions)');
       }
 
       // Layer 4: Archive expired games
@@ -1467,6 +1460,7 @@ function mapEdgeProp(p) {
     green: p.greenScore,
     betScore: p.betScore ?? null,
     edge: p.edge ?? null,
+    source: p.source || 'model',
   };
 }
 
@@ -1741,6 +1735,26 @@ async function writeLeaderboardAndSlips() {
   // Leaderboard: edge sorted by betScore, stack sorted by parlayEdge
   edgeProps.sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
   stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+  // Direction diversity for leaderboard: target 40-60% Overs (6-9 out of 15).
+  // Take top MAX_DIR from each direction, merge by betScore, slice 15.
+  const LB_MAX_DIR = 10;
+  const LB_MIN_DIR = 5;
+  const rawTop = edgeProps.slice(0, 15);
+  const lbOvers = rawTop.filter(p => p.dir === 'over').length;
+  const lbUnders = rawTop.filter(p => p.dir === 'under').length;
+  const allOversAvail = edgeProps.filter(p => p.dir === 'over').length;
+  const allUndersAvail = edgeProps.filter(p => p.dir === 'under').length;
+
+  if ((lbOvers < LB_MIN_DIR && allOversAvail >= LB_MIN_DIR) ||
+      (lbUnders < LB_MIN_DIR && allUndersAvail >= LB_MIN_DIR)) {
+    const overs = edgeProps.filter(p => p.dir === 'over').slice(0, LB_MAX_DIR);
+    const unders = edgeProps.filter(p => p.dir === 'under').slice(0, LB_MAX_DIR);
+    const balanced = [...overs, ...unders].sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0)).slice(0, 15);
+    const newO = balanced.filter(p => p.dir === 'over').length;
+    console.log(`[Leaderboard] Diversity: rebalanced from ${lbOvers}O/${lbUnders}U to ${newO}O/${15 - newO}U`);
+    edgeProps.splice(0, edgeProps.length, ...balanced, ...edgeProps.filter(p => !balanced.includes(p)));
+  }
 
   // Parlay slips — pass both alt legs and edge props for COMBO slip
   const parlaySlips = buildParlaySlips(stackLegs, edgeProps);

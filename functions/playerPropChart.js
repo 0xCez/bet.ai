@@ -188,6 +188,9 @@ async function findPropInCache(playerName, statType, line) {
             isHome: p.isHome,
           },
           source: 'edge',
+          rawHitRates: p.hitRates || null,
+          rawDefense: p.opponentDefense || null,
+          rawPlayerId: p.playerId || null,
         };
         break;
       }
@@ -223,6 +226,9 @@ async function findPropInCache(playerName, statType, line) {
             isHome: p.isHome,
           },
           source: 'stack',
+          rawHitRates: p.hitRates || null,
+          rawDefense: p.opponentDefense || null,
+          rawPlayerId: p.playerId || null,
         };
         break;
       }
@@ -362,26 +368,85 @@ exports.getPlayerPropChart = onRequest({
       });
     }
 
-    const { prop, game, source, safeLines, otherProps } = cached;
+    const { prop, game, source, safeLines, otherProps, rawHitRates, rawDefense, rawPlayerId } = cached;
 
     // 2. Resolve player ID + get game logs (both Firestore-cached)
-    const [playerId, espnData] = await Promise.all([
-      resolvePlayerId(playerName),
-      resolveEspnPlayer(playerName),
-    ]);
-
-    if (!playerId) {
-      return res.status(404).json({
-        success: false,
-        error: `Could not resolve player ID for: ${playerName}`,
-      });
+    //    Try multiple ID sources: resolvePlayerId, directory apiSportsId, pipeline playerId
+    let playerId = await resolvePlayerId(playerName);
+    if (!playerId && rawPlayerId) {
+      console.log(`[playerPropChart] resolvePlayerId failed, using pipeline playerId: ${rawPlayerId}`);
+      playerId = rawPlayerId;
     }
 
-    const gameLogs = await getGameLogs(playerId);
+    const espnData = await resolveEspnPlayer(playerName);
+    let gameLogs = playerId ? (await getGameLogs(playerId) || []) : [];
+
+    // 3. FALLBACK: If no game logs available, build response from cached pipeline data
     if (!gameLogs || gameLogs.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: `No game logs found for: ${playerName}`,
+      console.log(`[playerPropChart] No game logs for ${playerName}, using cached pipeline data`);
+      const isOver = (prop.prediction || 'over') === 'over';
+      const relevantOdds = isOver ? prop.oddsOver : prop.oddsUnder;
+
+      // Build hit rates from pipeline's pre-computed data
+      const pct = (over, total) => total > 0 ? Math.round((over / total) * 100) : 0;
+      const fallbackHitRates = rawHitRates ? {
+        l5:     { over: rawHitRates.l5?.over || 0,     total: rawHitRates.l5?.total || 0,     pct: rawHitRates.l5?.pct || 0 },
+        l10:    { over: rawHitRates.l10?.over || 0,    total: rawHitRates.l10?.total || 0,    pct: rawHitRates.l10?.pct || 0 },
+        l20:    { over: rawHitRates.l20?.over || 0,    total: rawHitRates.l20?.total || 0,    pct: rawHitRates.l20?.pct || 0 },
+        season: { over: rawHitRates.season?.over || 0, total: rawHitRates.season?.total || 0, pct: rawHitRates.season?.pct || 0 },
+        h2h:    { over: 0, total: 0, pct: 0 },
+      } : {
+        l5: { over: 0, total: 0, pct: 0 }, l10: { over: 0, total: 0, pct: 0 },
+        l20: { over: 0, total: 0, pct: 0 }, season: { over: 0, total: 0, pct: 0 },
+        h2h: { over: 0, total: 0, pct: 0 },
+      };
+
+      // Build defense from pipeline's pre-computed data
+      let fallbackDefense = null;
+      if (rawDefense) {
+        const label = defenseLabel(rawDefense.rank);
+        const supportsOver = rawDefense.rank >= 19;
+        const supports = isOver ? supportsOver : !supportsOver;
+        fallbackDefense = {
+          rank: rawDefense.rank,
+          totalTeams: 30,
+          label,
+          allowed: rawDefense.allowed,
+          stat: rawDefense.stat,
+          opponentCode: teamCode(game.opponent),
+          supports,
+          narrative: supports ? 'Supports' : 'Contradicts',
+        };
+      }
+
+      const ev = calculateEV(fallbackHitRates.l10?.pct, fallbackHitRates.season?.pct, relevantOdds);
+
+      return res.status(200).json({
+        success: true,
+        source,
+        fromPipelineCache: true,
+        player: {
+          name: playerName,
+          position: espnData.position || getPlayerPosition(playerName) || null,
+          team: game.team,
+          teamCode: teamCode(game.team),
+          headshotUrl: espnData.headshotUrl || null,
+        },
+        matchup: {
+          opponent: game.opponent,
+          opponentCode: teamCode(game.opponent),
+          isHome: game.isHome,
+          gameTime: game.gameTime,
+          home: game.home,
+          away: game.away,
+        },
+        prop,
+        gameLogs: [],
+        hitRates: fallbackHitRates,
+        defense: fallbackDefense,
+        ev,
+        safeLines: safeLines || [],
+        otherProps: otherProps || [],
       });
     }
 
