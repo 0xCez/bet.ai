@@ -18,7 +18,7 @@ const functions = require('firebase-functions/v2');
 const { fetchAltProps, fetchEvents, normalizeBookmaker } = require('./shared/oddsApi');
 const { resolvePlayerIdsBatch, getGameLogsBatch, getApiKey } = require('./shared/playerStats');
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
-const { calculateHitRates, getL10Average, getTrend } = require('./shared/hitRates');
+const { calculateHitRates, getL10Average, getTrend, filterPlayed } = require('./shared/hitRates');
 const { calculateGreenScore } = require('./shared/greenScore');
 const { AVG_GAP_THRESHOLDS } = require('./shared/qualityGates');
 const { getBookmakerTier } = require('./shared/bookmakerTiers');
@@ -97,8 +97,9 @@ async function processParlayStack(eventId, sharedData) {
     if (!gameLogs || gameLogs.length < MIN_GAMES) continue; // Need sufficient data
     if (EXCLUDED_STAT_TYPES.has(statType.toLowerCase())) continue; // Skip low-reliability stats
 
-    // Quality gate: minimum minutes per game
-    const recentLogs = gameLogs.slice(0, 10);
+    // Quality gate: minimum minutes per game (filter DNPs first)
+    const playedLogs = filterPlayed(gameLogs);
+    const recentLogs = playedLogs.slice(0, 10);
     const avgMin = recentLogs.reduce((s, g) => s + parseMinutes(g.min), 0) / recentLogs.length;
     if (avgMin < MIN_AVG_MINUTES) continue;
 

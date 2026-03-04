@@ -16,7 +16,7 @@ const admin = require('firebase-admin');
 
 // Shared modules
 const { resolvePlayerId, getGameLogs, getTeamSchedule, getPlayerPosition, API_SPORTS_TEAM_IDS, TEAM_ID_TO_NAME } = require('./shared/playerStats');
-const { getStatValue, calculateExtendedHitRates, calculateH2HHitRate, getL10Average, getTrend } = require('./shared/hitRates');
+const { getStatValue, calculateExtendedHitRates, calculateH2HHitRate, getL10Average, getTrend, filterPlayed } = require('./shared/hitRates');
 const { resolveEspnPlayer } = require('./shared/espnHeadshot');
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
 
@@ -381,6 +381,8 @@ exports.getPlayerPropChart = onRequest({
 
     const espnData = await resolveEspnPlayer(playerName);
     let gameLogs = playerId ? (await getGameLogs(playerId) || []) : [];
+    // Filter out DNP games (0 minutes) — prevents inflating Under hit rates and showing misleading 0-value bars
+    gameLogs = filterPlayed(gameLogs);
 
     // 3. FALLBACK: If no game logs available, build response from cached pipeline data
     if (!gameLogs || gameLogs.length === 0) {

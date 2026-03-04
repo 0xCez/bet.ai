@@ -20,7 +20,7 @@ const { GoogleAuth } = require('google-auth-library');
 const { fetchStandardProps, fetchAltProps, fetchEvents, findBestGoblinLine, normalizeBookmaker } = require('./shared/oddsApi');
 const { resolvePlayerIdsBatch, getGameLogsBatch, getL10AvgForStat, getApiKey, getCurrentNBASeason } = require('./shared/playerStats');
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
-const { calculateExtendedHitRates } = require('./shared/hitRates');
+const { calculateExtendedHitRates, filterPlayed } = require('./shared/hitRates');
 const { calibrateProbability, getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
 const { passesGreenScoreFloor, passesAvgGapFilter } = require('./shared/qualityGates');
 const { getBookmakerBonus } = require('./shared/bookmakerTiers');
@@ -216,8 +216,10 @@ function getMarketStat(modelPropType, f, window) {
  * Matches FEATURES_88_COMPLETE.md exactly.
  */
 function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
-  const l3Games = gameLogs.slice(0, 3);
-  const l10Games = gameLogs.slice(0, 10);
+  // Filter out DNP games (0 minutes) to prevent 0-stat games from contaminating ML features
+  const played = filterPlayed(gameLogs);
+  const l3Games = played.slice(0, 3);
+  const l10Games = played.slice(0, 10);
 
   // ── L3 Stats ──
   const l3Count = l3Games.length || 1;
@@ -531,6 +533,8 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
   // 7. Enrich props with team + isHome, filter to those with game logs + quality gate
   const MIN_GAMES = 5;
   const MIN_AVG_MINUTES = 20;
+  // Phase 2: 3PT excluded — alt lines unreliable, ESPN grading was broken, low analytical value
+  const EDGE_EXCLUDED_STATS = new Set(['threePointersMade']);
 
   const allEnriched = allProps
     .map(p => ({
@@ -538,10 +542,11 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
       team: playerTeamInfo[p.playerName]?.team || homeTeam,
       isHome: playerTeamInfo[p.playerName]?.isHome ?? false,
     }))
-    .filter(p => gameLogsMap[p.playerName]?.length > 0);
+    .filter(p => gameLogsMap[p.playerName]?.length > 0)
+    .filter(p => !EDGE_EXCLUDED_STATS.has(p.statType));
 
   const enrichedProps = allEnriched.filter(p => {
-    const logs = gameLogsMap[p.playerName];
+    const logs = filterPlayed(gameLogsMap[p.playerName]);
     if (logs.length < MIN_GAMES) return false;
     const recent = logs.slice(0, 10);
     const avgMin = recent.reduce((s, g) => s + parseMinutes(g.min), 0) / recent.length;
