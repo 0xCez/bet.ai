@@ -1,27 +1,24 @@
 /**
  * shared/qualityGates.js — Data-driven kill rules from Phase 2 analysis.
  *
- * Stat-type-aware thresholds based on empirical hit rate analysis:
- *   - Points: 2.0   (line ~25.5, so 2 units is small)
- *   - Rebounds: 1.5  (line ~8.5)
- *   - Assists: 1.5   (line ~6.5)
- *   - 3PT: 0.5       (line ~1.5, so 1 unit is a LOT)
- *   - Combos: 2.0-3.0
- *   - Low-volume (STL/BLK): 0.3
+ * Stat-type-aware thresholds — lowered in Phase 2.1 to increase pick volume
+ * while maintaining quality through green score + ML model validation.
+ * Books set lines near a player's actual average, so requiring large margins
+ * above the line filters out most legitimate picks.
  */
 
 const AVG_GAP_THRESHOLDS = {
-  'points': 2.0,
-  'rebounds': 1.5,
-  'assists': 1.5,
+  'points': 1.0,
+  'rebounds': 1.0,
+  'assists': 1.0,
   'threePointersMade': 0.5,
   'turnovers': 0.5,
   'steals': 0.3,
   'blocks': 0.3,
-  'points+rebounds+assists': 3.0,
-  'points+rebounds': 2.0,
-  'points+assists': 2.0,
-  'rebounds+assists': 1.5,
+  'points+rebounds+assists': 2.0,
+  'points+rebounds': 1.5,
+  'points+assists': 1.5,
+  'rebounds+assists': 1.0,
   'blocks+steals': 0.5,
   'steals+blocks': 0.5,
 };

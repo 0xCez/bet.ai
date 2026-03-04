@@ -374,31 +374,35 @@ async function refreshAllCachedGames(options = {}) {
         gameDate: data.gameStartTime,
       });
 
+      // Always overwrite pipeline results when pipeline ran successfully.
+      // Previously we preserved old data when new results were empty, but this
+      // kept stale 3PT picks alive after the stat type exclusion was added.
+      const edgeRan = mlPlayerProps.topProps !== undefined || mlPlayerProps.edgeBoard !== undefined;
+      const stackRan = mlPlayerProps.parlayStack !== undefined;
+
       const existing = data.analysis?.mlPlayerProps || {};
       const merged = { ...existing };
 
-      // Only overwrite edge data if new data has content (don't wipe good data with empty results)
+      if (edgeRan) {
+        merged.topProps = mlPlayerProps.topProps || [];
+        merged.edgeBoard = mlPlayerProps.edgeBoard || {};
+        merged.goblinLegs = mlPlayerProps.goblinLegs || [];
+        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable || 0;
+        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount || 0;
+        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount || 0;
+        merged.gameTime = mlPlayerProps.gameTime || null;
+      }
+
+      if (stackRan) {
+        merged.parlayStack = mlPlayerProps.parlayStack || { legs: [] };
+      }
+
       const newEdgeCount = mlPlayerProps.topProps?.length || mlPlayerProps.edgeBoard?.topProps?.length || 0;
-      if (newEdgeCount > 0) {
-        merged.topProps = mlPlayerProps.topProps;
-        merged.edgeBoard = mlPlayerProps.edgeBoard;
-        merged.goblinLegs = mlPlayerProps.goblinLegs;
-        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable;
-        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount;
-        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount;
-        merged.gameTime = mlPlayerProps.gameTime;
-      }
-
-      // Only overwrite stack data if new data has content
       const newStackCount = mlPlayerProps.parlayStack?.legs?.length || 0;
-      if (newStackCount > 0) {
-        merged.parlayStack = mlPlayerProps.parlayStack;
-      }
-
       const edgeCount = merged.topProps?.length || merged.edgeBoard?.topProps?.length || 0;
       const stackCount = merged.parlayStack?.legs?.length || 0;
-      const edgeSource = newEdgeCount > 0 ? 'fresh' : 'preserved';
-      const stackSource = newStackCount > 0 ? 'fresh' : 'preserved';
+      const edgeSource = edgeRan ? 'fresh' : 'preserved';
+      const stackSource = stackRan ? 'fresh' : 'preserved';
 
       // Firestore update with diagnostic stamp
       await doc.ref.update({
@@ -504,20 +508,24 @@ async function selfHeal(refreshResult, options = {}) {
       const doc = await docRef.get();
       if (!doc.exists) { stillEmpty++; continue; }
 
+      // Always overwrite when pipeline ran (same logic as refreshAllCachedGames)
+      const edgeRan = mlPlayerProps.topProps !== undefined || mlPlayerProps.edgeBoard !== undefined;
+      const stackRan = mlPlayerProps.parlayStack !== undefined;
+
       const existing = doc.data().analysis?.mlPlayerProps || {};
       const merged = { ...existing };
 
-      if (newEdgeCount > 0) {
-        merged.topProps = mlPlayerProps.topProps;
-        merged.edgeBoard = mlPlayerProps.edgeBoard;
-        merged.goblinLegs = mlPlayerProps.goblinLegs;
-        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable;
-        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount;
-        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount;
-        merged.gameTime = mlPlayerProps.gameTime;
+      if (edgeRan) {
+        merged.topProps = mlPlayerProps.topProps || [];
+        merged.edgeBoard = mlPlayerProps.edgeBoard || {};
+        merged.goblinLegs = mlPlayerProps.goblinLegs || [];
+        merged.totalPropsAvailable = mlPlayerProps.totalPropsAvailable || 0;
+        merged.highConfidenceCount = mlPlayerProps.highConfidenceCount || 0;
+        merged.mediumConfidenceCount = mlPlayerProps.mediumConfidenceCount || 0;
+        merged.gameTime = mlPlayerProps.gameTime || null;
       }
-      if (newStackCount > 0) {
-        merged.parlayStack = mlPlayerProps.parlayStack;
+      if (stackRan) {
+        merged.parlayStack = mlPlayerProps.parlayStack || { legs: [] };
       }
 
       await docRef.update({
@@ -1763,8 +1771,9 @@ async function writeLeaderboardAndSlips() {
   const LEADERBOARD_EXCLUDED_STATS = new Set(['threePointersMade']);
   const preFilterEdge = edgeProps.length;
   const preFilterStack = stackLegs.length;
-  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4 && !LEADERBOARD_EXCLUDED_STATS.has(p.statType));
-  const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3);
+  const isExcluded = (p) => LEADERBOARD_EXCLUDED_STATS.has(p.statType);
+  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4 && !isExcluded(p));
+  const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3 && !isExcluded(p));
   if (filteredEdge.length < preFilterEdge || filteredStack.length < preFilterStack) {
     console.log(`[Leaderboard] Green floor: edge ${preFilterEdge}→${filteredEdge.length}, stack ${preFilterStack}→${filteredStack.length}`);
   }
@@ -1776,6 +1785,24 @@ async function writeLeaderboardAndSlips() {
   // Leaderboard: edge sorted by betScore, stack sorted by parlayEdge
   edgeProps.sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
   stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
+
+  // Stat diversity cap: max 2 picks per stat type to prevent low-volume stats dominating
+  const MAX_PER_STAT_TYPE = 2;
+  const edgeTypeCounts = {};
+  const diverseEdge = edgeProps.filter(p => {
+    edgeTypeCounts[p.statType] = (edgeTypeCounts[p.statType] || 0) + 1;
+    return edgeTypeCounts[p.statType] <= MAX_PER_STAT_TYPE;
+  });
+  const stackTypeCounts = {};
+  const diverseStack = stackLegs.filter(p => {
+    stackTypeCounts[p.statType] = (stackTypeCounts[p.statType] || 0) + 1;
+    return stackTypeCounts[p.statType] <= MAX_PER_STAT_TYPE;
+  });
+  if (diverseEdge.length < edgeProps.length || diverseStack.length < stackLegs.length) {
+    console.log(`[Leaderboard] Stat diversity: edge ${edgeProps.length}→${diverseEdge.length}, stack ${stackLegs.length}→${diverseStack.length}`);
+  }
+  edgeProps.splice(0, edgeProps.length, ...diverseEdge);
+  stackLegs.splice(0, stackLegs.length, ...diverseStack);
 
   // Direction diversity for leaderboard: target 40-60% Overs (6-9 out of 15).
   // Take top MAX_DIR from each direction, merge by betScore, slice 15.
@@ -1931,6 +1958,14 @@ exports.getCheatsheetData = onRequest({
       const legs = ml.parlayStack?.legs || [];
       for (const p of legs) stackLegs.push(mapStackLeg(p));
     }
+
+    // Filter excluded stat types (catches stale cached 3PT picks)
+    const CHEATSHEET_EXCLUDED = new Set(['threePointersMade']);
+    const csExclude = (p) => CHEATSHEET_EXCLUDED.has(p.statType);
+    const cleanEdge = edgeProps.filter(p => !csExclude(p));
+    const cleanStack = stackLegs.filter(p => !csExclude(p));
+    edgeProps.length = 0; edgeProps.push(...cleanEdge);
+    stackLegs.length = 0; stackLegs.push(...cleanStack);
 
     // Sort edge by green score desc, stack by parlay edge desc (best value first)
     edgeProps.sort((a, b) => b.green - a.green);

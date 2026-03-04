@@ -46,7 +46,7 @@ const MIN_AVG_MARGIN = 1.5;   // Avg must be at least this far past the alt line
 
 // Stat types excluded from parlay stack (low reliability on alt lines)
 // Phase 2: added threePointersMade — 3PT alt lines are unreliable (0% Over / 100% Under due to DNP noise)
-const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals', 'threePointersMade']);
+const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals', 'threepointersmade']);
 
 /**
  * Convert American odds to implied probability (0-1).
