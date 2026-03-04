@@ -592,7 +592,11 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     }))
     .filter(p => gameLogsMap[p.playerName]?.length > 0)
     .filter(p => !EDGE_EXCLUDED_STATS.has(p.statType))
-    .filter(p => p.statType !== 'threePointersMade' || p.line >= 1.5); // 3PT only for volume shooters
+    .filter(p => p.statType !== 'threePointersMade' || p.line >= 1.5) // 3PT only for volume shooters
+    .filter(p => p.statType !== 'blocks' || p.line >= 1.0)           // no trivial Under 0.5 BLK
+    .filter(p => p.statType !== 'steals' || p.line >= 1.0)           // no trivial Under 0.5 STL
+    .filter(p => p.statType !== 'turnovers' || p.line >= 1.0)        // no trivial Under 0.5 TOV
+    .filter(p => p.statType !== 'blocks+steals' || p.line >= 1.5);   // no trivial Under 0.5 BLK+STL
 
   const enrichedProps = allEnriched.filter(p => {
     const logs = filterPlayed(gameLogsMap[p.playerName]);
