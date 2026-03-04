@@ -1427,6 +1427,8 @@ const BOOK_SHORT = {
   'Bovada': 'BOV', 'BetRivers': 'BR', 'Unibet': 'UNI',
   'Hard Rock': 'HR', 'Fanatics': 'FAN', 'BallyBet': 'BALLY',
   'MyBookie': 'MYBK', 'BetOnline': 'BOL', 'BetUS': 'BETUS',
+  'Pinnacle': 'PIN', 'LowVig': 'LOWVIG', 'WilliamHill': 'WH',
+  'BetParx': 'PARX', 'SuperBook': 'SUPER', 'BetAnySports': 'BAS',
 };
 
 function shortBook(name) { return BOOK_SHORT[name] || name; }
@@ -1766,14 +1768,11 @@ async function writeLeaderboardAndSlips() {
     for (const p of legs) { const m = mapStackLeg(p); m.gameTime = gameTime; stackLegs.push(m); }
   }
 
-  // Quality gate: green score floor + 3PT exclusion (belt-and-suspenders — pipelines also filter)
-  // 3PT filter here catches stale cached picks from before the pipeline exclusion
-  const LEADERBOARD_EXCLUDED_STATS = new Set(['threePointersMade']);
+  // Quality gate: green score floor (3PT now allowed by pipeline for line >= 1.5)
   const preFilterEdge = edgeProps.length;
   const preFilterStack = stackLegs.length;
-  const isExcluded = (p) => LEADERBOARD_EXCLUDED_STATS.has(p.statType);
-  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 3 && !isExcluded(p));
-  const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3 && !isExcluded(p));
+  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 3);
+  const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3);
   if (filteredEdge.length < preFilterEdge || filteredStack.length < preFilterStack) {
     console.log(`[Leaderboard] Green floor: edge ${preFilterEdge}→${filteredEdge.length}, stack ${preFilterStack}→${filteredStack.length}`);
   }
@@ -1786,8 +1785,8 @@ async function writeLeaderboardAndSlips() {
   edgeProps.sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
   stackLegs.sort((a, b) => (b.edge ?? 0) - (a.edge ?? 0));
 
-  // Stat diversity cap: max 2 picks per stat type to prevent low-volume stats dominating
-  const MAX_PER_STAT_TYPE = 2;
+  // Stat diversity cap: max 3 picks per stat type to prevent low-volume stats dominating
+  const MAX_PER_STAT_TYPE = 3;
   const edgeTypeCounts = {};
   const diverseEdge = edgeProps.filter(p => {
     edgeTypeCounts[p.statType] = (edgeTypeCounts[p.statType] || 0) + 1;
@@ -1839,7 +1838,7 @@ async function writeLeaderboardAndSlips() {
   // Write leaderboard doc
   await db.collection('matchAnalysisCache').doc('leaderboard').set({
     edge: edgeProps.slice(0, 15),
-    stack: stackLegs.slice(0, 15),
+    stack: stackLegs.slice(0, 30),
     generatedAt: now.toISOString(),
     expiresAt,
   });
@@ -1958,14 +1957,6 @@ exports.getCheatsheetData = onRequest({
       const legs = ml.parlayStack?.legs || [];
       for (const p of legs) stackLegs.push(mapStackLeg(p));
     }
-
-    // Filter excluded stat types (catches stale cached 3PT picks)
-    const CHEATSHEET_EXCLUDED = new Set(['threePointersMade']);
-    const csExclude = (p) => CHEATSHEET_EXCLUDED.has(p.statType);
-    const cleanEdge = edgeProps.filter(p => !csExclude(p));
-    const cleanStack = stackLegs.filter(p => !csExclude(p));
-    edgeProps.length = 0; edgeProps.push(...cleanEdge);
-    stackLegs.length = 0; stackLegs.push(...cleanStack);
 
     // Sort edge by green score desc, stack by parlay edge desc (best value first)
     edgeProps.sort((a, b) => b.green - a.green);

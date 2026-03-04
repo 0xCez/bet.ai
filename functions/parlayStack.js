@@ -45,8 +45,8 @@ const MIN_SZN_HIT_PCT = 60;   // For Over: ≥60%. For Under: ≤40%
 const MIN_AVG_MARGIN = 1.5;   // Avg must be at least this far past the alt line
 
 // Stat types excluded from parlay stack (low reliability on alt lines)
-// Phase 2: added threePointersMade — 3PT alt lines are unreliable (0% Over / 100% Under due to DNP noise)
-const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals', 'threepointersmade']);
+// Phase 2.2: removed assists (reliable enough), kept 3PT excluded (alt lines unreliable)
+const EXCLUDED_STAT_TYPES = new Set(['steals', 'blocks', 'blocks+steals', 'threepointersmade']);
 
 /**
  * Convert American odds to implied probability (0-1).

@@ -18,10 +18,17 @@ const BOOKMAKER_TIERS = {
   'hardrock':   { tier: 3, priority: 7 },
   'betrivers':  { tier: 3, priority: 8 },
   'bet365':     { tier: 3, priority: 9 },
+  'pinnacle':   { tier: 1, priority: 2 },  // sharpest book in the world
   'bovada':     { tier: 4, priority: 10 },
   'betonline':  { tier: 4, priority: 11 },
   'mybookie':   { tier: 4, priority: 12 },
   'betus':      { tier: 4, priority: 13 },
+  'lowvig':     { tier: 3, priority: 14 },
+  'williamhill':{ tier: 2, priority: 15 },
+  'betparx':    { tier: 3, priority: 16 },
+  'superbook':  { tier: 3, priority: 17 },
+  'betanysports':{ tier: 4, priority: 18 },
+  'unibet':     { tier: 3, priority: 19 },
 };
 
 // Tier bonus multipliers for sort scoring

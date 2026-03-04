@@ -114,6 +114,13 @@ export const BOOKMAKER_LOGOS: Record<string, any> = {
   MyBookie: require("../assets/images/mybookie.png"),
   BetOnline: require("../assets/images/Betonline.png"),
   BetUS: require("../assets/images/Betus.png"),
+  Pinnacle: require("../assets/images/Pinaccle.png"),
+  LowVig: require("../assets/images/Lowvig.png"),
+  WilliamHill: require("../assets/images/williamhill.png"),
+  BetParx: require("../assets/images/betparx.png"),
+  SuperBook: require("../assets/images/superbook.png"),
+  Unibet: require("../assets/images/unibet.png"),
+  BetAnySports: require("../assets/images/betanysports.png"),
   // Short codes from backend (shortBook mapping)
   DK: require("../assets/images/Draftkings.png"),
   FD: require("../assets/images/Fanduel.png"),
@@ -128,6 +135,13 @@ export const BOOKMAKER_LOGOS: Record<string, any> = {
   MYBK: require("../assets/images/mybookie.png"),
   BOL: require("../assets/images/Betonline.png"),
   BETUS: require("../assets/images/Betus.png"),
+  PIN: require("../assets/images/Pinaccle.png"),
+  LOWVIG: require("../assets/images/Lowvig.png"),
+  WH: require("../assets/images/williamhill.png"),
+  PARX: require("../assets/images/betparx.png"),
+  SUPER: require("../assets/images/superbook.png"),
+  UNI: require("../assets/images/unibet.png"),
+  BAS: require("../assets/images/betanysports.png"),
 };
 
 // Reverse map: short code → full bookmaker key for openBookmakerLink

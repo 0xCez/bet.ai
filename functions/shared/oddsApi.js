@@ -20,6 +20,7 @@ const STANDARD_MARKETS = [
   'player_points_rebounds_assists',
   'player_points_rebounds', 'player_points_assists',
   'player_rebounds_assists',
+  'player_blocks_steals',
 ];
 
 // Alternate markets (for Parlay Stack)
@@ -31,6 +32,7 @@ const ALT_MARKETS = [
   'player_points_rebounds_assists_alternate',
   'player_points_rebounds_alternate', 'player_points_assists_alternate',
   'player_rebounds_assists_alternate',
+  'player_blocks_steals_alternate',
 ];
 
 // Map The Odds API market keys → our internal statType
@@ -46,6 +48,7 @@ const MARKET_TO_STAT = {
   'player_points_rebounds': 'points+rebounds',
   'player_points_assists': 'points+assists',
   'player_rebounds_assists': 'rebounds+assists',
+  'player_blocks_steals': 'blocks+steals',
   // Alt versions map to same stat types
   'player_points_alternate': 'points',
   'player_rebounds_alternate': 'rebounds',
@@ -58,9 +61,10 @@ const MARKET_TO_STAT = {
   'player_points_rebounds_alternate': 'points+rebounds',
   'player_points_assists_alternate': 'points+assists',
   'player_rebounds_assists_alternate': 'rebounds+assists',
+  'player_blocks_steals_alternate': 'blocks+steals',
 };
 
-// Bookmaker name normalization (for ML model compatibility)
+// Bookmaker name normalization
 const BOOKMAKER_MAP = {
   'draftkings': 'DraftKings',
   'fanduel': 'FanDuel',
@@ -79,6 +83,12 @@ const BOOKMAKER_MAP = {
   'mybookieag': 'MyBookie',
   'betonlineag': 'BetOnline',
   'betus': 'BetUS',
+  'pinnacle': 'Pinnacle',
+  'williamhill_us': 'WilliamHill',
+  'betparx': 'BetParx',
+  'superbook': 'SuperBook',
+  'lowvig': 'LowVig',
+  'betanysports': 'BetAnySports',
 };
 
 function normalizeBookmaker(key) {
@@ -86,8 +96,8 @@ function normalizeBookmaker(key) {
   return BOOKMAKER_MAP[key.toLowerCase()] || key;
 }
 
-// All US bookmakers with NBA player prop coverage (us + us2 regions)
-const BOOKMAKERS = 'draftkings,fanduel,betmgm,caesars,espnbet,betrivers,bovada,fanatics,hardrockbet,ballybet,mybookieag,betonlineag,betus';
+// All bookmakers across us + us2 + eu regions
+const BOOKMAKERS = 'draftkings,fanduel,betmgm,caesars,espnbet,betrivers,bovada,fanatics,hardrockbet,ballybet,mybookieag,betonlineag,betus,pinnacle,williamhill_us,betparx,superbook,unibet_us,lowvig,betanysports';
 
 /**
  * Parse The Odds API response into a normalized props structure.
@@ -179,7 +189,7 @@ async function fetchStandardProps(eventId) {
 
   const markets = STANDARD_MARKETS.join(',');
   const url = `https://api.the-odds-api.com/v4/sports/basketball_nba/events/${eventId}/odds`
-    + `?apiKey=${ODDS_API_KEY}&regions=us&oddsFormat=american`
+    + `?apiKey=${ODDS_API_KEY}&regions=us,us2,eu&oddsFormat=american`
     + `&markets=${markets}&bookmakers=${BOOKMAKERS}`;
 
   try {
@@ -236,7 +246,7 @@ async function fetchAltProps(eventId) {
 
   const markets = ALT_MARKETS.join(',');
   const url = `https://api.the-odds-api.com/v4/sports/basketball_nba/events/${eventId}/odds`
-    + `?apiKey=${ODDS_API_KEY}&regions=us&oddsFormat=american`
+    + `?apiKey=${ODDS_API_KEY}&regions=us,us2,eu&oddsFormat=american`
     + `&markets=${markets}&bookmakers=${BOOKMAKERS}`;
 
   try {

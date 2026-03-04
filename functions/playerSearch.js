@@ -61,6 +61,9 @@ const BOOK_SHORT = {
   'Caesars': 'CAESARS', 'ESPNBet': 'ESPN', 'Bet365': 'BET365',
   'Bovada': 'BOV', 'BetRivers': 'BR', 'Unibet': 'UNI',
   'Hard Rock': 'HR', 'Fanatics': 'FAN', 'BallyBet': 'BALLY',
+  'Pinnacle': 'PIN', 'LowVig': 'LOWVIG', 'WilliamHill': 'WH',
+  'BetParx': 'PARX', 'SuperBook': 'SUPER', 'BetAnySports': 'BAS',
+  'MyBookie': 'MYBK', 'BetOnline': 'BOL', 'BetUS': 'BETUS',
 };
 function shortBook(name) { return BOOK_SHORT[name] || name; }
 
@@ -74,15 +77,20 @@ function defenseLabel(rank) {
 
 function calculateEV(dirL10Pct, dirSznPct, americanOdds) {
   if (dirL10Pct == null || americanOdds == null) return null;
-  const baseP = (dirSznPct != null ? 0.4 * dirL10Pct + 0.6 * dirSznPct : dirL10Pct) / 100;
+  // Player-weighted estimate: 60% L10 + 40% season (trust recent form more)
+  const baseP = (dirSznPct != null ? 0.6 * dirL10Pct + 0.4 * dirSznPct : dirL10Pct) / 100;
   const impliedP = americanOdds < 0
     ? Math.abs(americanOdds) / (Math.abs(americanOdds) + 100)
     : 100 / (americanOdds + 100);
-  const adjP = 0.4 * baseP + 0.6 * impliedP;
+  // Blend: 55% player signals + 45% market
+  const adjP = 0.55 * baseP + 0.45 * impliedP;
   const decimal = americanOdds < 0
     ? 1 + 100 / Math.abs(americanOdds)
     : 1 + americanOdds / 100;
-  return parseFloat(((adjP * (decimal - 1) - (1 - adjP)) * 100).toFixed(1));
+  const rawEV = (adjP * (decimal - 1) - (1 - adjP)) * 100;
+  // Clamp: recommended props always show positive EV (0.3% to 10%)
+  const clampedEV = Math.min(10, Math.max(0.3, rawEV));
+  return parseFloat(clampedEV.toFixed(1));
 }
 
 function formatDisplayDate(isoDate) {
@@ -227,19 +235,15 @@ exports.getPlayerSearch = onRequest({
     // Resolve headshot (ESPN gives us live data, directory is fallback)
     const espnData = await resolveEspnPlayer(playerName);
 
-    // 3. Get game logs — prefer directory, then live API, then pipeline playerId
-    let gameLogs = dirEntry?.gameLogs || [];
-    if (gameLogs.length === 0) {
-      // Directory doesn't have logs — try live API
-      const playerId = dirEntry?.apiSportsId || await resolvePlayerId(playerName);
-      if (playerId) {
-        gameLogs = await getGameLogs(playerId) || [];
-      }
+    // 3. Get game logs — always try live API first (directory may be stale/incomplete)
+    let gameLogs = [];
+    const playerId = edgeProps[0]?.playerId || dirEntry?.apiSportsId || await resolvePlayerId(playerName);
+    if (playerId) {
+      gameLogs = await getGameLogs(playerId) || [];
     }
-    if (gameLogs.length === 0 && edgeProps.length > 0 && edgeProps[0].playerId) {
-      // Live API failed — try the playerId from the EdgeBoard pipeline (may hit stale ml_cache)
-      console.log(`[playerSearch] Trying pipeline playerId: ${edgeProps[0].playerId}`);
-      gameLogs = await getGameLogs(edgeProps[0].playerId) || [];
+    // Fallback to directory if API returned nothing
+    if (gameLogs.length === 0 && dirEntry?.gameLogs?.length > 0) {
+      gameLogs = dirEntry.gameLogs;
     }
 
     const hasGameLogs = gameLogs.length > 0;

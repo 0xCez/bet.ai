@@ -1,12 +1,11 @@
 /**
  * ML Player Props Cloud Function v2 — EdgeBoard Pipeline
  *
- * Replaces SGO with The Odds API for props catalog.
- * Uses shared data layer for all data fetching.
+ * Signal-based scoring pipeline (replaced Vertex AI in Phase 2.2).
+ * Determines direction + confidence from pure statistical signals.
  *
  * Key components:
- * - 88-feature engineering for CatBoost model on Vertex AI
- * - Temperature scaling (T=2.0) + hard cap (85%)
+ * - Signal-based direction scoring (hit rates, avg gap, defense, trend)
  * - Avg-gated sanity filter + green score (0-5)
  * - Alt lines enrichment with goblin legs
  */
@@ -14,28 +13,19 @@
 const functions = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const axios = require('axios');
-const { GoogleAuth } = require('google-auth-library');
 
 // ── Shared Modules ──
 const { fetchStandardProps, fetchAltProps, fetchEvents, findBestGoblinLine, normalizeBookmaker } = require('./shared/oddsApi');
 const { resolvePlayerIdsBatch, getGameLogsBatch, getL10AvgForStat, getApiKey, getCurrentNBASeason } = require('./shared/playerStats');
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
 const { calculateExtendedHitRates, filterPlayed } = require('./shared/hitRates');
-const { calibrateProbability, getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
+const { getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
 const { passesGreenScoreFloor, passesAvgGapFilter } = require('./shared/qualityGates');
 const { getBookmakerBonus } = require('./shared/bookmakerTiers');
 
 // ── Config ──
 let db;
 const getDb = () => { if (!db) db = admin.firestore(); return db; };
-
-const VERTEX_ENDPOINT = 'https://us-central1-aiplatform.googleapis.com/v1/projects/133991312998/locations/us-central1/endpoints/7508590194849742848:predict';
-
-// Token cache for Vertex AI
-let cachedToken = null;
-let tokenExpiry = 0;
-
-const PROB_CAP = 0.85;
 
 // EdgeBoard odds ceiling: exclude props with predicted-side odds heavier than this.
 // Heavy juice (-300 and below) belongs on Parlay Stack, not EdgeBoard.
@@ -468,28 +458,86 @@ function buildFeatures(gameLogs, prop, homeTeam, awayTeam, gameDate) {
 }
 
 // ──────────────────────────────────────────────
-// VERTEX AI
+// SIGNAL-BASED DIRECTION SCORING
 // ──────────────────────────────────────────────
 
-async function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && now < tokenExpiry - 300000) return cachedToken;
+/**
+ * Compute signal strength for a given direction (Over or Under).
+ *
+ * Components:
+ *   Hit rate score (70%): weighted directional hit rates across windows
+ *   Avg gap score (0-20): how far L10 avg is past the line
+ *   Defense alignment (0-15): opponent rank vs direction
+ *   Trend score (-5 to +5): recent momentum
+ *
+ * Returns a score where higher = stronger signal for that direction.
+ */
+function computeDirectionScore(dir, hitRates, l10Avg, line, opponentDefense, trend) {
+  const isOver = dir === 'Over';
 
-  const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
-  const client = await auth.getClient();
-  const token = await client.getAccessToken();
-  cachedToken = token.token;
-  tokenExpiry = now + 3600000;
-  return cachedToken;
+  // Directional hit percentages per window
+  const l5Hit = hitRates?.l5?.pct != null
+    ? (isOver ? hitRates.l5.pct : (100 - hitRates.l5.pct)) : 50;
+  const l10Hit = hitRates?.l10?.pct != null
+    ? (isOver ? hitRates.l10.pct : (100 - hitRates.l10.pct)) : 50;
+  const l20Hit = hitRates?.l20?.pct != null
+    ? (isOver ? hitRates.l20.pct : (100 - hitRates.l20.pct)) : 50;
+  const sznHit = hitRates?.season?.pct != null
+    ? (isOver ? hitRates.season.pct : (100 - hitRates.season.pct)) : 50;
+
+  // Weighted hit rate (0-100 range)
+  const hitScore = l5Hit * 0.20 + l10Hit * 0.35 + l20Hit * 0.15 + sznHit * 0.30;
+
+  // Avg gap score (0-20): how far avg is past the line in the right direction
+  let avgScore = 0;
+  if (l10Avg != null) {
+    const gap = isOver ? (l10Avg - line) : (line - l10Avg);
+    avgScore = Math.min(20, Math.max(0, gap * 5));
+  }
+
+  // Defense alignment (0-15)
+  let defScore = 7.5; // neutral when no data
+  const defRank = opponentDefense?.rank;
+  if (defRank != null) {
+    if (isOver && defRank >= 21) defScore = 15;
+    else if (isOver && defRank <= 10) defScore = 0;
+    else if (!isOver && defRank <= 10) defScore = 15;
+    else if (!isOver && defRank >= 21) defScore = 0;
+    else defScore = 7.5;
+  }
+
+  // Trend (-5 to +5)
+  let trendScore = 0;
+  if (trend != null) {
+    trendScore = isOver ? Math.min(5, trend) : Math.min(5, -trend);
+  }
+
+  return hitScore * 0.70 + avgScore + defScore + trendScore;
 }
 
-async function predictBatch(featuresArray) {
-  const token = await getAccessToken();
-  const response = await axios.post(VERTEX_ENDPOINT, { instances: featuresArray }, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    timeout: 30000
-  });
-  return response.data.predictions;
+/**
+ * Determine prediction direction and synthetic confidence from signals.
+ * Evaluates both Over and Under, picks the stronger direction.
+ *
+ * Returns: { prediction, overScore, underScore, syntheticProb }
+ */
+function computeSignalPrediction(hitRates, l10Avg, line, opponentDefense, trend) {
+  const overScore = computeDirectionScore('Over', hitRates, l10Avg, line, opponentDefense, trend);
+  const underScore = computeDirectionScore('Under', hitRates, l10Avg, line, opponentDefense, trend);
+
+  const prediction = overScore >= underScore ? 'Over' : 'Under';
+  const bestScore = Math.max(overScore, underScore);
+  const worstScore = Math.min(overScore, underScore);
+
+  // Synthetic probability: map signal score to 0.50-0.85 range
+  // bestScore typically ranges 40-90, normalize to probability
+  const normalizedScore = Math.min(1, Math.max(0, (bestScore - 30) / 60));
+  const syntheticProb = 0.50 + normalizedScore * 0.35; // 0.50 to 0.85
+
+  // Asymmetry: how much stronger is the best direction
+  const asymmetry = bestScore > 0 ? (bestScore - worstScore) / bestScore : 0;
+
+  return { prediction, overScore, underScore, syntheticProb, asymmetry };
 }
 
 // ──────────────────────────────────────────────
@@ -533,8 +581,8 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
   // 7. Enrich props with team + isHome, filter to those with game logs + quality gate
   const MIN_GAMES = 5;
   const MIN_AVG_MINUTES = 20;
-  // Phase 2: 3PT excluded — alt lines unreliable, ESPN grading was broken, low analytical value
-  const EDGE_EXCLUDED_STATS = new Set(['threePointersMade']);
+  // Phase 2.2: Allow 3PT for volume shooters (line >= 1.5)
+  const EDGE_EXCLUDED_STATS = new Set([]);
 
   const allEnriched = allProps
     .map(p => ({
@@ -543,7 +591,8 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
       isHome: playerTeamInfo[p.playerName]?.isHome ?? false,
     }))
     .filter(p => gameLogsMap[p.playerName]?.length > 0)
-    .filter(p => !EDGE_EXCLUDED_STATS.has(p.statType));
+    .filter(p => !EDGE_EXCLUDED_STATS.has(p.statType))
+    .filter(p => p.statType !== 'threePointersMade' || p.line >= 1.5); // 3PT only for volume shooters
 
   const enrichedProps = allEnriched.filter(p => {
     const logs = filterPlayed(gameLogsMap[p.playerName]);
@@ -558,7 +607,7 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     console.log(`[EdgeBoard] Quality filter removed ${qualityFiltered} players (min ${MIN_GAMES} games, ${MIN_AVG_MINUTES} min/game)`);
   }
 
-  console.log(`[EdgeBoard] Processing ${enrichedProps.length} props through ML`);
+  console.log(`[EdgeBoard] Processing ${enrichedProps.length} props through signal scoring`);
 
   if (enrichedProps.length === 0) {
     return {
@@ -570,7 +619,7 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     };
   }
 
-  // 8. Build 88-feature vectors
+  // 8. Build feature vectors (used for player stats, trend, reasoning — not for ML)
   const effectiveGameDate = gameDate || gameTime;
   const featuresList = enrichedProps.map(prop =>
     buildFeatures(gameLogsMap[prop.playerName], prop, homeTeamCode, awayTeamCode, effectiveGameDate)
@@ -594,170 +643,145 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
     }
   });
 
-  // 10. Call Vertex AI in batches of 10
-  const allPredictions = [];
-  for (let i = 0; i < featuresList.length; i += 10) {
-    const batch = featuresList.slice(i, i + 10);
-    try {
-      const preds = await predictBatch(batch);
-      allPredictions.push(...preds);
-    } catch (err) {
-      console.error(`[EdgeBoard] Vertex AI batch error:`, err.message);
-      allPredictions.push(...batch.map(() => null));
-    }
-  }
-
-  // 11. Combine props with predictions + sanity filter + green score
+  // 10. Signal-based direction + scoring (replaces Vertex AI)
   const results = [];
   let filteredBySanity = 0;
   enrichedProps.forEach((prop, idx) => {
-    const pred = allPredictions[idx];
-    if (!pred) return;
+    const hitRates = calculateExtendedHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
+    const pStats = playerStatsMap[prop.playerName];
+    const opponentTeam = prop.team === homeTeam ? awayTeam : homeTeam;
+    const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
+    const l10Avg = getL10AvgForStat(pStats, prop.statType, featuresList[idx]);
+    const trendVal = getTrendForStat(featuresList[idx], prop.statType);
 
-    const confidence = pred.confidence;
-    const shouldBet = confidence > 0.10;
-    const bettingValue = confidence > 0.15 ? 'high' : confidence >= 0.10 ? 'medium' : 'low';
+    // Signal-based direction prediction
+    const signalResult = computeSignalPrediction(hitRates, l10Avg, prop.line, opponentDefense, trendVal);
+    const prediction = signalResult.prediction;
+    const isOver = prediction === 'Over';
 
-    if (shouldBet) {
-      const hitRates = calculateExtendedHitRates(gameLogsMap[prop.playerName], prop.statType, prop.line);
-      const pStats = playerStatsMap[prop.playerName];
-      const opponentTeam = prop.team === homeTeam ? awayTeam : homeTeam;
-      const opponentDefense = getOpponentStatForProp(oppStatsData, opponentTeam, prop.statType);
-
-      // Sanity check
-      const l10Avg = getL10AvgForStat(pStats, prop.statType, featuresList[idx]);
-      const sanity = passesSanityCheck({
-        prediction: pred.prediction,
-        l10Avg,
-        line: prop.line,
-        hitRates,
-        opponentDefense,
-      });
-      if (!sanity.pass) {
-        filteredBySanity++;
-        console.log(`[EdgeBoard] FILTERED: ${prop.playerName} ${pred.prediction} ${prop.line} ${prop.statType} — ${sanity.reason}`);
-        return;
-      }
-
-      // Reasoning features
-      const reasoning = getReasoningFeatures(featuresList[idx], prop.statType);
-
-      // Temperature-scaled + capped probabilities
-      const calOver = calibrateProbability(pred.probability_over);
-      const calUnder = calibrateProbability(pred.probability_under);
-      const cappedOver = Math.min(calOver, PROB_CAP);
-      const cappedUnder = Math.min(calUnder, PROB_CAP);
-      const displayConfidence = Math.min(
-        pred.prediction === 'Over' ? calOver : calUnder,
-        PROB_CAP
-      );
-
-      // Green score
-      const isOver = pred.prediction === 'Over';
-      const relevantOdds = isOver ? prop.oddsOver : prop.oddsUnder;
-      const { score: greenScore, signals: greenSignals } = calculateGreenScore({
-        prediction: pred.prediction,
-        l10Avg,
-        line: prop.line,
-        hitRates,
-        opponentDefense,
-        relevantOdds,
-      });
-
-      // Quality gates (Phase 2 analysis kill rules)
-      const greenGate = passesGreenScoreFloor(greenScore, 'edge');
-      if (!greenGate.pass) {
-        filteredBySanity++;
-        return;
-      }
-      const avgGapGate = passesAvgGapFilter(l10Avg, prop.line, pred.prediction, prop.statType);
-      if (!avgGapGate.pass) {
-        filteredBySanity++;
-        return;
-      }
-
-      // Trend
-      const trend = parseFloat(getTrendForStat(featuresList[idx], prop.statType).toFixed(1));
-
-      // Pick Score (replaces old betScore — field name kept for backward compat)
-      // Phase 2 analysis: betScore had weak discriminative power (50-61.7% range).
-      // New formula: directional hit rates + defense alignment + green score + bookmaker bonus.
-      const dirL10Pct = isOver ? (hitRates.l10?.pct ?? 50) : (100 - (hitRates.l10?.pct ?? 50));
-      const dirSznPct = isOver ? (hitRates.season?.pct ?? 50) : (100 - (hitRates.season?.pct ?? 50));
-      const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
-      const bookBonus = getBookmakerBonus(bookmaker);
-      // Defense alignment score (0-100): strong signal from Phase 2 analysis
-      // Over vs weak defense (high rank) = good, Under vs strong defense (low rank) = good
-      const defRank = opponentDefense?.rank || 15;
-      const defAlignScore = isOver ? ((defRank / 30) * 100) : (((31 - defRank) / 30) * 100);
-      // Base: 45% L10 dir HR, 20% season dir HR, 20% defense alignment, 15% green score
-      const baseScore = dirL10Pct * 0.45 + dirSznPct * 0.20 + defAlignScore * 0.20 + (greenScore * 3) * 0.15;
-      const betScore = Math.round(baseScore * bookBonus);
-
-      // Explicit edge: how much our directional hit rate exceeds implied probability
-      let edge = 0;
-      if (relevantOdds != null) {
-        const impliedProb = relevantOdds < 0
-          ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
-          : 100 / (relevantOdds + 100);
-        edge = parseFloat((dirL10Pct - impliedProb * 100).toFixed(1));
-      }
-
-      // Directional hit rates: pct reflects the prediction direction (Over or Under)
-      const dirPct = (window) => {
-        const raw = hitRates[window]?.pct ?? null;
-        if (raw === null) return null;
-        return isOver ? raw : 100 - raw;
-      };
-      const directionalHitRates = {
-        l10: dirPct('l10'),
-        l20: dirPct('l20'),
-        season: dirPct('season'),
-      };
-
-      results.push({
-        playerName: prop.playerName,
-        playerId: playerIdMap[prop.playerName] || null,
-        team: prop.team,
-        statType: prop.statType,
-        line: prop.line,
-        prediction: pred.prediction,
-        isHome: prop.isHome,
-        l10Avg: l10Avg != null ? parseFloat(l10Avg.toFixed(1)) : null,
-        trend,
-        probabilityOver: parseFloat(cappedOver.toFixed(4)),
-        probabilityUnder: parseFloat(cappedUnder.toFixed(4)),
-        confidence,
-        confidencePercent: (confidence * 100).toFixed(1),
-        confidenceTier: bettingValue,
-        oddsOver: prop.oddsOver,
-        oddsUnder: prop.oddsUnder,
-        gamesUsed: gameLogsMap[prop.playerName].length,
-        playerStats: pStats || null,
-        rawProbabilityOver: pred.probability_over,
-        rawProbabilityUnder: pred.probability_under,
-        displayConfidence: parseFloat(displayConfidence.toFixed(4)),
-        displayConfidencePercent: (displayConfidence * 100).toFixed(1),
-        bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
-        bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
-        allBookmakers: prop.allBookmakers || [],
-        hitRates,
-        directionalHitRates,
-        reasoning,
-        opponent: opponentTeam,
-        opponentDefense,
-        greenScore,
-        greenSignals,
-        betScore,
-        edge,
-      });
+    // Sanity check (same as before)
+    const sanity = passesSanityCheck({
+      prediction,
+      l10Avg,
+      line: prop.line,
+      hitRates,
+      opponentDefense,
+    });
+    if (!sanity.pass) {
+      filteredBySanity++;
+      return;
     }
+
+    // Reasoning features
+    const reasoning = getReasoningFeatures(featuresList[idx], prop.statType);
+
+    // Green score
+    const relevantOdds = isOver ? prop.oddsOver : prop.oddsUnder;
+    const { score: greenScore, signals: greenSignals } = calculateGreenScore({
+      prediction,
+      l10Avg,
+      line: prop.line,
+      hitRates,
+      opponentDefense,
+      relevantOdds,
+    });
+
+    // Quality gates
+    const greenGate = passesGreenScoreFloor(greenScore, 'edge');
+    if (!greenGate.pass) {
+      filteredBySanity++;
+      return;
+    }
+    const avgGapGate = passesAvgGapFilter(l10Avg, prop.line, prediction, prop.statType);
+    if (!avgGapGate.pass) {
+      filteredBySanity++;
+      return;
+    }
+
+    // Trend
+    const trend = parseFloat(trendVal.toFixed(1));
+
+    // Synthetic probabilities for app backward compatibility
+    const syntheticProb = signalResult.syntheticProb;
+    const probOver = isOver ? syntheticProb : (1 - syntheticProb);
+    const probUnder = isOver ? (1 - syntheticProb) : syntheticProb;
+
+    // Confidence tier from signal asymmetry
+    const asymmetry = signalResult.asymmetry;
+    const confidenceTier = asymmetry > 0.15 ? 'high' : asymmetry > 0.08 ? 'medium' : 'low';
+
+    // Pick Score (betScore — same formula as before)
+    const dirL10Pct = isOver ? (hitRates.l10?.pct ?? 50) : (100 - (hitRates.l10?.pct ?? 50));
+    const dirSznPct = isOver ? (hitRates.season?.pct ?? 50) : (100 - (hitRates.season?.pct ?? 50));
+    const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
+    const bookBonus = getBookmakerBonus(bookmaker);
+    const defRank = opponentDefense?.rank || 15;
+    const defAlignScore = isOver ? ((defRank / 30) * 100) : (((31 - defRank) / 30) * 100);
+    const baseScore = dirL10Pct * 0.45 + dirSznPct * 0.20 + defAlignScore * 0.20 + (greenScore * 3) * 0.15;
+    const betScore = Math.round(baseScore * bookBonus);
+
+    // Edge: directional hit rate minus implied probability
+    let edge = 0;
+    if (relevantOdds != null) {
+      const impliedProb = relevantOdds < 0
+        ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
+        : 100 / (relevantOdds + 100);
+      edge = parseFloat((dirL10Pct - impliedProb * 100).toFixed(1));
+    }
+
+    // Directional hit rates
+    const dirPct = (window) => {
+      const raw = hitRates[window]?.pct ?? null;
+      if (raw === null) return null;
+      return isOver ? raw : 100 - raw;
+    };
+    const directionalHitRates = {
+      l10: dirPct('l10'),
+      l20: dirPct('l20'),
+      season: dirPct('season'),
+    };
+
+    results.push({
+      playerName: prop.playerName,
+      playerId: playerIdMap[prop.playerName] || null,
+      team: prop.team,
+      statType: prop.statType,
+      line: prop.line,
+      prediction,
+      isHome: prop.isHome,
+      l10Avg: l10Avg != null ? parseFloat(l10Avg.toFixed(1)) : null,
+      trend,
+      probabilityOver: parseFloat(probOver.toFixed(4)),
+      probabilityUnder: parseFloat(probUnder.toFixed(4)),
+      confidence: syntheticProb,
+      confidencePercent: (syntheticProb * 100).toFixed(1),
+      confidenceTier,
+      oddsOver: prop.oddsOver,
+      oddsUnder: prop.oddsUnder,
+      gamesUsed: gameLogsMap[prop.playerName].length,
+      playerStats: pStats || null,
+      displayConfidence: parseFloat(syntheticProb.toFixed(4)),
+      displayConfidencePercent: (syntheticProb * 100).toFixed(1),
+      bookmakerOver: normalizeBookmaker(prop.bookmakerOver),
+      bookmakerUnder: normalizeBookmaker(prop.bookmakerUnder),
+      allBookmakers: prop.allBookmakers || [],
+      hitRates,
+      directionalHitRates,
+      reasoning,
+      opponent: opponentTeam,
+      opponentDefense,
+      greenScore,
+      greenSignals,
+      betScore,
+      edge,
+    });
   });
 
-  // 12. Filter out goblin-tier odds, sort by betScore (hit rate + edge), take top 15
+  // 12. Filter: must have odds on predicted side + not goblin-tier juice
   const edgeResults = results.filter(r => {
     const relevantOdds = r.prediction === 'Over' ? r.oddsOver : r.oddsUnder;
-    return relevantOdds == null || relevantOdds >= EDGEBOARD_ODDS_CEILING;
+    if (relevantOdds == null) return false; // unbettable — no odds available
+    return relevantOdds >= EDGEBOARD_ODDS_CEILING;
   });
   console.log(`[EdgeBoard] ${results.length} total → ${edgeResults.length} after odds ceiling (≥${EDGEBOARD_ODDS_CEILING}), ${results.length - edgeResults.length} goblin-tier excluded`);
   edgeResults.sort((a, b) => b.betScore - a.betScore);
@@ -847,7 +871,6 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
           statType: tp.statType,
           line: tp.line,
           features: fidx !== undefined ? featuresList[fidx] : null,
-          vertexPrediction: fidx !== undefined ? allPredictions[fidx] : null
         };
       })
     };

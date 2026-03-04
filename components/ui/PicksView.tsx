@@ -138,14 +138,15 @@ export function PicksView() {
     const rawL10 = item.dirL10 ?? (item.l10 != null ? (isOver ? item.l10 : 100 - item.l10) : null);
     const rawSzn = item.szn != null ? (isOver ? item.szn : 100 - item.szn) : null;
 
-    // EV: blend L10+SZN, regress toward market implied probability
+    // EV: blend L10+SZN (player-weighted), regress toward market implied probability
     let ev: number | null = null;
     if (rawL10 != null && item.odds != null) {
-      const baseP = (rawSzn != null ? 0.4 * rawL10 + 0.6 * rawSzn : rawL10) / 100;
+      const baseP = (rawSzn != null ? 0.6 * rawL10 + 0.4 * rawSzn : rawL10) / 100;
       const impliedP = item.odds < 0 ? Math.abs(item.odds) / (Math.abs(item.odds) + 100) : 100 / (item.odds + 100);
-      const adjP = 0.4 * baseP + 0.6 * impliedP;
+      const adjP = 0.55 * baseP + 0.45 * impliedP;
       const decimal = item.odds < 0 ? 1 + 100 / Math.abs(item.odds) : 1 + item.odds / 100;
-      ev = parseFloat(((adjP * (decimal - 1) - (1 - adjP)) * 100).toFixed(1));
+      const rawEV = (adjP * (decimal - 1) - (1 - adjP)) * 100;
+      ev = parseFloat(Math.min(10, Math.max(0.3, rawEV)).toFixed(1));
     }
 
     return (
