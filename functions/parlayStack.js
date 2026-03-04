@@ -5,12 +5,11 @@
  * Alt lines are pre-filtered by bookmaker juice (≤-400).
  * Our job: validate with hit rates + defense + avg.
  *
- * All 5 signals must validate for a leg to be included:
- *   1. L10 hit rate ≥ 60% (Over) or ≤ 40% (Under) against ALT line
- *   2. Season hit rate ≥ 50% against ALT line
- *   3. L10 avg safely above/below alt line
+ * 4 signals must validate for a leg to be included:
+ *   1. L10 hit rate ≥ 70% (Over) or ≤ 30% (Under) against ALT line
+ *   2. Season hit rate ≥ 60% (Over) or ≤ 40% (Under) against ALT line
+ *   3. L10 avg safely above/below alt line (stat-type-aware margin)
  *   4. Opponent defense doesn't contradict
- *   5. Trend supports direction
  */
 
 const functions = require('firebase-functions/v2');
@@ -21,6 +20,8 @@ const { resolvePlayerIdsBatch, getGameLogsBatch, getApiKey } = require('./shared
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
 const { calculateHitRates, getL10Average, getTrend } = require('./shared/hitRates');
 const { calculateGreenScore } = require('./shared/greenScore');
+const { AVG_GAP_THRESHOLDS } = require('./shared/qualityGates');
+const { getBookmakerTier } = require('./shared/bookmakerTiers');
 
 // Goblin threshold: only consider alt lines with odds between floor and ceiling.
 // Ceiling: ≤ -300 (wider funnel, strict validation filters the bad ones)
@@ -44,7 +45,8 @@ const MIN_SZN_HIT_PCT = 60;   // For Over: ≥60%. For Under: ≤40%
 const MIN_AVG_MARGIN = 1.5;   // Avg must be at least this far past the alt line
 
 // Stat types excluded from parlay stack (low reliability on alt lines)
-const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals']);
+// Phase 2: added threePointersMade — 3PT alt lines are unreliable (0% Over / 100% Under due to DNP noise)
+const EXCLUDED_STAT_TYPES = new Set(['assists', 'steals', 'blocks', 'blocks+steals', 'threePointersMade']);
 
 /**
  * Convert American odds to implied probability (0-1).
@@ -170,14 +172,22 @@ async function processParlayStack(eventId, sharedData) {
     }
   }
 
-  // 9. Sort by parlayEdge (highest edge = best value for a parlay).
+  // 9. Sort by parlayEdge (highest edge = best value for a parlay), bookmaker tier as tiebreaker.
   // Edge = actual L10 hit rate - implied probability from odds.
   // A -420 leg with 90% hit rate (edge +9.2%) beats a -650 leg with 90% hit rate (edge +3.3%).
-  legs.sort((a, b) => b.parlayEdge - a.parlayEdge);
+  legs.sort((a, b) => {
+    const edgeDiff = b.parlayEdge - a.parlayEdge;
+    if (Math.abs(edgeDiff) > 0.01) return edgeDiff;
+    // Tiebreaker: prefer higher-tier bookmaker (lower priority = better)
+    const aPri = getBookmakerTier(a.bookmaker).priority;
+    const bPri = getBookmakerTier(b.bookmaker).priority;
+    return aPri - bPri;
+  });
 
-  // Filter out legs with negative edge (book has edge on us)
-  const edgeFilteredLegs = legs.filter(leg => leg.parlayEdge >= 0);
-  console.log(`[ParlayStack] ${legs.length} raw legs → ${edgeFilteredLegs.length} after parlayEdge ≥ 0 filter`);
+  // Filter out legs with low edge (Phase 2: parlayEdge ≥ 0.03 floor)
+  const MIN_PARLAY_EDGE = 0.03;
+  const edgeFilteredLegs = legs.filter(leg => leg.parlayEdge >= MIN_PARLAY_EDGE);
+  console.log(`[ParlayStack] ${legs.length} raw legs → ${edgeFilteredLegs.length} after parlayEdge ≥ ${MIN_PARLAY_EDGE} filter`);
 
   // Keep only the best-value leg per player-stat combo PER BOOKMAKER
   const seen = new Set();
@@ -226,10 +236,11 @@ function validateLeg({ playerName, statType, prediction, altLine, altOdds, bookm
   if (isOver && sznPct < MIN_SZN_HIT_PCT) return null;
   if (!isOver && sznPct > (100 - MIN_SZN_HIT_PCT)) return null;
 
-  // Signal 3: L10 avg safely past alt line
+  // Signal 3: L10 avg safely past alt line (stat-type-aware margin)
   if (l10Avg == null) return null;
-  if (isOver && l10Avg < altLine + MIN_AVG_MARGIN) return null;
-  if (!isOver && l10Avg > altLine - MIN_AVG_MARGIN) return null;
+  const effectiveMargin = AVG_GAP_THRESHOLDS[statType] || MIN_AVG_MARGIN;
+  if (isOver && l10Avg < altLine + effectiveMargin) return null;
+  if (!isOver && l10Avg > altLine - effectiveMargin) return null;
 
   // Signal 4: Opponent defense doesn't contradict
   const defRank = opponentDefense?.rank;
@@ -239,11 +250,8 @@ function validateLeg({ playerName, statType, prediction, altLine, altOdds, bookm
     if (!isOver && defRank >= 21) return null;
   }
 
-  // Signal 5: Trend supports (L10 avg vs alt line direction)
-  // For Over: avg should be comfortably above. For Under: below.
-  // (Already captured by Signal 3, but we add a stronger check here)
+  // avgMargin for output (informational — Phase 2 analysis showed trend signal was noise)
   const avgMargin = isOver ? l10Avg - altLine : altLine - l10Avg;
-  if (avgMargin < 0) return null; // Shouldn't happen after Signal 3, safety net
 
   // Green score
   const { score: greenScore, signals: greenSignals } = calculateGreenScore({

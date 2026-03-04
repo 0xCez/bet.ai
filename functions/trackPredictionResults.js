@@ -74,7 +74,7 @@ async function fetchGameStatsForDate(dateStr) {
             stl: parseFloat(statMap['STL']) || 0,
             blk: parseFloat(statMap['BLK']) || 0,
             tov: parseFloat(statMap['TO']) || 0,
-            tpm: parseFloat(statMap['3PM']) || 0,
+            tpm: parseFloat(statMap['3PT']) || 0,
             min: statMap['MIN'] || '0',
           });
         }
@@ -174,6 +174,16 @@ function normalizeStatType(statType) {
 function resolvePick(pick, playerStats) {
   const playerEntry = findPlayerESPN(playerStats, pick.name);
   if (!playerEntry) {
+    pick.actualStat = null;
+    pick.result = 'dnp';
+    pick.hit = null;
+    return;
+  }
+
+  // DNP check: player in box score but did not play (0 minutes)
+  const minStr = String(playerEntry.min || '0');
+  const minVal = parseFloat(minStr.replace(':', '.')) || 0;
+  if (minVal === 0) {
     pick.actualStat = null;
     pick.result = 'dnp';
     pick.hit = null;

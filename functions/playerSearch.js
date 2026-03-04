@@ -104,7 +104,8 @@ async function findAllPlayerProps(playerName) {
     .get();
 
   const now = new Date();
-  const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  // 3h grace period: NBA games last ~2.5h, so include in-progress games
+  const cutoff = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
   const nameNorm = playerName.toLowerCase().trim();
 
   const edgeProps = [];

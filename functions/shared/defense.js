@@ -104,34 +104,55 @@ async function getOpponentDefensiveStats() {
       return null;
     }
 
-    // Compute opponent points per game for each team
-    const teamOppPts = {}; // key -> [opponent scores]
+    // Compute opponent points per game (defense) and own points per game (offense)
+    const teamOppPts = {}; // key -> [opponent scores] (defense)
+    const teamOwnPts = {}; // key -> [own scores] (offense)
     for (const g of finished) {
       const homeKey = normalizeTeamKey(g.teams.home.name);
       const awayKey = normalizeTeamKey(g.teams.visitors.name);
       const homePts = g.scores.home.points;
       const awayPts = g.scores.visitors.points;
 
+      // Defense: opponent points allowed
       if (!teamOppPts[homeKey]) teamOppPts[homeKey] = [];
       if (!teamOppPts[awayKey]) teamOppPts[awayKey] = [];
       teamOppPts[homeKey].push(awayPts); // home allowed awayPts
       teamOppPts[awayKey].push(homePts); // away allowed homePts
+
+      // Offense: own points scored
+      if (!teamOwnPts[homeKey]) teamOwnPts[homeKey] = [];
+      if (!teamOwnPts[awayKey]) teamOwnPts[awayKey] = [];
+      teamOwnPts[homeKey].push(homePts);
+      teamOwnPts[awayKey].push(awayPts);
     }
 
     // Build teams object with per-game averages
     const teams = {};
     for (const [key, ptsList] of Object.entries(teamOppPts)) {
+      const ownPtsList = teamOwnPts[key] || [];
       teams[key] = {
         oppPts: parseFloat((ptsList.reduce((a, b) => a + b, 0) / ptsList.length).toFixed(1)),
+        ownPts: ownPtsList.length > 0
+          ? parseFloat((ownPtsList.reduce((a, b) => a + b, 0) / ownPtsList.length).toFixed(1))
+          : null,
         gamesPlayed: ptsList.length,
       };
     }
 
     // Rank by opponent points per game (1 = fewest = best defense)
     const ranks = {};
-    const sorted = Object.entries(teams).sort((a, b) => a[1].oppPts - b[1].oppPts);
-    sorted.forEach(([teamKey], i) => {
+    const sortedDef = Object.entries(teams).sort((a, b) => a[1].oppPts - b[1].oppPts);
+    sortedDef.forEach(([teamKey], i) => {
       ranks[teamKey] = { oppPtsRank: i + 1 };
+    });
+
+    // Rank by own points per game (1 = most scored = best offense)
+    const sortedOff = Object.entries(teams)
+      .filter(([, t]) => t.ownPts != null)
+      .sort((a, b) => b[1].ownPts - a[1].ownPts);
+    sortedOff.forEach(([teamKey], i) => {
+      if (!ranks[teamKey]) ranks[teamKey] = {};
+      ranks[teamKey].ownPtsRank = i + 1;
     });
 
     const freshData = { season, fetchedAt: Date.now(), teams, ranks };
@@ -168,7 +189,9 @@ function getOpponentStatForProp(oppStatsData, oppTeamName, statType) {
 
   return {
     rank: rankData.oppPtsRank,
+    offRank: rankData.ownPtsRank ?? null,
     allowed: stats.oppPts,
+    scored: stats.ownPts ?? null,
     stat: 'PTS',
     gamesPlayed: stats.gamesPlayed,
   };

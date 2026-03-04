@@ -113,7 +113,8 @@ function formatDisplayDate(isoDate) {
  */
 async function findPropInCache(playerName, statType, line) {
   const now = new Date();
-  const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  // 3h grace period: include in-progress games (NBA ~2.5h)
+  const cutoff = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
 
   const snapshot = await getDb().collection('matchAnalysisCache')
     .where('sport', '==', 'nba')

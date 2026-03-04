@@ -63,6 +63,7 @@ interface LeaderboardProp {
   szn?: number;
   trend?: number;
   defRank?: number;
+  offRank?: number;
   defTeam?: string;
   isHome?: boolean;
   green?: number;
@@ -87,8 +88,11 @@ export function PicksView() {
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
-        setEdgeProps(data.edge || []);
-        setStackLegs(data.stack || []);
+        // Filter out props from games that have already started (3h grace for in-progress)
+        const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+        const isActive = (p: LeaderboardProp) => !p.gameTime || p.gameTime > cutoff;
+        setEdgeProps((data.edge || []).filter(isActive));
+        setStackLegs((data.stack || []).filter(isActive));
       }
     } catch (err) {
       console.error("[PicksView] Error fetching leaderboard:", err);

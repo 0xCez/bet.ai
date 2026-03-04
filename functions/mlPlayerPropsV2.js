@@ -22,6 +22,8 @@ const { resolvePlayerIdsBatch, getGameLogsBatch, getL10AvgForStat, getApiKey, ge
 const { getOpponentDefensiveStats, getOpponentStatForProp } = require('./shared/defense');
 const { calculateExtendedHitRates } = require('./shared/hitRates');
 const { calibrateProbability, getTrendForStat, calculateGreenScore, passesSanityCheck } = require('./shared/greenScore');
+const { passesGreenScoreFloor, passesAvgGapFilter } = require('./shared/qualityGates');
+const { getBookmakerBonus } = require('./shared/bookmakerTiers');
 
 // ── Config ──
 let db;
@@ -657,55 +659,43 @@ async function processEdgeBoard(eventId, sharedData, options = {}) {
         relevantOdds,
       });
 
+      // Quality gates (Phase 2 analysis kill rules)
+      const greenGate = passesGreenScoreFloor(greenScore, 'edge');
+      if (!greenGate.pass) {
+        filteredBySanity++;
+        return;
+      }
+      const avgGapGate = passesAvgGapFilter(l10Avg, prop.line, pred.prediction, prop.statType);
+      if (!avgGapGate.pass) {
+        filteredBySanity++;
+        return;
+      }
+
       // Trend
       const trend = parseFloat(getTrendForStat(featuresList[idx], prop.statType).toFixed(1));
 
-      // Bet Score: weighted hit rate strength (70%) + edge vs odds (30%)
-      // Step 1: Weighted hit rate from signals + defense (0-100)
-      const hr = hitRates;
+      // Pick Score (replaces old betScore — field name kept for backward compat)
+      // Phase 2 analysis: betScore had weak discriminative power (50-61.7% range).
+      // New formula: directional hit rates + defense alignment + green score + bookmaker bonus.
+      const dirL10Pct = isOver ? (hitRates.l10?.pct ?? 50) : (100 - (hitRates.l10?.pct ?? 50));
+      const dirSznPct = isOver ? (hitRates.season?.pct ?? 50) : (100 - (hitRates.season?.pct ?? 50));
+      const bookmaker = isOver ? prop.bookmakerOver : prop.bookmakerUnder;
+      const bookBonus = getBookmakerBonus(bookmaker);
+      // Defense alignment score (0-100): strong signal from Phase 2 analysis
+      // Over vs weak defense (high rank) = good, Under vs strong defense (low rank) = good
       const defRank = opponentDefense?.rank || 15;
-      const defScore = isOver ? ((defRank / 30) * 100) : (((31 - defRank) / 30) * 100);
-      const hitSignals = [
-        { pct: hr.l3?.pct ?? null,     weight: 0.10 },
-        { pct: hr.l5?.pct ?? null,     weight: 0.15 },
-        { pct: hr.l10?.pct ?? null,    weight: 0.25 },
-        { pct: hr.l20?.pct ?? null,    weight: 0.15 },
-        { pct: hr.season?.pct ?? null, weight: 0.15 },
-        { pct: defScore,               weight: 0.20 },
-      ];
-      let totalWeight = 0, totalScore = 0;
-      for (const s of hitSignals) {
-        if (s.pct === null) continue;
-        // For Under bets, invert hit rate pcts (not defense)
-        const val = (!isOver && s !== hitSignals[hitSignals.length - 1]) ? (100 - s.pct) : s.pct;
-        totalScore += val * s.weight;
-        totalWeight += s.weight;
-      }
-      const weightedHitRate = totalWeight > 0 ? (totalScore / totalWeight) : 0;
+      const defAlignScore = isOver ? ((defRank / 30) * 100) : (((31 - defRank) / 30) * 100);
+      // Base: 45% L10 dir HR, 20% season dir HR, 20% defense alignment, 15% green score
+      const baseScore = dirL10Pct * 0.45 + dirSznPct * 0.20 + defAlignScore * 0.20 + (greenScore * 3) * 0.15;
+      const betScore = Math.round(baseScore * bookBonus);
 
-      // Step 2: Edge vs implied probability from odds (0-100 scale)
-      let edgeScore = 50; // neutral default when no odds
-      if (relevantOdds != null) {
-        const impliedProb = relevantOdds < 0
-          ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
-          : 100 / (relevantOdds + 100);
-        const impliedPct = impliedProb * 100;
-        // edge = how much our hit rate exceeds what the odds imply
-        const edgeRaw = weightedHitRate - impliedPct;
-        // Scale: 0 edge = 50, +25% edge = 100, -25% edge = 0
-        edgeScore = Math.min(100, Math.max(0, 50 + edgeRaw * 2));
-      }
-
-      // Step 3: Blend — 70% signal strength, 30% edge vs odds
-      const betScore = Math.round(weightedHitRate * 0.7 + edgeScore * 0.3);
-
-      // Explicit edge: how much our hit rate exceeds implied probability
+      // Explicit edge: how much our directional hit rate exceeds implied probability
       let edge = 0;
       if (relevantOdds != null) {
         const impliedProb = relevantOdds < 0
           ? Math.abs(relevantOdds) / (Math.abs(relevantOdds) + 100)
           : 100 / (relevantOdds + 100);
-        edge = parseFloat((weightedHitRate - impliedProb * 100).toFixed(1));
+        edge = parseFloat((dirL10Pct - impliedProb * 100).toFixed(1));
       }
 
       // Directional hit rates: pct reflects the prediction direction (Over or Under)

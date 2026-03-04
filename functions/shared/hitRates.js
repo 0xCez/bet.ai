@@ -5,6 +5,26 @@
  */
 
 /**
+ * Check if a player actually played in a game (non-zero minutes).
+ * Filters out DNP games that would corrupt hit rates and averages.
+ */
+function didPlay(game) {
+  const minStr = game.min;
+  if (!minStr) return false;
+  const str = String(minStr);
+  // Handle "32:15" or "32" or "0" or "00" or "0:00"
+  const val = parseFloat(str.replace(':', '.')) || 0;
+  return val > 0;
+}
+
+/**
+ * Filter game logs to only games where the player actually played.
+ */
+function filterPlayed(gameLogs) {
+  return gameLogs.filter(didPlay);
+}
+
+/**
  * Extract the numeric stat value from a game log entry.
  */
 function getStatValue(game, statType) {
@@ -43,7 +63,9 @@ function getStatValue(game, statType) {
  * @returns {{ l10: {over, total, pct}, season: {over, total, pct} }}
  */
 function calculateHitRates(gameLogs, statType, line) {
-  const l10 = gameLogs.slice(0, 10);
+  // Filter out DNP games (0 minutes) to avoid inflating Under hit rates
+  const played = filterPlayed(gameLogs);
+  const l10 = played.slice(0, 10);
 
   let l10Over = 0, l10Total = 0;
   for (const g of l10) {
@@ -52,7 +74,7 @@ function calculateHitRates(gameLogs, statType, line) {
   }
 
   let seasonOver = 0, seasonTotal = 0;
-  for (const g of gameLogs) {
+  for (const g of played) {
     const val = getStatValue(g, statType);
     if (val !== null) { seasonTotal++; if (val > line) seasonOver++; }
   }
@@ -67,7 +89,7 @@ function calculateHitRates(gameLogs, statType, line) {
  * Calculate L10 average for a stat from raw game logs.
  */
 function getL10Average(gameLogs, statType) {
-  const l10 = gameLogs.slice(0, 10);
+  const l10 = filterPlayed(gameLogs).slice(0, 10);
   let sum = 0, count = 0;
   for (const g of l10) {
     const val = getStatValue(g, statType);
@@ -81,8 +103,9 @@ function getL10Average(gameLogs, statType) {
  * Positive = trending up, negative = trending down.
  */
 function getTrend(gameLogs, statType) {
-  const l3 = gameLogs.slice(0, 3);
-  const l10 = gameLogs.slice(0, 10);
+  const played = filterPlayed(gameLogs);
+  const l3 = played.slice(0, 3);
+  const l10 = played.slice(0, 10);
 
   let l3Sum = 0, l3Count = 0;
   for (const g of l3) {
@@ -110,14 +133,16 @@ function getTrend(gameLogs, statType) {
  * @returns {{ l5, l10, l20, season }} each with { over, total, pct }
  */
 function calculateExtendedHitRates(gameLogs, statType, line) {
+  // Filter out DNP games (0 minutes)
+  const played = filterPlayed(gameLogs);
   let l3Over = 0, l3Total = 0;
   let l5Over = 0, l5Total = 0;
   let l10Over = 0, l10Total = 0;
   let l20Over = 0, l20Total = 0;
   let seasonOver = 0, seasonTotal = 0;
 
-  for (let i = 0; i < gameLogs.length; i++) {
-    const val = getStatValue(gameLogs[i], statType);
+  for (let i = 0; i < played.length; i++) {
+    const val = getStatValue(played[i], statType);
     if (val === null) continue;
 
     const hit = val > line;
@@ -151,7 +176,7 @@ function calculateExtendedHitRates(gameLogs, statType, line) {
 function calculateH2HHitRate(gameLogs, statType, line, opponentGameIds) {
   let over = 0, total = 0;
 
-  for (const g of gameLogs) {
+  for (const g of filterPlayed(gameLogs)) {
     const gameId = g.game?.id;
     if (!gameId || !opponentGameIds.has(gameId)) continue;
     const val = getStatValue(g, statType);
@@ -165,6 +190,7 @@ function calculateH2HHitRate(gameLogs, statType, line, opponentGameIds) {
 
 module.exports = {
   getStatValue,
+  filterPlayed,
   calculateHitRates,
   calculateExtendedHitRates,
   calculateH2HHitRate,

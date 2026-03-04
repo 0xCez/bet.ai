@@ -148,9 +148,15 @@ export const BoardView: React.FC<BoardViewProps> = ({ games, loading, error, dir
     const teamsSet = new Set<string>();
     const booksSet = new Set<string>();
 
+    // Filter out games that started more than 3h ago (grace period for in-progress games)
+    const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+
     games.forEach((game) => {
       // Sport filter
       if (game.sport !== sportFilter) return;
+
+      // Skip games that have already started (past the grace period)
+      if (game.gameStartTime && game.gameStartTime < cutoff) return;
 
       const mlProps = game.analysis?.mlPlayerProps;
       const topProps = mlProps?.edgeBoard?.topProps || mlProps?.topProps || [];

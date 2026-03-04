@@ -65,9 +65,10 @@ const SOCCER_LEAGUES = [
 ];
 
 // Post-game buffer: keep full analysis in live cache for 7 days after game starts.
-// Creators need recent games for replay content (scan a game from yesterday/this week).
-// After 7 days, archiveExpiredGames() moves them to permanent gameArchive.
-const POST_GAME_BUFFER_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Grace period after game start before archiving to gameArchive.
+// 3h covers a full NBA game (~2.5h) so in-progress games stay live.
+// After expiry, archiveExpiredGames() moves them to permanent gameArchive (not deleted).
+const POST_GAME_BUFFER_MS = 3 * 60 * 60 * 1000; // 3 hours
 
 /**
  * Check if a game is already cached and still valid
@@ -1021,9 +1022,19 @@ async function archiveExpiredGames() {
     .where('preCached', '==', true)
     .get();
 
+  // Archive if EITHER condition is true:
+  // 1. expiresAt has passed (normal TTL expiry)
+  // 2. gameStartTime + 3h has passed (game is finished — keeps board clean)
+  const graceMs = 3 * 60 * 60 * 1000; // 3h covers a full NBA game
   const expired = snapshot.docs.filter(doc => {
+    if (doc.id === 'leaderboard' || doc.id === 'parlayOfTheDay') return false;
     const data = doc.data();
-    return data.expiresAt && data.expiresAt < now;
+    if (data.expiresAt && data.expiresAt < now) return true;
+    if (data.gameStartTime) {
+      const cutoff = new Date(new Date(data.gameStartTime).getTime() + graceMs).toISOString();
+      return cutoff < now;
+    }
+    return false;
   });
 
   if (expired.length === 0) {
@@ -1429,6 +1440,7 @@ function teamCode(name) { return TEAM_CODE[name] || name?.split(' ').pop()?.subs
 
 // ── ESPN Headshot Resolution (shared module) ──
 const { resolveEspnHeadshot, resolveHeadshotsBatch } = require('./shared/espnHeadshot');
+const { getBookmakerTier } = require('./shared/bookmakerTiers');
 
 function mapEdgeProp(p) {
   const isOver = p.prediction === 'Over';
@@ -1455,6 +1467,7 @@ function mapEdgeProp(p) {
     dirL10: p.directionalHitRates?.l10 ?? null,
     trend: p.trend,
     defRank: p.opponentDefense?.rank ?? null,
+    offRank: p.opponentDefense?.offRank ?? null,
     defTeam: teamCode(p.opponent),
     isHome: p.isHome,
     green: p.greenScore,
@@ -1498,11 +1511,19 @@ function pickLegs(pool, count, preferDiversity) {
   const picked = [];
   const usedPlayers = new Set();
   const usedGames = new Set();
+  const gameDirections = {}; // track directions per game to avoid correlated failures
   const deferred = [];
 
   for (const leg of pool) {
     if (usedPlayers.has(leg.name)) continue;
     const gameKey = [leg.teamCode, leg.defTeam].sort().join('-');
+    const dirKey = `${gameKey}|${leg.dir}`;
+
+    // Avoid 2 legs with same direction from same game (correlated failure risk)
+    if (gameDirections[dirKey]) {
+      deferred.push(leg);
+      continue;
+    }
 
     if (preferDiversity && usedGames.has(gameKey)) {
       deferred.push(leg);
@@ -1511,6 +1532,7 @@ function pickLegs(pool, count, preferDiversity) {
 
     usedPlayers.add(leg.name);
     usedGames.add(gameKey);
+    gameDirections[dirKey] = true;
     picked.push(leg);
     if (picked.length >= count) return picked;
   }
@@ -1570,8 +1592,9 @@ function buildParlaySlips(altLegs, edgeProps) {
   const altByBook = expandLegsByBook(altLegs);
   const edgeByBook = expandLegsByBook(edgeProps || []);
 
-  // Collect all bookmakers that have legs
-  const allBooks = new Set([...Object.keys(altByBook), ...Object.keys(edgeByBook)]);
+  // Collect all bookmakers, sorted by tier priority (Tier 1 first)
+  const allBooks = [...new Set([...Object.keys(altByBook), ...Object.keys(edgeByBook)])]
+    .sort((a, b) => getBookmakerTier(a).priority - getBookmakerTier(b).priority);
 
   // Build LOCK / STEADY / SNIPER for EVERY bookmaker that qualifies.
   // Each slip is playable on exactly one book.
@@ -1582,7 +1605,8 @@ function buildParlaySlips(altLegs, edgeProps) {
     const bookEdge = (edgeByBook[bk] || []).sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
 
     // ── LOCK: 3-5 alt-line legs, safest possible ──
-    const lockPool = bookAlt.filter(l => dirHitRate(l) >= 70);
+    // Phase 2: tightened from >=70 to >=75 + green>=3 (51% of failed parlays had 1 leg miss)
+    const lockPool = bookAlt.filter(l => dirHitRate(l) >= 75 && (l.green ?? 0) >= 3);
     if (lockPool.length >= 3) {
       const count = Math.min(lockPool.length, 5);
       const lockLegs = pickLegs(lockPool, count, true);
@@ -1687,6 +1711,7 @@ function mapStackLeg(p) {
     l10: p.hitRates?.l10?.pct ?? null,
     szn: p.hitRates?.season?.pct ?? null,
     defRank: p.opponentDefense?.rank ?? null,
+    offRank: p.opponentDefense?.offRank ?? null,
     defTeam: teamCode(p.opponent),
     defStat: STAT_TO_DEF_STAT[p.statType] || null,
     isHome: p.isHome,
@@ -1703,7 +1728,8 @@ function mapStackLeg(p) {
 async function writeLeaderboardAndSlips() {
   const db = getDb();
   const now = new Date();
-  const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+  // 3h grace period: include in-progress games (NBA ~2.5h), consistent with frontend filter
+  const cutoff = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(); // 24h TTL
 
   const snapshot = await db.collection('matchAnalysisCache')
@@ -1731,6 +1757,19 @@ async function writeLeaderboardAndSlips() {
     const legs = ml.parlayStack?.legs || [];
     for (const p of legs) { const m = mapStackLeg(p); m.gameTime = gameTime; stackLegs.push(m); }
   }
+
+  // Quality gate: green score floor (belt-and-suspenders — pipelines also filter)
+  const preFilterEdge = edgeProps.length;
+  const preFilterStack = stackLegs.length;
+  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4);
+  const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3);
+  if (filteredEdge.length < preFilterEdge || filteredStack.length < preFilterStack) {
+    console.log(`[Leaderboard] Green floor: edge ${preFilterEdge}→${filteredEdge.length}, stack ${preFilterStack}→${filteredStack.length}`);
+  }
+  edgeProps.length = 0;
+  edgeProps.push(...filteredEdge);
+  stackLegs.length = 0;
+  stackLegs.push(...filteredStack);
 
   // Leaderboard: edge sorted by betScore, stack sorted by parlayEdge
   edgeProps.sort((a, b) => (b.betScore ?? 0) - (a.betScore ?? 0));
@@ -1858,8 +1897,8 @@ exports.getCheatsheetData = onRequest({
     const db = getDb();
     const now = new Date();
     const nowISO = now.toISOString();
-    // Only include upcoming games (not yet started, with 30-min buffer for tip-off)
-    const cutoff = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
+    // Include upcoming + in-progress games (3h grace — NBA games last ~2.5h)
+    const cutoff = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
 
     const snapshot = await db.collection('matchAnalysisCache')
       .where('sport', '==', 'nba')
