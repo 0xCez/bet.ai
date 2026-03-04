@@ -139,10 +139,21 @@ async function resolvePlayerId(playerName, apiKey) {
 
     // Fallback: first name token match (for "A.J. Green" matching "AJ Green")
     const searchFirst = normalizeName(playerName.split(' ')[0]);
+    const searchLastNorm = normalizeName(searchName);
     for (const p of response.data.response) {
       const apiFirst = normalizeName(p.firstname || '');
       const apiLast = normalizeName(p.lastname || '');
-      if (apiFirst === searchFirst || apiLast === normalizeName(searchName)) return cachePlayer(p);
+      if (apiFirst === searchFirst && apiLast === searchLastNorm) return cachePlayer(p);
+    }
+
+    // First-initial + last name match (handles "C. Coward" vs "Cedric Coward")
+    const firstInitial = searchFirst[0];
+    if (firstInitial) {
+      for (const p of response.data.response) {
+        const apiFirst = normalizeName(p.firstname || '');
+        const apiLast = normalizeName(p.lastname || '');
+        if (apiFirst[0] === firstInitial && apiLast === searchLastNorm) return cachePlayer(p);
+      }
     }
 
     // Last resort: first result (only if single result to avoid mismatches)
