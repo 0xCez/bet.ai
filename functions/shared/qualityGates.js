@@ -25,10 +25,12 @@ const AVG_GAP_THRESHOLDS = {
 
 /**
  * Green score floor gate.
- * Phase 2 finding: green ≤ 3 → 55-63% HR; green 4+ → 69-71% HR.
+ * Phase 2 finding: green 3 → ~63% HR, green 4+ → 69-71% HR.
+ * Lowered edge floor to 3 in Phase 2.1 — 63% still beats coin flip
+ * and the ML model + other filters provide additional quality control.
  */
 function passesGreenScoreFloor(greenScore, pipeline) {
-  const floor = pipeline === 'edge' ? 4 : 3;
+  const floor = pipeline === 'edge' ? 3 : 3;
   return {
     pass: greenScore >= floor,
     reason: greenScore >= floor

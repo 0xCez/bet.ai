@@ -1772,7 +1772,7 @@ async function writeLeaderboardAndSlips() {
   const preFilterEdge = edgeProps.length;
   const preFilterStack = stackLegs.length;
   const isExcluded = (p) => LEADERBOARD_EXCLUDED_STATS.has(p.statType);
-  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4 && !isExcluded(p));
+  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 3 && !isExcluded(p));
   const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3 && !isExcluded(p));
   if (filteredEdge.length < preFilterEdge || filteredStack.length < preFilterStack) {
     console.log(`[Leaderboard] Green floor: edge ${preFilterEdge}→${filteredEdge.length}, stack ${preFilterStack}→${filteredStack.length}`);

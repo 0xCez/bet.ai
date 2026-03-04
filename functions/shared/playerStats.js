@@ -22,6 +22,36 @@ const playerPositionCache = {};
 
 const GAME_LOGS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const MAX_STALE_GAME_LOGS = 24 * 60 * 60 * 1000; // 24 hours — stale fallback window
+const PLAYER_ID_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days — player IDs rarely change
+
+// Name suffixes to strip before extracting last name
+const NAME_SUFFIXES = new Set(['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'v']);
+
+/**
+ * Extract a searchable last name from a player name.
+ * Handles suffixes (Jr, III), hyphens (Gilgeous-Alexander → Gilgeous).
+ */
+function extractSearchName(playerName) {
+  const parts = playerName.trim().split(/\s+/);
+  // Strip suffix if present
+  while (parts.length > 1 && NAME_SUFFIXES.has(parts[parts.length - 1].toLowerCase())) {
+    parts.pop();
+  }
+  let lastName = parts[parts.length - 1];
+  // For hyphenated last names, use the first part (Gilgeous-Alexander → Gilgeous)
+  if (lastName.includes('-')) {
+    lastName = lastName.split('-')[0];
+  }
+  return lastName;
+}
+
+/**
+ * Normalize a name for matching: strip periods, lowercase, alpha+space only.
+ * "C.J. McCollum" → "cj mccollum", "A.J. Green" → "aj green"
+ */
+function normalizeName(name) {
+  return name.toLowerCase().replace(/\./g, '').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
 
 function getApiKey() {
   try {
@@ -41,50 +71,87 @@ function getCurrentNBASeason() {
 
 /**
  * Resolve a player name to an API-Sports ID.
- * Uses in-memory cache first, then API-Sports search.
+ * Cache chain: in-memory → Firestore (30d TTL) → API-Sports search.
+ *
+ * Handles name edge cases:
+ * - Suffixes: "Kelly Oubre Jr" → searches "Oubre"
+ * - Hyphens: "Shai Gilgeous-Alexander" → searches "Gilgeous"
+ * - Periods: "C.J. McCollum" matched against "CJ McCollum"
  */
 async function resolvePlayerId(playerName, apiKey) {
   if (!apiKey) apiKey = getApiKey();
-  const cacheKey = playerName.toLowerCase().trim();
+  const cacheKey = normalizeName(playerName);
   if (playerIdCache[cacheKey]) return playerIdCache[cacheKey];
 
+  // Check Firestore cache (30-day TTL)
+  const firestoreKey = `player_id_${cacheKey.replace(/\s+/g, '_')}`;
   try {
-    const parts = playerName.trim().split(' ');
-    const lastName = parts[parts.length - 1];
+    const doc = await getDb().collection('ml_cache').doc(firestoreKey).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (Date.now() - data.fetchedAt < PLAYER_ID_CACHE_TTL) {
+        playerIdCache[cacheKey] = data.playerId;
+        if (data.position) playerPositionCache[cacheKey] = data.position;
+        return data.playerId;
+      }
+    }
+  } catch (e) { /* cache miss */ }
+
+  // API-Sports search
+  try {
+    const searchName = extractSearchName(playerName);
+    const normalizedSearch = normalizeName(playerName);
 
     const response = await axios.get(
-      `https://v2.nba.api-sports.io/players?search=${encodeURIComponent(lastName)}`,
+      `https://v2.nba.api-sports.io/players?search=${encodeURIComponent(searchName)}`,
       { headers: { 'x-apisports-key': apiKey }, timeout: 10000 }
     );
 
     if (!response.data?.response?.length) {
-      console.log(`[playerStats] Player not found: ${playerName}`);
+      console.log(`[playerStats] Player not found: ${playerName} (searched "${searchName}")`);
       return null;
     }
-
-    const normalizedSearch = playerName.toLowerCase().replace(/[^a-z\s]/g, '').trim();
 
     function cachePlayer(p) {
       playerIdCache[cacheKey] = p.id;
       const pos = p.leagues?.standard?.pos || null;
       if (pos) playerPositionCache[cacheKey] = pos;
+      // Persist to Firestore
+      try {
+        getDb().collection('ml_cache').doc(firestoreKey).set({
+          fetchedAt: Date.now(), playerId: p.id, playerName, position: pos,
+        });
+      } catch (e) { /* silent */ }
       return p.id;
     }
 
-    // Exact match
+    // Exact match (period-insensitive)
     for (const p of response.data.response) {
-      const fullName = `${p.firstname || ''} ${p.lastname || ''}`.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+      const fullName = normalizeName(`${p.firstname || ''} ${p.lastname || ''}`);
       if (fullName === normalizedSearch) return cachePlayer(p);
     }
 
-    // Partial match
+    // Partial match (period-insensitive)
     for (const p of response.data.response) {
-      const fullName = `${p.firstname || ''} ${p.lastname || ''}`.toLowerCase();
+      const fullName = normalizeName(`${p.firstname || ''} ${p.lastname || ''}`);
       if (fullName.includes(normalizedSearch) || normalizedSearch.includes(fullName)) return cachePlayer(p);
     }
 
-    // Fallback: first result
-    return cachePlayer(response.data.response[0]);
+    // Fallback: first name token match (for "A.J. Green" matching "AJ Green")
+    const searchFirst = normalizeName(playerName.split(' ')[0]);
+    for (const p of response.data.response) {
+      const apiFirst = normalizeName(p.firstname || '');
+      const apiLast = normalizeName(p.lastname || '');
+      if (apiFirst === searchFirst || apiLast === normalizeName(searchName)) return cachePlayer(p);
+    }
+
+    // Last resort: first result (only if single result to avoid mismatches)
+    if (response.data.response.length === 1) {
+      return cachePlayer(response.data.response[0]);
+    }
+
+    console.log(`[playerStats] Player not matched: ${playerName} (${response.data.response.length} results for "${searchName}")`);
+    return null;
   } catch (err) {
     console.error(`[playerStats] Error searching player ${playerName}:`, err.message);
     return null;
