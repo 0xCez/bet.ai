@@ -1758,10 +1758,12 @@ async function writeLeaderboardAndSlips() {
     for (const p of legs) { const m = mapStackLeg(p); m.gameTime = gameTime; stackLegs.push(m); }
   }
 
-  // Quality gate: green score floor (belt-and-suspenders — pipelines also filter)
+  // Quality gate: green score floor + 3PT exclusion (belt-and-suspenders — pipelines also filter)
+  // 3PT filter here catches stale cached picks from before the pipeline exclusion
+  const LEADERBOARD_EXCLUDED_STATS = new Set(['threePointersMade']);
   const preFilterEdge = edgeProps.length;
   const preFilterStack = stackLegs.length;
-  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4);
+  const filteredEdge = edgeProps.filter(p => (p.green ?? 0) >= 4 && !LEADERBOARD_EXCLUDED_STATS.has(p.statType));
   const filteredStack = stackLegs.filter(p => (p.green ?? 0) >= 3);
   if (filteredEdge.length < preFilterEdge || filteredStack.length < preFilterStack) {
     console.log(`[Leaderboard] Green floor: edge ${preFilterEdge}→${filteredEdge.length}, stack ${preFilterStack}→${filteredStack.length}`);
